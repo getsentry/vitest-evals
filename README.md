@@ -2,6 +2,7 @@
 
 This project is a WIP prototype of extending vitest to support basic _Evals_ functionality. Evals are a type of testing that is most commonly deployed to _evaluate_ the results of calls to language models. This allows you to utilize them with a pattern of testing you're familiar with, working well with your existing continuous integration toolchain.
 
+This is heavily inspired by [Evalite](https://www.evalite.dev/), but opts for a vitest-native approach to maximize the compatibility of the existing ecosystem.
 
 ## Use
 
