@@ -1,4 +1,4 @@
-import { expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import "vitest";
 
 export type TaskFn = (input: string) => Promise<string>;
@@ -31,20 +31,44 @@ declare module "vitest" {
   interface AsymmetricMatchersContaining extends EvalMatchers {}
 }
 
-expect.extend({
-  async toEval(received, expected, taskFn, scoreFn, threshold = 1.0) {
-    const output = await taskFn(received);
+async function toEval(
+  input: string,
+  expected: string,
+  taskFn: TaskFn,
+  scoreFn: ScoreFn,
+  threshold = 1.0,
+) {
+  const output = await taskFn(input);
 
-    const result = await scoreFn({
-      question: received,
-      groundTruth: expected,
-      submission: output,
-    });
+  const result = await scoreFn(input, expected, output);
 
-    return {
-      pass: result.score >= threshold,
-      message: () =>
-        `Score: ${result.score}\nRationale: ${result.metadata.rationale}`,
-    };
+  return {
+    pass: result.score >= threshold,
+    message: () =>
+      `Score: ${result.score}\nRationale: ${result.metadata.rationale}`,
+  };
+}
+
+expect.extend({ toEval });
+
+export function describeEval(
+  name: string,
+  {
+    data,
+    task,
+    scorer,
+  }: {
+    data: { input: string; expected: string }[];
+    task: TaskFn;
+    scorer: ScoreFn;
   },
-});
+) {
+  return describe(name, () => {
+    for (const { input, expected } of data) {
+      it(input, async () => {
+        const result = await task(input);
+        expect(result).toEval(expected, task, scorer);
+      });
+    }
+  });
+}
