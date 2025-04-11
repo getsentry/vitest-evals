@@ -1,10 +1,10 @@
 import { expect } from "vitest";
 import "vitest";
 
-type TaskFn = (input: string) => Promise<string>;
+export type TaskFn = (input: string) => Promise<string>;
 
 // We're intentionally matching the API of evalite here
-type ScoreFn = (
+export type ScoreFn = (
   input: string,
   expected: string,
   output: string,
@@ -15,7 +15,7 @@ type ScoreFn = (
   };
 }>;
 
-interface EvalMatchers<R = unknown> {
+export interface EvalMatchers<R = unknown> {
   toEval: (expected: string, taskFn: TaskFn, scoreFn: ScoreFn) => Promise<R>;
 }
 
@@ -25,7 +25,7 @@ declare module "vitest" {
 }
 
 expect.extend({
-  async toEval(received, expected, taskFn, scoreFn) {
+  async toEval(received, expected, taskFn, scoreFn, threshold = 1.0) {
     const output = await taskFn(received);
 
     const result = await scoreFn({
@@ -35,7 +35,7 @@ expect.extend({
     });
 
     return {
-      pass: result.score >= 0.8,
+      pass: result.score >= threshold,
       message: () =>
         `Score: ${result.score}\nRationale: ${result.metadata.rationale}`,
     };
