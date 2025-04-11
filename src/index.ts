@@ -15,8 +15,15 @@ export type ScoreFn = (
   };
 }>;
 
+export type ToEval<R = unknown> = (
+  expected: string,
+  taskFn: TaskFn,
+  scoreFn: ScoreFn,
+  threshold?: number,
+) => Promise<R>;
+
 export interface EvalMatchers<R = unknown> {
-  toEval: (expected: string, taskFn: TaskFn, scoreFn: ScoreFn) => Promise<R>;
+  toEval: ToEval<R>;
 }
 
 declare module "vitest" {
