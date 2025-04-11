@@ -1,10 +1,14 @@
-# vitest-evals (Draft)
+# vitest-evals
 
 This project is a WIP prototype of extending vitest to support basic _Evals_ functionality. Evals are a type of testing that is most commonly deployed to _evaluate_ the results of calls to language models. This allows you to utilize them with a pattern of testing you're familiar with, working well with your existing continuous integration toolchain.
 
 This is heavily inspired by [Evalite](https://www.evalite.dev/), but opts for a vitest-native approach to maximize the compatibility of the existing ecosystem.
 
 ## Use
+
+```shell
+npm install -D vitest-evals
+```
 
 ### Dedicated Test Suites
 
@@ -24,13 +28,15 @@ describeEval("my evals", {
   },
   scorers: [checkFactuality],
   threshold: 0.8,
-  // timeout: 10000,
+  // timeout: 10000, // default timeout increased from 5s to 10s
 })
 ```
 
 ### Existing Test Suites
 
 ```javascript
+// import vitest-evals to expose expect().toEval();
+import "vitest-evals";
 import { generateObject } from "ai";
 
 function askTheLLM(input: string) {
@@ -50,9 +56,9 @@ describe("my test suite", () => {
 
 ```javascript
 export const checkFactuality = async (opts: {
-  question: string;
-  groundTruth: string;
-  submission: string;
+  input: string;
+  expected: string;
+  output: string;
 }) => {
   const { object } = await generateObject({
     model,
@@ -65,11 +71,11 @@ export const checkFactuality = async (opts: {
       You are comparing a submitted answer to an expert answer on a given question. Here is the data:
       [BEGIN DATA]
       ************
-      [Question]: ${opts.question}
+      [Question]: ${opts.input}
       ************
-      [Expert]: ${opts.groundTruth}
+      [Expert]: ${opts.expected}
       ************
-      [Submission]: ${opts.submission}
+      [Submission]: ${opts.output}
       ************
       [END DATA]
 
