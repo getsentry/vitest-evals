@@ -1,6 +1,6 @@
 {
   "name": "vitest-evals",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "sideEffects": false,
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
