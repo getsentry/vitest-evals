@@ -37,7 +37,7 @@ expect.extend({
 
     const result = await scoreFn({
       question: received,
-      groundTruth: expected!,
+      groundTruth: expected,
       submission: output,
     });
 

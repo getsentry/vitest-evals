@@ -5,9 +5,7 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,6 +15,10 @@
   },
   "scripts": {
     "build": "tsup",
+    "format": "biome format --write",
+    "lint": "biome lint",
+    "lint:fix": "biome lint --fix",
+    "postinstall": "simple-git-hooks",
     "test": "vitest"
   },
   "repository": {
@@ -34,8 +36,18 @@
     "vitest": "*"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "lint-staged": "^15.5.0",
+    "simple-git-hooks": "^2.12.1",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
     "vitest": "*"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged --concurrent false"
+  },
+  "lint-staged": {
+    "**/*.{ts,tsx,json}": ["biome format --write"],
+    "**/*.{ts,tsx}": ["biome lint --fix"]
   }
 }
