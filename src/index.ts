@@ -3,17 +3,19 @@ import "vitest";
 
 export type TaskFn = (input: string) => Promise<string>;
 
+type Score = {
+  score: number | null;
+  metadata?: {
+    rationale: string;
+  };
+};
+
 // We're intentionally matching the API of evalite here
 export type ScoreFn = (
   input: string,
   expected: string,
   output: string,
-) => Promise<{
-  score: number;
-  metadata: {
-    rationale: string;
-  };
-}>;
+) => Promise<Score>;
 
 export type ToEval<R = unknown> = (
   expected: string,
@@ -43,24 +45,28 @@ async function toEval(
   const result = await scoreFn(input, expected, output);
 
   return {
-    pass: result.score >= threshold,
+    pass: (result.score ?? 0) >= threshold,
     message: () =>
-      `Score: ${result.score}\nRationale: ${result.metadata.rationale}`,
+      `Score: ${result.score}\n${result.metadata ? `Rationale: ${result.metadata.rationale}` : ""}`,
   };
 }
 
 expect.extend({ toEval });
 
+// XXX: This is very similar to the `evalite` API, but ScoreFn is currently
+// a different signature.
 export function describeEval(
   name: string,
   {
     data,
     task,
     scorer,
+    threshold = 1.0,
   }: {
     data: () => Promise<{ input: string; expected: string }[]>;
     task: TaskFn;
     scorer: ScoreFn;
+    threshold?: number;
   },
 ) {
   return describe(name, async () => {
@@ -68,7 +74,7 @@ export function describeEval(
     for (const { input, expected } of await data()) {
       it(input, async () => {
         const result = await task(input);
-        expect(result).toEval(expected, task, scorer);
+        expect(result).toEval(expected, task, scorer, threshold);
       });
     }
   });

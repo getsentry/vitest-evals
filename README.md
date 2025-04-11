@@ -21,6 +21,7 @@ describeEval("my evals", {
     return output;
   },
   scorer: checkFactuality,
+  treshold: 0.8,
 })
 ```
 
@@ -37,7 +38,7 @@ function askTheLLM(input: string) {
 
 describe("my test suite", () => {
   it("kind of works", () => {
-    expect("What is the capital of France?").toEval("Paris", askTheLLM, checkFactuality)
+    expect("What is the capital of France?").toEval("Paris", askTheLLM, checkFactuality, 0.8)
   });
 });
 ```
