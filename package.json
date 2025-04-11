@@ -1,0 +1,30 @@
+{
+  "name": "vitest-evals",
+  "version": "0.1.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getsentry/vitest-evals.git"
+  },
+  "author": "David Cramer",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/getsentry/vitest-evals/issues"
+  },
+  "homepage": "https://github.com/getsentry/vitest-evals#readme",
+  "description": "",
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
