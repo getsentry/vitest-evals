@@ -1,21 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import "vitest";
 
 export type TaskFn = (input: string) => Promise<string>;
 
-type Score = {
+export type Score = {
   score: number | null;
   metadata?: {
     rationale: string;
   };
 };
 
-// We're intentionally matching the API of evalite here
-export type ScoreFn = (
-  input: string,
-  expected: string,
-  output: string,
-) => Promise<Score>;
+export type ScoreFn = (opts: {
+  input: string;
+  expected: string;
+  output: string;
+}) => Promise<Score>;
 
 export type ToEval<R = unknown> = (
   expected: string,
@@ -33,49 +32,73 @@ declare module "vitest" {
   interface AsymmetricMatchersContaining extends EvalMatchers {}
 }
 
-async function toEval(
-  input: string,
-  expected: string,
-  taskFn: TaskFn,
-  scoreFn: ScoreFn,
-  threshold = 1.0,
-) {
-  const output = await taskFn(input);
+expect.extend({
+  toEval: async function toEval(
+    input: string,
+    expected: string,
+    taskFn: TaskFn,
+    scoreFn: ScoreFn,
+    threshold = 1.0,
+  ) {
+    const { isNot } = this;
 
-  const result = await scoreFn(input, expected, output);
+    const output = await taskFn(input);
 
-  return {
-    pass: (result.score ?? 0) >= threshold,
-    message: () =>
-      `Score: ${result.score}\n${result.metadata ? `Rationale: ${result.metadata.rationale}` : ""}`,
-  };
-}
+    const result = await scoreFn({ input, expected, output });
 
-expect.extend({ toEval });
+    return {
+      pass: (result.score ?? 0) >= threshold,
+      message: () =>
+        `Score: ${result.score} ${isNot ? "<" : ">"} ${threshold}\n${
+          result.metadata ? `Rationale: ${result.metadata.rationale}` : ""
+        }`,
+    };
+  },
+});
 
-// XXX: This is very similar to the `evalite` API, but ScoreFn is currently
-// a different signature.
 export function describeEval(
   name: string,
   {
     data,
     task,
-    scorer,
+    scorers,
     threshold = 1.0,
+    // increase default test timeout as 5s is usually not enough for
+    // a single factuality check
+    timeout = 10000,
   }: {
     data: () => Promise<{ input: string; expected: string }[]>;
     task: TaskFn;
-    scorer: ScoreFn;
-    threshold?: number;
+    scorers: ScoreFn[];
+    threshold?: number | null;
+    timeout?: number;
   },
 ) {
   return describe(name, async () => {
     // TODO: should data just be a generator?
     for (const { input, expected } of await data()) {
-      it(input, async () => {
-        const result = await task(input);
-        expect(result).toEval(expected, task, scorer, threshold);
-      });
+      it(
+        input,
+        async () => {
+          const output = await task(input);
+
+          const scores = await Promise.all(
+            scorers.map((scorer) => scorer({ input, expected, output })),
+          );
+
+          const avgScore =
+            scores.reduce((acc, s) => acc + (s.score ?? 0), 0) / scores.length;
+          if (threshold) {
+            assert(
+              avgScore >= threshold,
+              `Score: ${avgScore} below threshold: ${threshold}\nOutput: ${output}`,
+            );
+          }
+        },
+        {
+          timeout,
+        },
+      );
     }
   });
 }
