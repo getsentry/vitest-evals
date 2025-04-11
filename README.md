@@ -5,15 +5,46 @@ This project is a WIP prototype of extending vitest to support basic _Evals_ fun
 
 ## Use
 
+### Dedicated Test Suites
+
+```javascript
+describeEval("my evals", {
+  data: async () => {
+    return [
+      input: "What is the capital of France?",
+      expected: "Paris",
+    ];
+  },
+  task: async (input) => {
+    // TODO: query an LLM using a factuality checker
+    const output = 'Paris';
+    return output;
+  },
+  scorer: checkFactuality,
+})
+```
+
+### Existing Test Suites
+
 ```javascript
 import { generateObject } from "ai";
 
 function askTheLLM(input: string) {
-    // TODO: query an LLM using a factuality checker
-    const output = 'Paris';
-    return output;
+  // TODO: query an LLM using a factuality checker
+  const output = 'Paris';
+  return output;
 }
 
+describe("my test suite", () => {
+  it("kind of works", () => {
+    expect("What is the capital of France?").toEval("Paris", askTheLLM, checkFactuality)
+  });
+});
+```
+
+### Factuality Scoring
+
+```javascript
 export const checkFactuality = async (opts: {
   question: string;
   groundTruth: string;
@@ -69,11 +100,4 @@ export const checkFactuality = async (opts: {
     },
   };
 };
-
-
-describe("my test suite", () => {
-  it("kind of works", () => {
-    expect("The capital of France is Paris").toEval("Paris", askTheLLM, checkFactuality)
-  });
-});
 ```

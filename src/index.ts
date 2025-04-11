@@ -58,13 +58,14 @@ export function describeEval(
     task,
     scorer,
   }: {
-    data: { input: string; expected: string }[];
+    data: () => Promise<{ input: string; expected: string }[]>;
     task: TaskFn;
     scorer: ScoreFn;
   },
 ) {
-  return describe(name, () => {
-    for (const { input, expected } of data) {
+  return describe(name, async () => {
+    // TODO: should data just be a generator?
+    for (const { input, expected } of await data()) {
       it(input, async () => {
         const result = await task(input);
         expect(result).toEval(expected, task, scorer);
