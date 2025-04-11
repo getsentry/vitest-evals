@@ -8,6 +8,8 @@ This project is a WIP prototype of extending vitest to support basic _Evals_ fun
 ### Dedicated Test Suites
 
 ```javascript
+// Inspired by the `evalite` API, however supports only singular scoring
+// TODO: decide one way or another if this is too limiting.
 describeEval("my evals", {
   data: async () => {
     return [
