@@ -9,8 +9,7 @@ This is heavily inspired by [Evalite](https://www.evalite.dev/), but opts for a 
 ### Dedicated Test Suites
 
 ```javascript
-// Inspired by the `evalite` API, however supports only singular scoring
-// TODO: decide one way or another if this is too limiting.
+// Inspired by the `evalite` API
 describeEval("my evals", {
   data: async () => {
     return [
@@ -23,8 +22,9 @@ describeEval("my evals", {
     const output = 'Paris';
     return output;
   },
-  scorer: checkFactuality,
-  treshold: 0.8,
+  scorers: [checkFactuality],
+  threshold: 0.8,
+  // timeout: 10000,
 })
 ```
 
