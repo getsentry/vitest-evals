@@ -1,6 +1,7 @@
 {
   "name": "vitest-evals",
   "version": "0.1.0",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -22,9 +23,12 @@
   },
   "homepage": "https://github.com/getsentry/vitest-evals#readme",
   "description": "",
+  "peerDependencies": {
+    "vitest": "*"
+  },
   "devDependencies": {
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.1"
+    "vitest": "*"
   }
 }
