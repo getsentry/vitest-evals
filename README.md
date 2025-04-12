@@ -192,7 +192,7 @@ export default defineConfig({
 In the above, we're telling it to only match only `*.eval.*` files (vs the typical `*.test.*` or `*.spec.*`). We're also inheriting from our default `vitest.config.ts`. This gives us a clean way to run only tests, or run only evals:
 
 ```shell
-npx vitest -- --config=vitest.evals.config.ts
+vitest --config=vitest.evals.config.ts
 ```
 
 Its recommended to add this to your `package.json`, such as under an `eval` helper:
