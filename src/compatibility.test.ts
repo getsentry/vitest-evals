@@ -9,9 +9,9 @@ describeEval("autoevals compatibility", {
       expected: "Paris",
     },
   ],
-  task: async (input: string): Promise<string> => {
+  task: async () => {
     return "Paris";
   },
   scorers: [Levenshtein],
-  threshold: 0.8,
+  threshold: 1.0,
 });
