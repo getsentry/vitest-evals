@@ -137,6 +137,9 @@ export function describeEval(
     for (const { input, expected } of await data()) {
       testFn(
         input,
+        {
+          timeout,
+        },
         async () => {
           const output = await task(input);
 
@@ -164,9 +167,6 @@ export function describeEval(
               )}`,
             );
           }
-        },
-        {
-          timeout,
         },
       );
     }
