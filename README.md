@@ -169,6 +169,46 @@ export function Factuality(model: LanguageModel) {
 }
 ```
 
+### Separating Evals
+
+A mechanism before `skipIf` for controlling if evals run is creating an entirely separating `vitest` configuration for them. For example:
+
+```javascript
+// vitest.evals.config.ts
+/// <reference types="vitest" />
+import { defineConfig } from "vitest/config";
+import defaultConfig from "./vitest.config";
+
+export default defineConfig({
+  ...defaultConfig,
+  test: {
+    ...defaultConfig.test,
+    include: ["src/**/*.eval.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+  },
+});
+```
+
+In the above, we're telling it to only match only `*.eval.*` files (vs the typical `*.test.*` or `*.spec.*`). We're also inheriting from our default `vitest.config.ts`. This gives us a clean way to run only tests, or run only evals:
+
+```shell
+npx vitest -- --config=vitest.evals.config.ts
+```
+
+Its recommended to add this to your `package.json`, such as under an `eval` helper:
+
+```json
+// package.json
+{
+  // ...
+  "scripts": {
+    // ...
+    "eval": "vitest --config=vitest.evals.config.ts",
+  }
+}
+```
+
+You can then run your evals using `npm run eval`.
+
 ## Development
 
 Nothing fancy here.
