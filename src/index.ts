@@ -6,7 +6,8 @@ export type TaskFn = (input: string) => Promise<string>;
 export type Score = {
   score: number | null;
   metadata?: {
-    rationale: string;
+    rationale?: string;
+    output?: string;
   };
 };
 
@@ -139,13 +140,19 @@ export function describeEval(
           const scores = await Promise.all(
             scorers.map((scorer) => scorer({ input, expected, output })),
           );
+          const scoresWithName = scores.map((s, i) => ({
+            ...s,
+            name: scorers[i].name,
+          }));
 
           const avgScore =
             scores.reduce((acc, s) => acc + (s.score ?? 0), 0) / scores.length;
           if (threshold) {
             assert(
               avgScore >= threshold,
-              `Score: ${avgScore} below threshold: ${threshold}\nOutput: ${output}`,
+              `Score: ${avgScore} below threshold: ${threshold}\nOutput: ${output}\n${formatScores(
+                scoresWithName,
+              )}`,
             );
           }
         },
@@ -155,4 +162,22 @@ export function describeEval(
       );
     }
   });
+}
+
+export function formatScores(scores: (Score & { name: string })[]) {
+  return scores
+    .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
+    .map((s) => {
+      const scoreLine = `${s.name || "Unknown"} [${(s.score ?? 0).toFixed(1)}]`;
+      if (
+        ((s.score ?? 0) < 1.0 && s.metadata?.rationale) ||
+        s.metadata?.output
+      ) {
+        return `${scoreLine}${
+          s.metadata.rationale ? `\nRationale: ${s.metadata.rationale}` : ""
+        }${s.metadata.output ? `\nOutput: ${s.metadata.output}` : ""}`;
+      }
+      return scoreLine;
+    })
+    .join("\n\n");
 }
