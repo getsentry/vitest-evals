@@ -197,7 +197,7 @@ npx vitest -- --config=vitest.evals.config.ts
 
 Its recommended to add this to your `package.json`, such as under an `eval` helper:
 
-```json
+```javascript
 // package.json
 {
   // ...
