@@ -168,3 +168,15 @@ export function Factuality(model: LanguageModel) {
   };
 }
 ```
+
+## Development
+
+Nothing fancy here.
+
+```javascript
+pnpm install
+```
+
+```javascript
+pnpm test
+```
