@@ -1,0 +1,18 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit"
+  },
+  "files.trimTrailingWhitespace": false,
+  "files.trimFinalNewlines": false,
+  "files.insertFinalNewline": true,
+  "cursor.general.enableShadowWorkspace": true,
+  "[typescript]": {
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
