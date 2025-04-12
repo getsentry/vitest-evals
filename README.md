@@ -113,8 +113,8 @@ import { z } from "zod";
 export function Factuality(model: LanguageModel) {
   return async (opts: {
     input: string;
-    expected: string;
     output: string;
+    expected?: string;
   }) => {
     const { object } = await generateObject({
       model,
