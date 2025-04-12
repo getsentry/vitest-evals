@@ -1,4 +1,4 @@
-import { assert, describe, expect, it, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import "vitest";
 
 export type TaskFn = (input: string) => Promise<string>;
@@ -13,9 +13,9 @@ export type Score = {
 
 export type ScoreFn = (opts: {
   input: string;
-  expected: string;
   output: string;
-}) => Promise<Score>;
+  expected?: string;
+}) => Promise<Score> | Score;
 
 export type ToEval<R = unknown> = (
   expected: string,
@@ -68,7 +68,10 @@ expect.extend({
 
     const output = await taskFn(input);
 
-    const result = await scoreFn({ input, expected, output });
+    let result = scoreFn({ input, expected, output });
+    if (result instanceof Promise) {
+      result = await result;
+    }
 
     return {
       pass: (result.score ?? 0) >= threshold,
@@ -138,7 +141,13 @@ export function describeEval(
           const output = await task(input);
 
           const scores = await Promise.all(
-            scorers.map((scorer) => scorer({ input, expected, output })),
+            scorers.map((scorer) => {
+              const result = scorer({ input, expected, output });
+              if (result instanceof Promise) {
+                return result;
+              }
+              return new Promise<Score>((resolve) => resolve(result));
+            }),
           );
           const scoresWithName = scores.map((s, i) => ({
             ...s,

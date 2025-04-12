@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "autoevals": "^0.0.127",
     "lint-staged": "^15.5.0",
     "simple-git-hooks": "^2.12.1",
     "tsup": "^8.4.0",
