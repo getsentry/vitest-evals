@@ -101,7 +101,10 @@ import { z } from "zod";
 /**
  * A Factuality checker utilizing the `ai` SDK based on the implementation in `autoevals`.
  * 
- * ```
+ * @param model - The language model to utilize (via `ai`).
+ * 
+ * @example
+ * ```javascript
  * import { openai } from "@ai-sdk/openai";
  *
  * scorers: [Factuality(openai("gpt-4o"))]

@@ -43,7 +43,7 @@ expect.extend({
    * @param threshold - Minimum acceptable score (0-1), defaults to 1.0
    *
    * @example
-   * ```ts
+   * ```javascript
    * test("checks capital of France", async () => {
    *   expect("What is the capital of France?").toEval(
    *     "Paris",
@@ -96,7 +96,7 @@ expect.extend({
  * @param options.timeout - Test timeout in milliseconds, defaults to 10000
  *
  * @example
- * ```ts
+ * ```javascript
  * describeEval("capital cities test", {
  *   data: async () => [{
  *     input: "What is the capital of France?",
