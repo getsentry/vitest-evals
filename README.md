@@ -171,7 +171,7 @@ export function Factuality(model: LanguageModel) {
 
 ### Separating Evals
 
-A mechanism before `skipIf` for controlling if evals run is creating an entirely separating `vitest` configuration for them. For example:
+An alternative to `skipIf` for controlling if evals run is creating an entirely separating `vitest` configuration for them. This gives a lot of advantages, particularly allowing you to maintain two completely separate test suites.
 
 ```javascript
 // vitest.evals.config.ts
@@ -183,6 +183,7 @@ export default defineConfig({
   ...defaultConfig,
   test: {
     ...defaultConfig.test,
+    // run `eval` files rather than typical `test` files
     include: ["src/**/*.eval.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
   },
 });
