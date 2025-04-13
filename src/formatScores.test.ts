@@ -39,10 +39,12 @@ describe("formatScores", () => {
 
     expect(result).toMatchInlineSnapshot(`
       "Scorer C [0.5]
-      Rationale: Incorrect answer
+      Rationale:
+      Incorrect answer
 
       Scorer A [0.8]
-      Rationale: Missing some details
+      Rationale:
+      Missing some details
 
       Scorer B [1.0]"
     `);
