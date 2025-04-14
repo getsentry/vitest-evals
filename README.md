@@ -111,7 +111,7 @@ import { z } from "zod";
  * ```
  */
 export function Factuality(model: LanguageModel) {
-  return async (opts: {
+  return async Factuality(opts: {
     input: string;
     output: string;
     expected?: string;
