@@ -18,8 +18,7 @@
     "format": "biome format --write",
     "lint": "biome lint",
     "lint:fix": "biome lint --fix",
-    "prepare": "build",
-    "postinstall": "simple-git-hooks",
+    "prepare": "npm run build && simple-git-hooks",
     "test": "vitest"
   },
   "repository": {
