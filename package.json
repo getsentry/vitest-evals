@@ -18,7 +18,7 @@
     "format": "biome format --write",
     "lint": "biome lint",
     "lint:fix": "biome lint --fix",
-    "prepare": "build",
+    "prepare": "npm run build",
     "postinstall": "simple-git-hooks",
     "test": "vitest"
   },
@@ -46,10 +46,12 @@
     "vitest": "*"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm exec lint-staged --concurrent false"
+    "pre-commit": "npm exec lint-staged --concurrent false"
   },
   "lint-staged": {
-    "**/*.{ts,tsx,json}": ["biome format --write"],
-    "**/*.{ts,tsx}": ["biome lint --fix"]
+    "*": [
+      "biome format --write --no-errors-on-unmatched --files-ignore-unknown=true",
+      "biome lint --fix --no-errors-on-unmatched --files-ignore-unknown=true"
+    ]
   }
 }
