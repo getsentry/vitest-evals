@@ -12,11 +12,11 @@ describe("formatScores", () => {
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "Scorer C [0.5]
+      "# Scorer C [0.5]
 
-      Scorer A [0.8]
+      # Scorer A [0.8]
 
-      Scorer B [1.0]"
+      # Scorer B [1.0]"
     `);
   });
 
@@ -31,22 +31,30 @@ describe("formatScores", () => {
       {
         name: "Scorer C",
         score: 0.5,
-        metadata: { rationale: "Incorrect answer" },
+        metadata: { rationale: "Incorrect answer", output: "Paris" },
       },
     ];
 
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "Scorer C [0.5]
-      Rationale:
+      "# Scorer C [0.5]
+
+      ## Rationale
+
       Incorrect answer
 
-      Scorer A [0.8]
-      Rationale:
+      ## Response
+
+      Paris
+
+      # Scorer A [0.8]
+
+      ## Rationale
+
       Missing some details
 
-      Scorer B [1.0]"
+      # Scorer B [1.0]"
     `);
   });
 
@@ -59,9 +67,9 @@ describe("formatScores", () => {
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "Scorer A [0.0]
+      "# Scorer A [0.0]
 
-      Scorer B [0.8]"
+      # Scorer B [0.8]"
     `);
   });
 });

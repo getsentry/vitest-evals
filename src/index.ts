@@ -75,12 +75,7 @@ expect.extend({
 
     return {
       pass: (result.score ?? 0) >= threshold,
-      message: () =>
-        `Score: ${result.score} ${isNot ? "<" : ">"} ${threshold}\n${
-          result.metadata?.rationale
-            ? `Rationale:\n${wrapText(result.metadata.rationale)}`
-            : ""
-        }`,
+      message: () => formatScores([{ ...result, name: scoreFn.name }]),
     };
   },
 });
@@ -164,7 +159,7 @@ export function describeEval(
           if (threshold) {
             assert(
               avgScore >= threshold,
-              `Score: ${avgScore} below threshold: ${threshold}\nOutput:\n${wrapText(output)}\n${formatScores(
+              `Score: ${avgScore} below threshold: ${threshold}\n\n## Output:\n${wrapText(output)}\n\n${formatScores(
                 scoresWithName,
               )}`,
             );
@@ -179,16 +174,16 @@ export function formatScores(scores: (Score & { name: string })[]) {
   return scores
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
     .map((s) => {
-      const scoreLine = `${s.name || "Unknown"} [${(s.score ?? 0).toFixed(1)}]`;
+      const scoreLine = `# ${s.name || "Unknown"} [${(s.score ?? 0).toFixed(1)}]`;
       if (
         ((s.score ?? 0) < 1.0 && s.metadata?.rationale) ||
         s.metadata?.output
       ) {
         return `${scoreLine}${
           s.metadata?.rationale
-            ? `\nRationale:\n${wrapText(s.metadata.rationale)}`
+            ? `\n\n## Rationale\n\n${wrapText(s.metadata.rationale)}`
             : ""
-        }${s.metadata?.output ? `\nOutput:\n${wrapText(s.metadata.output)}` : ""}`;
+        }${s.metadata?.output ? `\n\n## Response\n\n${wrapText(s.metadata.output)}` : ""}`;
       }
       return scoreLine;
     })
