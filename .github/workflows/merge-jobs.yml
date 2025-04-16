@@ -55,7 +55,6 @@ jobs:
         run: pnpm build
 
       - name: Pack NPM Tarball
-        working-directory: packages/toolbar
         run: |
           pnpm install
           pnpm build
