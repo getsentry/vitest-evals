@@ -34,8 +34,10 @@ describeEval("my evals", {
   data: async () => {
     // The scenarios you wish to evaluate
     return [
-      input: "What is the capital of France?",
-      expected: "Paris",
+      {
+        input: "What is the capital of France?",
+        expected: "Paris",
+      }
     ];
   },
 
