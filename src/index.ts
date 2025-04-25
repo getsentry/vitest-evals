@@ -90,7 +90,7 @@ expect.extend({
  * @param options.skipIf - Optional function that determines if tests should be skipped
  * @param options.scorers - Array of scoring functions that evaluate model outputs
  * @param options.threshold - Minimum acceptable average score (0-1), defaults to 1.0
- * @param options.timeout - Test timeout in milliseconds, defaults to 10000
+ * @param options.timeout - Test timeout in milliseconds, defaults to 60000 (60s)
  *
  * @example
  * ```javascript
@@ -118,7 +118,7 @@ export function describeEval(
     threshold = 1.0,
     // increase default test timeout as 5s is usually not enough for
     // a single factuality check
-    timeout = 10000,
+    timeout = 60000,
   }: {
     data: () => Promise<{ input: string; expected: string }[]>;
     task: TaskFn;
