@@ -31,6 +31,13 @@ export interface EvalMatchers<R = unknown> {
 declare module "vitest" {
   interface Assertion<T = any> extends EvalMatchers<T> {}
   interface AsymmetricMatchersContaining extends EvalMatchers {}
+
+  interface TaskMeta {
+    eval?: {
+      scores: (Score & { name: string })[];
+      avgScore: number;
+    };
+  }
 }
 
 expect.extend({
@@ -137,7 +144,7 @@ export function describeEval(
         {
           timeout,
         },
-        async () => {
+        async ({ task: testTask }) => {
           const output = await task(input);
 
           const scores = await Promise.all(
@@ -156,6 +163,14 @@ export function describeEval(
 
           const avgScore =
             scores.reduce((acc, s) => acc + (s.score ?? 0), 0) / scores.length;
+
+          testTask.meta.eval = {
+            scores: scoresWithName,
+            avgScore,
+          };
+
+          console.log(testTask.meta);
+
           if (threshold) {
             assert(
               avgScore >= threshold,
