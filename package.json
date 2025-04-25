@@ -5,14 +5,17 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.mjs"
+    },
+    "./reporter": {
+      "types": "./dist/reporter.d.ts",
+      "require": "./dist/reporter.js",
+      "import": "./dist/reporter.mjs"
     }
   },
   "scripts": {
@@ -37,6 +40,7 @@
   "homepage": "https://github.com/getsentry/vitest-evals#readme",
   "description": "",
   "peerDependencies": {
+    "tinyrainbow": "*",
     "vitest": "*"
   },
   "devDependencies": {
@@ -46,6 +50,7 @@
     "lint-staged": "^15.5.0",
     "simple-git-hooks": "^2.12.1",
     "tsup": "^8.4.0",
+    "tinyrainbow": "*",
     "typescript": "^5.8.3",
     "vitest": "*"
   },
