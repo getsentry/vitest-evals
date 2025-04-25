@@ -169,8 +169,6 @@ export function describeEval(
             avgScore,
           };
 
-          console.log(testTask.meta);
-
           if (threshold) {
             assert(
               avgScore >= threshold,
