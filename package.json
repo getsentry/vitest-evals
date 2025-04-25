@@ -1,11 +1,13 @@
 {
   "name": "vitest-evals",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "sideEffects": false,
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
