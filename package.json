@@ -25,8 +25,8 @@
     "lint:fix": "biome lint --fix",
     "prepare": "npm run build && simple-git-hooks",
     "postinstall": "simple-git-hooks",
-    "test": "vitest",
-    "test:ci": "vitest run --coverage --reporter=junit --outputFile=tests.junit.xml"
+    "test": "vitest --reporter=./src/reporter.ts",
+    "test:ci": "vitest run --coverage --reporter=./src/reporter.ts --reporter=junit --outputFile=tests.junit.xml"
   },
   "repository": {
     "type": "git",
