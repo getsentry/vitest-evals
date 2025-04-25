@@ -18,7 +18,7 @@ async function answerQuestion(prompt: string) {
   const { text } = await generateText({
     model,
     prompt,
-  })
+  });
   return text;
 }
 ```
@@ -52,7 +52,7 @@ describeEval("my evals", {
 
   // The timeout for each test. Defaults to 10s. You may need to increase this if your model
   // provider has high latency or you're using a large number of scorers.
-  // timeout: 10000,
+  // timeout: 60000,
 
   // A check to determine if these tests should run. This is helpful to control tests so they only
   // in certain situations, for example if a model providers API key is defined.
@@ -70,7 +70,12 @@ import { Factuality } from "autoevals";
 
 describe("my test suite", () => {
   it("kind of works", () => {
-    expect("What is the capital of France?").toEval("Paris", answerQuestion, Factuality, 0.8)
+    expect("What is the capital of France?").toEval(
+      "Paris",
+      answerQuestion,
+      Factuality,
+      0.8
+    );
   });
 });
 ```
@@ -81,28 +86,28 @@ Scorers are compatible with the `autoevals` interface, but are also simple to im
 
 ```javascript
 export const Contains = async (opts: {
-  input: string;
-  expected: string;
-  output: string;
+  input: string,
+  expected: string,
+  output: string,
 }) => {
   return {
     score: output.indexOf(expected) !== -1 ? 1.0 : 0.0,
   };
-}
+};
 ```
 
 For something more realistic, here's a reimplementation of the Factuality scorer from `autoevals`, with some flexibility
 on the model, enabling you to evaluate against multiple models:
 
-```javascript
+````javascript
 import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 
 /**
  * A Factuality checker utilizing the `ai` SDK based on the implementation in `autoevals`.
- * 
+ *
  * @param model - The language model to utilize (via `ai`).
- * 
+ *
  * @example
  * ```javascript
  * import { openai } from "@ai-sdk/openai";
@@ -167,7 +172,7 @@ export function Factuality(model: LanguageModel) {
     };
   };
 }
-```
+````
 
 ### Separating Evals
 
