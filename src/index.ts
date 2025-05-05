@@ -11,11 +11,12 @@ export type Score = {
   };
 };
 
-export type ScoreFn = (opts: {
-  input: string;
-  output: string;
-  expected?: string;
-}) => Promise<Score> | Score;
+export type ScoreFn = (
+  opts: {
+    input: string;
+    output: string;
+  } & Record<string, unknown>,
+) => Promise<Score> | Score;
 
 export type ToEval<R = unknown> = (
   expected: string,
@@ -64,6 +65,7 @@ expect.extend({
    * });
    * ```
    */
+  // TODO: this needs to be support true extensibility with Eval scorers
   toEval: async function toEval(
     input: string,
     expected: string,
@@ -138,7 +140,7 @@ export function describeEval(
   return describe(name, async () => {
     const testFn = skipIf ? test.skipIf(skipIf()) : test;
     // TODO: should data just be a generator?
-    for (const { input, expected } of await data()) {
+    for (const { input, ...params } of await data()) {
       testFn(
         input,
         {
@@ -149,7 +151,7 @@ export function describeEval(
 
           const scores = await Promise.all(
             scorers.map((scorer) => {
-              const result = scorer({ input, expected, output });
+              const result = scorer({ input, ...params, output });
               if (result instanceof Promise) {
                 return result;
               }
