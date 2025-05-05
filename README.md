@@ -176,6 +176,32 @@ export function Factuality(model: LanguageModel) {
 }
 ````
 
+#### Compatibility with `autoevals`
+
+We maintain compatibility with the [autoevals package](https://github.com/braintrustdata/autoevals) from Braintrust. To use it you'll typically need to use te `partial` helper provided on the scorers. For example, with the `ClosedQA` scorer:
+
+```javascript
+import { describeEval } from "vitest-evals";
+import { ClosedQA } from "autoevals";
+
+describeEval("my evals", {
+  data: async () => {
+    // The scenarios you wish to evaluate
+    return [
+      {
+        input: "What is the capital of France?",
+        expected: "Paris",
+      }
+    ];
+  },
+  task: answerQuestion,
+  scorers: [ClosedQA.partial({
+    criteria: "Does the submission indicate that the question is out of scope?",
+  })],
+  threshold: 0.6,
+})
+```
+
 ### Separating Evals
 
 An alternative to `skipIf` for controlling if evals run is creating an separate `vitest` configuration for them. This gives a lot of advantages, particularly allowing you to maintain two completely separate test suites. A good pattern you can enable with this is a filename-based-test selector:
