@@ -1,4 +1,4 @@
-import { assert, describe, expect, test } from "vitest";
+import { assert, describe, expect, type RunnerTestCase, test } from "vitest";
 import "vitest";
 
 /**
@@ -62,7 +62,9 @@ export type Score = {
   score: number | null;
   metadata?: {
     rationale?: string;
-    output?: string;
+    output?: string | null;
+    llm_judge?: string;
+    [key: string]: any; // Allow additional metadata fields
   };
 };
 
@@ -95,7 +97,7 @@ declare module "vitest" {
     eval?: {
       scores: (Score & { name: string })[];
       avgScore: number;
-      toolCalls?: ToolCall[];
+      toolCalls?: ToolCall[] | undefined;
     };
   }
 }
@@ -263,6 +265,10 @@ export function describeEval(
           const avgScore =
             scores.reduce((acc, s) => acc + (s.score ?? 0), 0) / scores.length;
 
+          // Available for JUnit XML reporter
+          annotateJUnitWithScoresData(testTask, scoresWithName, toolCalls);
+
+          // Available for JSON reporter
           testTask.meta.eval = {
             scores: scoresWithName,
             avgScore,
@@ -301,6 +307,133 @@ export function formatScores(scores: (Score & { name: string })[]) {
       return scoreLine;
     })
     .join("\n\n");
+}
+
+/**
+ * Annotates JUnit test results with evaluation scores and tool call data for XML reporting.
+ *
+ * This function adds structured annotations to the test context that can be used by JUnit XML
+ * reporters to include evaluation metrics and tool usage information in test reports.
+ *
+ * The annotations follow a hierarchical schema:
+ * - `evals.scores.{SCORE_NAME}.value` - The numeric score value
+ * - `evals.scores.{SCORE_NAME}.type` - The data type (float/bool)
+ * - `evals.scores.{SCORE_NAME}.llm_judge` - LLM judge reasoning (if available)
+ * - `evals.scores.{SCORE_NAME}.metadata.{FIELD}` - Flattened metadata fields
+ * - `evals.toolCalls.{INDEX}.{FIELD}` - Tool call data (if present)
+ *
+ * @param testTask - The Vitest test case to annotate
+ * @param scoresWithName - Array of evaluation scores with their names
+ * @param toolCalls - Optional array of tool calls made during the test
+ *
+ * @example
+ * ```javascript
+ * // In a test case
+ * const scores = [{ name: "factuality", score: 0.8, metadata: { rationale: "Good answer" } }];
+ * const toolCalls = [{ name: "search", arguments: { query: "weather" } }];
+ *
+ * annotateJUnitWithScoresData(testTask, scores, toolCalls);
+ * // Results in annotations like:
+ * // evals.scores.factuality.value = "0.8"
+ * // evals.scores.factuality.type = "float"
+ * // evals.scores.factuality.metadata.rationale = "Good answer"
+ * // evals.toolCalls.0.name = "search"
+ * // evals.toolCalls.0.arguments.query = "weather"
+ * ```
+ */
+export function annotateJUnitWithScoresData(
+  testTask: RunnerTestCase,
+  scoresWithName: (Score & { name: string })[],
+  toolCalls?: ToolCall[],
+) {
+  /**
+   * Recursively flattens nested objects into dot-notation keys for JUnit annotations.
+   *
+   * Converts nested object structures into flat key-value pairs where nested keys
+   * are joined with dots. Dots in original keys are replaced with underscores to
+   * avoid conflicts with the annotation hierarchy.
+   *
+   * @param obj - The object to flatten
+   * @param prefix - Current key prefix for nested properties
+   * @returns Flattened object with dot-notation keys
+   *
+   * @example
+   * ```javascript
+   * flattenObject({ a: { b: 1, "c.d": 2 } })
+   * // Returns: { "a.b": 1, "a.c_d": 2 }
+   *
+   * flattenObject({ metadata: { rationale: "Good", details: { confidence: 0.9 } } }, "score")
+   * // Returns: { "score.metadata.rationale": "Good", "score.metadata.details.confidence": 0.9 }
+   * ```
+   */
+  function flattenObject(obj: any, prefix = ""): Record<string, any> {
+    const flattened: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(obj)) {
+      // Replace dots in keys with underscores to avoid conflicts with annotation hierarchy
+      const keyNoDots = key.replace(/\./g, "_");
+      const newKey = prefix ? `${prefix}.${keyNoDots}` : keyNoDots;
+
+      if (value !== null && typeof value === "object") {
+        Object.assign(flattened, flattenObject(value, newKey));
+      } else {
+        flattened[newKey] = value;
+      }
+    }
+
+    return flattened;
+  }
+
+  // Annotate scores following the schema: evals.scores.SCORE_NAME
+  for (let i = 0; i < scoresWithName.length; i++) {
+    const score = scoresWithName[i];
+    // Scored with no name are listed as "score_0", "score_1", etc.
+    const scoreName = score.name.replace(/\./g, "_") || `score_${i}`;
+
+    // Required: value
+    testTask.context.annotate(
+      String(score.score ?? ""),
+      `evals.scores.${scoreName}.value`,
+    );
+
+    // Optional: type (infer from score value)
+    if (score.score !== null && score.score !== undefined) {
+      const scoreType = typeof score.score === "boolean" ? "bool" : "float";
+      testTask.context.annotate(scoreType, `evals.scores.${scoreName}.type`);
+    }
+
+    // Optional: llm_judge (if available in metadata)
+    if (score.metadata?.llm_judge) {
+      testTask.context.annotate(
+        score.metadata.llm_judge,
+        `evals.scores.${scoreName}.llm_judge`,
+      );
+    }
+
+    // Optional: metadata fields (flattened)
+    if (score.metadata) {
+      const flattenedMetadata = flattenObject(score.metadata);
+      for (const [key, value] of Object.entries(flattenedMetadata)) {
+        testTask.context.annotate(
+          String(value ?? ""),
+          `evals.scores.${scoreName}.metadata.${key}`,
+        );
+      }
+    }
+  }
+
+  // Annotate toolCalls if present
+  if (toolCalls && toolCalls.length > 0) {
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i];
+      const flattenedToolCall = flattenObject(toolCall);
+
+      for (const [key, value] of Object.entries(flattenedToolCall)) {
+        const annotationKey = `evals.toolCalls.${i}.${key}`;
+        testTask.context.annotate(String(value ?? ""), annotationKey);
+      }
+    }
+  }
 }
 
 /**
