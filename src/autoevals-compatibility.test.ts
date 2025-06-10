@@ -1,6 +1,7 @@
 import { describeEval } from "./index";
 import { init, ClosedQA, Factuality, Levenshtein } from "autoevals";
 import OpenAI from "openai";
+import { describe, expect, it } from "vitest";
 
 // const client = new OpenAI({
 //   apiKey: process.env.OPENAI_API_KEY,
@@ -21,6 +22,17 @@ describeEval("autoevals Levenshtein", {
   },
   scorers: [Levenshtein],
   threshold: 1.0,
+});
+
+describe("evals with expect.toEval", () => {
+  it("don't include eval scores in the output", () => {
+    expect("What is the capital of France?").toEval(
+      "Paris",
+      async () => "Paris",
+      Levenshtein,
+      0.8,
+    );
+  });
 });
 
 describeEval("autoevals Factuality", {
