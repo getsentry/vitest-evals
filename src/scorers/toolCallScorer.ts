@@ -1,150 +1,370 @@
-import type { ScoreFn, BaseScorerOptions } from "../index";
+import type { ScoreFn, BaseScorerOptions, ToolCall } from "../index";
 
 export interface ToolCallScorerOptions extends BaseScorerOptions {
-  expectedTools?: string[];
-  requireExactOrder?: boolean;
-  checkArguments?: boolean;
-  argumentMatcher?: (expected: any, actual: any) => boolean;
+  // Expected tools are now defined in the test data
+  expectedTools?: Array<{
+    name: string;
+    arguments?: any;
+  }>;
+}
+
+export interface ToolCallScorerConfig {
+  /**
+   * Whether tools must be called in the exact order specified
+   * @default false
+   */
+  ordered?: boolean;
+
+  /**
+   * Whether to use strict argument matching (exact equality)
+   * @default false (uses fuzzy matching)
+   */
+  strictArgs?: boolean;
+
+  /**
+   * Custom function to compare expected vs actual arguments
+   * Overrides strictArgs when provided
+   */
+  argMatcher?: (expected: any, actual: any) => boolean;
+
+  /**
+   * Whether to allow additional tool calls beyond those expected
+   * @default true
+   */
+  allowExtraTools?: boolean;
+
+  /**
+   * Whether all expected tools must be called
+   * @default true
+   */
+  requireAllTools?: boolean;
+}
+
+/**
+ * Default fuzzy matching for arguments
+ */
+function fuzzyMatch(expected: any, actual: any): boolean {
+  // Null/undefined handling
+  if (expected == null || actual == null) {
+    return expected === actual;
+  }
+
+  // For objects, check if actual has all expected properties
+  if (
+    typeof expected === "object" &&
+    typeof actual === "object" &&
+    !Array.isArray(expected)
+  ) {
+    return Object.entries(expected).every(
+      ([key, value]) => key in actual && fuzzyMatch(value, actual[key]),
+    );
+  }
+
+  // For strings, case-insensitive substring match
+  if (typeof expected === "string" && typeof actual === "string") {
+    return actual.toLowerCase().includes(expected.toLowerCase());
+  }
+
+  // For numbers, allow small differences (0.1% or 0.001, whichever is larger)
+  if (typeof expected === "number" && typeof actual === "number") {
+    const tolerance = Math.max(Math.abs(expected) * 0.001, 0.001);
+    return Math.abs(expected - actual) <= tolerance;
+  }
+
+  // For arrays, check if all expected items exist in actual (order doesn't matter in fuzzy mode)
+  if (Array.isArray(expected) && Array.isArray(actual)) {
+    return expected.every((expItem) =>
+      actual.some((actItem) => fuzzyMatch(expItem, actItem)),
+    );
+  }
+
+  // Otherwise strict equality
+  return expected === actual;
+}
+
+/**
+ * Strict equality comparison
+ */
+function strictEquals(expected: any, actual: any): boolean {
+  return JSON.stringify(expected) === JSON.stringify(actual);
 }
 
 /**
  * A configurable scorer for evaluating tool usage in LLM responses.
  *
- * @param options - Configuration options for the scorer
- * @param options.checkArguments - Whether to validate tool arguments match expected values
- * @param options.requireExactOrder - Whether tools must be called in the exact order specified
- * @param options.argumentMatcher - Custom function to compare expected vs actual arguments
+ * The test data defines WHAT tools/arguments are expected,
+ * while this scorer defines HOW to evaluate them.
+ *
+ * @param config - Configuration options for the scorer
  *
  * @example
- * // Basic usage - just check if tools were called
- * describeEval("tool test", {
+ * // Fuzzy matching, any order (default)
+ * describeEval("search test", {
  *   data: async () => [{
- *     input: "Search for weather",
- *     expectedTools: ["search", "weather_api"]
+ *     input: "Find restaurants",
+ *     expectedTools: [
+ *       { name: "search", arguments: { type: "restaurant" } },
+ *       { name: "filter" }
+ *     ]
  *   }],
  *   task: myTask,
  *   scorers: [ToolCallScorer()]
  * });
  *
  * @example
- * // Strict mode - check order and arguments
- * describeEval("strict tool test", {
+ * // Strict order and arguments
+ * describeEval("payment flow", {
  *   data: async () => [{
- *     input: "Search for weather",
- *     expectedTools: ["search", "weather_api"],
- *     expectedArguments: [
- *       { query: "weather" },
- *       { location: "current" }
+ *     input: "Process payment",
+ *     expectedTools: [
+ *       { name: "validate", arguments: { amount: 100 } },
+ *       { name: "charge", arguments: { amount: 100, method: "card" } }
  *     ]
  *   }],
  *   task: myTask,
- *   scorers: [ToolCallScorer({
- *     requireExactOrder: true,
- *     checkArguments: true
- *   })]
+ *   scorers: [ToolCallScorer({ ordered: true, strictArgs: true })]
  * });
  */
 export function ToolCallScorer(
-  options: Partial<ToolCallScorerOptions> = {},
-): ScoreFn<ToolCallScorerOptions & { expectedArguments?: any[] }> {
+  config: ToolCallScorerConfig = {},
+): ScoreFn<ToolCallScorerOptions> {
   const {
-    requireExactOrder = false,
-    checkArguments = false,
-    argumentMatcher = (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  } = options;
+    ordered = false,
+    strictArgs = false,
+    allowExtraTools = true,
+    requireAllTools = true,
+    argMatcher = strictArgs ? strictEquals : fuzzyMatch,
+  } = config;
 
   return async (opts) => {
+    const expectedTools = opts.expectedTools || [];
+    const actualCalls = opts.toolCalls || [];
+
     // No expectations means pass
-    if (!opts.expectedTools || opts.expectedTools.length === 0) {
+    if (expectedTools.length === 0) {
       return {
         score: 1.0,
         metadata: {
-          rationale: "No tool expectations defined",
+          rationale: "No tool calls expected",
         },
       };
     }
 
-    // No tool calls when we expected some
-    if (!opts.toolCalls || opts.toolCalls.length === 0) {
+    // No actual calls when we expected some
+    if (actualCalls.length === 0) {
       return {
         score: 0.0,
         metadata: {
-          rationale: `Expected tools: ${opts.expectedTools.join(", ")}, but no tools were called`,
+          rationale: `Expected ${expectedTools.length} tool(s) but none were called`,
         },
       };
     }
 
-    const actualTools = opts.toolCalls.map((tc) => tc.name);
+    if (ordered) {
+      return evaluateOrderedTools(expectedTools, actualCalls, {
+        argMatcher,
+        allowExtraTools,
+      });
+    }
 
-    // Check exact order if required
-    if (requireExactOrder) {
-      const orderMatches = opts.expectedTools.every(
-        (tool, i) => actualTools[i] === tool,
-      );
+    return evaluateUnorderedTools(expectedTools, actualCalls, {
+      argMatcher,
+      requireAllTools,
+      allowExtraTools,
+    });
+  };
+}
 
-      if (!orderMatches) {
-        return {
-          score: 0.0,
-          metadata: {
-            rationale: `Expected order: ${opts.expectedTools.join(" → ")}, Got: ${actualTools.join(" → ")}`,
-          },
-        };
-      }
+/**
+ * Evaluate tools that must be called in a specific order
+ */
+function evaluateOrderedTools(
+  expected: Array<{ name: string; arguments?: any }>,
+  actual: ToolCall[],
+  options: {
+    argMatcher: (expected: any, actual: any) => boolean;
+    allowExtraTools: boolean;
+  },
+) {
+  let expectedIndex = 0;
+  let actualIndex = 0;
 
-      // Check arguments if required and order matches
-      if (checkArguments && opts.expectedArguments) {
-        const argumentsMatch = opts.toolCalls.every((call, i) => {
-          const expected = opts.expectedArguments![i];
-          return expected ? argumentMatcher(expected, call.arguments) : true;
-        });
+  // Match expected tools in order
+  while (expectedIndex < expected.length && actualIndex < actual.length) {
+    const exp = expected[expectedIndex];
+    const act = actual[actualIndex];
 
-        if (!argumentsMatch) {
+    if (exp.name === act.name) {
+      // Check arguments if specified
+      if (exp.arguments !== undefined) {
+        const argsMatch = options.argMatcher(
+          exp.arguments,
+          act.arguments || {},
+        );
+        if (!argsMatch) {
           return {
             score: 0.5,
             metadata: {
-              rationale:
-                "Tools called in correct order but with incorrect arguments",
+              rationale: `Tool '${exp.name}' called with incorrect arguments at position ${expectedIndex + 1}`,
+              expected: exp.arguments,
+              actual: act.arguments,
             },
           };
         }
       }
-
-      return {
-        score: 1.0,
-        metadata: {
-          rationale: requireExactOrder
-            ? "All tools called in expected order"
-            : "All expected tools were called",
-        },
-      };
-    }
-
-    // Check if all expected tools were called (any order)
-    const missingTools = opts.expectedTools.filter(
-      (tool) => !actualTools.includes(tool),
-    );
-    const extraTools = actualTools.filter(
-      (tool) => !opts.expectedTools!.includes(tool),
-    );
-
-    if (missingTools.length > 0) {
+      expectedIndex++;
+      actualIndex++;
+    } else if (options.allowExtraTools) {
+      // Skip extra tool
+      actualIndex++;
+    } else {
+      // Wrong tool in sequence when extra tools not allowed
       return {
         score: 0.0,
         metadata: {
-          rationale: `Missing required tools: ${missingTools.join(", ")}`,
+          rationale: `Expected '${exp.name}' at position ${expectedIndex + 1} but found '${act.name}'`,
         },
       };
     }
+  }
 
-    // All expected tools were called
+  // Check if all expected tools were matched
+  if (expectedIndex < expected.length) {
+    const missing = expected.slice(expectedIndex).map((t) => t.name);
+    return {
+      score: 0.0,
+      metadata: {
+        rationale: `Missing required tools in sequence: ${missing.join(", ")}`,
+      },
+    };
+  }
+
+  // Check for extra tools at the end if not allowed
+  if (!options.allowExtraTools && actualIndex < actual.length) {
+    const extra = actual.slice(actualIndex).map((t) => t.name);
+    return {
+      score: 0.0,
+      metadata: {
+        rationale: `Unexpected extra tools: ${extra.join(", ")}`,
+      },
+    };
+  }
+
+  return {
+    score: 1.0,
+    metadata: {
+      rationale: "All tools called in expected order with correct arguments",
+    },
+  };
+}
+
+/**
+ * Evaluate tools that can be called in any order
+ */
+function evaluateUnorderedTools(
+  expected: Array<{ name: string; arguments?: any }>,
+  actual: ToolCall[],
+  options: {
+    argMatcher: (expected: any, actual: any) => boolean;
+    requireAllTools: boolean;
+    allowExtraTools: boolean;
+  },
+) {
+  const matchedExpected = new Set<number>();
+  const matchedActual = new Set<number>();
+  const issues: string[] = [];
+
+  // Try to match each expected tool
+  for (let i = 0; i < expected.length; i++) {
+    const exp = expected[i];
+    let found = false;
+
+    // Look for a matching actual tool call
+    for (let j = 0; j < actual.length; j++) {
+      if (matchedActual.has(j)) continue;
+
+      const act = actual[j];
+      if (exp.name === act.name) {
+        // Check arguments if specified
+        if (exp.arguments !== undefined) {
+          const argsMatch = options.argMatcher(
+            exp.arguments,
+            act.arguments || {},
+          );
+          if (!argsMatch) {
+            continue; // Try to find another call with matching args
+          }
+        }
+
+        // Found a match
+        matchedExpected.add(i);
+        matchedActual.add(j);
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      if (exp.arguments !== undefined) {
+        // Check if tool was called but with wrong args
+        const wrongArgsCalls = actual.filter((a) => a.name === exp.name);
+        if (wrongArgsCalls.length > 0) {
+          issues.push(`Tool '${exp.name}' called but with incorrect arguments`);
+        } else {
+          issues.push(`Missing required tool: ${exp.name}`);
+        }
+      } else {
+        issues.push(`Missing required tool: ${exp.name}`);
+      }
+    }
+  }
+
+  // Check for extra tools
+  const extraTools = actual
+    .filter((_, i) => !matchedActual.has(i))
+    .map((t) => t.name);
+
+  if (!options.allowExtraTools && extraTools.length > 0) {
+    issues.push(`Unexpected extra tools: ${extraTools.join(", ")}`);
+  }
+
+  // Calculate score
+  const expectedMatched = matchedExpected.size;
+  const expectedTotal = expected.length;
+
+  // If we have any critical issues (wrong tools, missing tools when required, or extra tools when not allowed)
+  if (
+    issues.length > 0 &&
+    (options.requireAllTools || !options.allowExtraTools)
+  ) {
+    return {
+      score: 0.0,
+      metadata: {
+        rationale: issues.join("; "),
+      },
+    };
+  }
+
+  // Partial credit when not all required
+  const score = expectedTotal > 0 ? expectedMatched / expectedTotal : 1.0;
+
+  if (score === 1.0) {
+    const extraInfo =
+      extraTools.length > 0 ? ` (plus extra: ${extraTools.join(", ")})` : "";
     return {
       score: 1.0,
       metadata: {
-        rationale:
-          extraTools.length > 0
-            ? `All expected tools called, plus extras: ${extraTools.join(", ")}`
-            : "All expected tools were called",
+        rationale: `All expected tools were called${extraInfo}`,
       },
     };
+  }
+
+  return {
+    score,
+    metadata: {
+      rationale: issues.join("; "),
+      matched: expectedMatched,
+      total: expectedTotal,
+    },
   };
 }

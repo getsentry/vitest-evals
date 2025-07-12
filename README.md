@@ -87,11 +87,37 @@ const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
 Evaluates if the expected tools were called with correct arguments.
 
 ```javascript
+// Basic usage - fuzzy matching, any order
+describeEval("search test", {
+  data: async () => [{
+    input: "Find Italian restaurants",
+    expectedTools: [
+      { name: "search", arguments: { type: "restaurant" } },
+      { name: "filter", arguments: { cuisine: "italian" } }
+    ]
+  }],
+  task: myTask,
+  scorers: [ToolCallScorer()]
+});
+
+// Strict evaluation - exact order and arguments
+scorers: [ToolCallScorer({ 
+  ordered: true,      // Tools must be in exact order
+  strictArgs: true    // Arguments must match exactly
+})]
+
+// Flexible evaluation
 scorers: [ToolCallScorer({
-  expectedTools: ['search', 'filter'],
-  requireExactArgs: true
+  allowExtraTools: false,   // No additional tools allowed
+  requireAllTools: false    // Partial matches give partial credit
 })]
 ```
+
+**Default behavior:**
+- Fuzzy argument matching (case-insensitive, subset matching)
+- Any order
+- Extra tools allowed
+- All expected tools required
 
 ## AI SDK Integration
 

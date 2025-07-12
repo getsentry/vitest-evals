@@ -1,1 +1,5 @@
-export { ToolCallScorer, type ToolCallScorerOptions } from "./toolCallScorer";
+export {
+  ToolCallScorer,
+  type ToolCallScorerOptions,
+  type ToolCallScorerConfig,
+} from "./toolCallScorer";

@@ -151,11 +151,13 @@ describeEval("AI SDK Weather Assistant", {
   data: async () => [
     {
       input: "What's the weather like in Seattle?",
-      expectedTools: ["getWeather"],
+      expectedTools: [
+        { name: "getWeather", arguments: { location: "Seattle" } },
+      ],
     },
     {
       input: "Compare the weather between Seattle and New York",
-      expectedTools: ["getWeather", "getWeather"], // Called twice
+      expectedTools: [{ name: "getWeather" }, { name: "getWeather" }], // Called twice, don't care about specific args
     },
     {
       input: "Tell me about the weather", // Vague request
@@ -164,11 +166,8 @@ describeEval("AI SDK Weather Assistant", {
   ],
   task: weatherAssistantTask,
   scorers: [
-    // Use the built-in ToolCallScorer
-    ToolCallScorer({
-      requireExactOrder: false, // Don't care about order
-      checkArguments: false, // Just verify the right tools were called
-    }),
+    // Use the built-in ToolCallScorer with fuzzy matching (default)
+    ToolCallScorer(),
 
     // Custom scorer for weather-specific validation
     async (opts) => {
@@ -210,8 +209,12 @@ describeEval("Tool Argument Validation", {
   data: async () => [
     {
       input: "What's the weather in Seattle in Celsius?",
-      expectedTools: ["getWeather"],
-      expectedArguments: [{ location: "Seattle", units: "celsius" }],
+      expectedTools: [
+        {
+          name: "getWeather",
+          arguments: { location: "Seattle", units: "celsius" },
+        },
+      ],
     },
   ],
   task: async (input) => {
@@ -232,15 +235,45 @@ describeEval("Tool Argument Validation", {
   },
   scorers: [
     ToolCallScorer({
-      checkArguments: true,
-      argumentMatcher: (expected, actual) => {
-        // Custom matcher that's more flexible
-        return (
-          expected.location === actual.location &&
-          (expected.units === actual.units ||
-            (!expected.units && actual.units === "fahrenheit"))
-        ); // default
-      },
+      strictArgs: true, // Require exact argument matching
+    }),
+  ],
+  threshold: 1.0,
+});
+
+// Example with custom argument matching
+describeEval("Flexible Argument Matching", {
+  data: async () => [
+    {
+      input: "Search for Italian restaurants nearby",
+      expectedTools: [
+        {
+          name: "search_places",
+          arguments: { type: "restaurant", cuisine: "italian" },
+        },
+      ],
+    },
+  ],
+  task: async (input) => {
+    return {
+      result: "Found 5 Italian restaurants within 1 mile",
+      toolCalls: [
+        {
+          name: "search_places",
+          arguments: {
+            type: "restaurant",
+            cuisine: "Italian", // Different case
+            radius: 1,
+            units: "miles",
+          },
+        },
+      ],
+    };
+  },
+  scorers: [
+    ToolCallScorer({
+      // Default fuzzy matching handles case differences
+      // and extra arguments automatically
     }),
   ],
   threshold: 1.0,

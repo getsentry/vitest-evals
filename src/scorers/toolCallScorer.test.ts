@@ -3,159 +3,383 @@ import { ToolCallScorer } from "./toolCallScorer";
 import type { ToolCall } from "../index";
 
 describe("ToolCallScorer", () => {
-  test("passes when no tool expectations defined", async () => {
-    const scorer = ToolCallScorer();
-    const result = await scorer({
-      input: "test",
-      output: "result",
+  describe("unordered tools (default)", () => {
+    test("passes when all expected tools are called", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "weather_api", arguments: { location: "Seattle" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toContain(
+        "All expected tools were called",
+      );
     });
-    expect(result.score).toBe(1.0);
-    expect(result.metadata?.rationale).toContain("No tool expectations");
+
+    test("fails when missing required tools", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain(
+        "Missing required tool: weather_api",
+      );
+    });
+
+    test("passes with extra tools when allowed (default)", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "weather_api", arguments: { location: "Seattle" } },
+        { name: "format", arguments: { style: "json" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toContain("plus extra: format");
+    });
+
+    test("fails with extra tools when not allowed", async () => {
+      const scorer = ToolCallScorer({ allowExtraTools: false });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "weather_api", arguments: { location: "Seattle" } },
+        { name: "format", arguments: { style: "json" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain(
+        "Unexpected extra tools: format",
+      );
+    });
+
+    test("partial credit when requireAllTools is false", async () => {
+      const scorer = ToolCallScorer({ requireAllTools: false });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search" },
+          { name: "weather_api" },
+          { name: "format" },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1 / 3);
+      expect(result.metadata?.matched).toBe(1);
+      expect(result.metadata?.total).toBe(3);
+    });
   });
 
-  test("fails when expected tools but none called", async () => {
-    const scorer = ToolCallScorer();
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
+  describe("ordered tools", () => {
+    test("fails when order is wrong", async () => {
+      const scorer = ToolCallScorer({ ordered: true });
+      const toolCalls: ToolCall[] = [
+        { name: "weather_api", arguments: { location: "Seattle" } },
+        { name: "search", arguments: { query: "weather" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.0);
+      // With allowExtraTools:true (default), it skips weather_api and finds search next,
+      // but then weather_api is missing from the sequence
+      expect(result.metadata?.rationale).toContain(
+        "Missing required tools in sequence: weather_api",
+      );
     });
-    expect(result.score).toBe(0.0);
-    expect(result.metadata?.rationale).toContain("no tools were called");
+
+    test("passes when exact order matches", async () => {
+      const scorer = ToolCallScorer({ ordered: true });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "weather_api", arguments: { location: "Seattle" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("handles extra tools in ordered mode", async () => {
+      const scorer = ToolCallScorer({ ordered: true });
+      const toolCalls: ToolCall[] = [
+        { name: "init", arguments: {} },
+        { name: "search", arguments: { query: "weather" } },
+        { name: "cache", arguments: {} },
+        { name: "weather_api", arguments: { location: "Seattle" } },
+        { name: "cleanup", arguments: {} },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }, { name: "weather_api" }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toContain(
+        "All tools called in expected order",
+      );
+    });
   });
 
-  test("passes when all expected tools called", async () => {
-    const scorer = ToolCallScorer();
-    const toolCalls: ToolCall[] = [
-      { name: "search", arguments: { query: "weather" } },
-      { name: "weather_api", arguments: { location: "Seattle" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      toolCalls,
+  describe("argument matching", () => {
+    test("fuzzy matching by default", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        {
+          name: "search",
+          arguments: { query: "Weather in SEATTLE", limit: 10 },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search", arguments: { query: "weather in seattle" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
     });
-    expect(result.score).toBe(1.0);
-    expect(result.metadata?.rationale).toContain(
-      "All expected tools were called",
-    );
+
+    test("fuzzy matching with numbers", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "calculate", arguments: { value: 100.001 } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "calculate", arguments: { value: 100 } }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("fuzzy matching with arrays", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        {
+          name: "filter",
+          arguments: { tags: ["weather", "seattle", "today"] },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "filter", arguments: { tags: ["seattle", "weather"] } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("strict matching when enabled", async () => {
+      const scorer = ToolCallScorer({ strictArgs: true });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "Weather in SEATTLE" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search", arguments: { query: "weather in seattle" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain("incorrect arguments");
+    });
+
+    test("strict matching with exact match", async () => {
+      const scorer = ToolCallScorer({ strictArgs: true });
+      const toolCalls: ToolCall[] = [
+        {
+          name: "search",
+          arguments: { query: "weather", location: "Seattle" },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          {
+            name: "search",
+            arguments: { query: "weather", location: "Seattle" },
+          },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("custom argument matcher", async () => {
+      const scorer = ToolCallScorer({
+        argMatcher: (expected, actual) => {
+          // Case-insensitive location matching
+          if (expected.location && actual.location) {
+            return (
+              expected.location.toLowerCase() === actual.location.toLowerCase()
+            );
+          }
+          return JSON.stringify(expected) === JSON.stringify(actual);
+        },
+      });
+      const toolCalls: ToolCall[] = [
+        { name: "weather_api", arguments: { location: "SEATTLE" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "weather_api", arguments: { location: "seattle" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("detects wrong arguments", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "restaurants" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search", arguments: { query: "weather" } }],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain(
+        "Tool 'search' called but with incorrect arguments",
+      );
+    });
+
+    test("handles tools without arguments", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "get_current_user", arguments: {} },
+        { name: "list_projects" },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "get_current_user" },
+          { name: "list_projects" },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
   });
 
-  test("fails when missing required tools", async () => {
-    const scorer = ToolCallScorer();
-    const toolCalls: ToolCall[] = [
-      { name: "search", arguments: { query: "weather" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      toolCalls,
+  describe("edge cases", () => {
+    test("handles empty expectations", async () => {
+      const scorer = ToolCallScorer();
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [],
+        toolCalls: [{ name: "search", arguments: {} }],
+      });
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toContain("No tool calls expected");
     });
-    expect(result.score).toBe(0.0);
-    expect(result.metadata?.rationale).toContain(
-      "Missing required tools: weather_api",
-    );
+
+    test("handles no actual calls when expecting some", async () => {
+      const scorer = ToolCallScorer();
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search" }],
+        toolCalls: [],
+      });
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain(
+        "Expected 1 tool(s) but none were called",
+      );
+    });
+
+    test("handles missing expectedTools", async () => {
+      const scorer = ToolCallScorer();
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        toolCalls: [{ name: "search", arguments: {} }],
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("handles null/undefined in fuzzy matching", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: null, filters: undefined } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search", arguments: { query: null } }],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
   });
 
-  test("passes with extra tools when order not required", async () => {
-    const scorer = ToolCallScorer();
-    const toolCalls: ToolCall[] = [
-      { name: "search", arguments: { query: "weather" } },
-      { name: "weather_api", arguments: { location: "Seattle" } },
-      { name: "format", arguments: { style: "json" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      toolCalls,
+  describe("ordered with arguments", () => {
+    test("validates arguments in ordered mode", async () => {
+      const scorer = ToolCallScorer({ ordered: true, strictArgs: true });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "filter", arguments: { location: "Seattle" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search", arguments: { query: "weather" } },
+          { name: "filter", arguments: { location: "Portland" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(0.5);
+      expect(result.metadata?.rationale).toContain(
+        "Tool 'filter' called with incorrect arguments at position 2",
+      );
     });
-    expect(result.score).toBe(1.0);
-    expect(result.metadata?.rationale).toContain("plus extras: format");
-  });
-
-  test("fails when exact order required but not matched", async () => {
-    const scorer = ToolCallScorer({ requireExactOrder: true });
-    const toolCalls: ToolCall[] = [
-      { name: "weather_api", arguments: { location: "Seattle" } },
-      { name: "search", arguments: { query: "weather" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      toolCalls,
-    });
-    expect(result.score).toBe(0.0);
-    expect(result.metadata?.rationale).toContain(
-      "Expected order: search → weather_api",
-    );
-  });
-
-  test("passes when exact order matches", async () => {
-    const scorer = ToolCallScorer({ requireExactOrder: true });
-    const toolCalls: ToolCall[] = [
-      { name: "search", arguments: { query: "weather" } },
-      { name: "weather_api", arguments: { location: "Seattle" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      toolCalls,
-    });
-    expect(result.score).toBe(1.0);
-  });
-
-  test("validates arguments when checkArguments is true", async () => {
-    const scorer = ToolCallScorer({
-      requireExactOrder: true,
-      checkArguments: true,
-    });
-    const toolCalls: ToolCall[] = [
-      { name: "search", arguments: { query: "weather" } },
-      { name: "weather_api", arguments: { location: "Seattle" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["search", "weather_api"],
-      expectedArguments: [
-        { query: "weather" },
-        { location: "London" }, // Wrong location
-      ],
-      toolCalls,
-    });
-    expect(result.score).toBe(0.5);
-    expect(result.metadata?.rationale).toContain("incorrect arguments");
-  });
-
-  test("custom argument matcher", async () => {
-    const scorer = ToolCallScorer({
-      requireExactOrder: true,
-      checkArguments: true,
-      argumentMatcher: (expected, actual) => {
-        // Case-insensitive location matching
-        if (expected.location && actual.location) {
-          return (
-            expected.location.toLowerCase() === actual.location.toLowerCase()
-          );
-        }
-        return JSON.stringify(expected) === JSON.stringify(actual);
-      },
-    });
-    const toolCalls: ToolCall[] = [
-      { name: "weather_api", arguments: { location: "SEATTLE" } },
-    ];
-    const result = await scorer({
-      input: "test",
-      output: "result",
-      expectedTools: ["weather_api"],
-      expectedArguments: [{ location: "seattle" }],
-      toolCalls,
-    });
-    expect(result.score).toBe(1.0);
   });
 });
