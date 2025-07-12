@@ -16,28 +16,26 @@ export interface ToolCallScorerConfig {
   ordered?: boolean;
 
   /**
-   * Whether to use strict argument matching (exact equality)
-   * @default false (uses fuzzy matching)
+   * Whether all expected tools must be called for a passing score
+   * When false: gives partial credit based on tools matched
+   * @default true
    */
-  strictArgs?: boolean;
-
-  /**
-   * Custom function to compare expected vs actual arguments
-   * Overrides strictArgs when provided
-   */
-  argMatcher?: (expected: any, actual: any) => boolean;
+  requireAll?: boolean;
 
   /**
    * Whether to allow additional tool calls beyond those expected
    * @default true
    */
-  allowExtraTools?: boolean;
+  allowExtras?: boolean;
 
   /**
-   * Whether all expected tools must be called
-   * @default true
+   * How to match tool arguments/parameters
+   * - "strict": Exact equality required (default)
+   * - "fuzzy": Case-insensitive, subset matching, numeric tolerance
+   * - Custom function: Your own comparison logic
+   * @default "strict"
    */
-  requireAllTools?: boolean;
+  params?: "strict" | "fuzzy" | ((expected: any, actual: any) => boolean);
 }
 
 /**
@@ -96,9 +94,13 @@ function strictEquals(expected: any, actual: any): boolean {
  * while this scorer defines HOW to evaluate them.
  *
  * @param config - Configuration options for the scorer
+ * @param config.ordered - Require exact order of tool calls
+ * @param config.requireAll - Require all expected tools (vs partial credit)
+ * @param config.allowExtras - Allow additional tool calls
+ * @param config.params - How to match parameters: "strict", "fuzzy", or custom function
  *
  * @example
- * // Fuzzy matching, any order (default)
+ * // Default: strict params, any order
  * describeEval("search test", {
  *   data: async () => [{
  *     input: "Find restaurants",
@@ -112,7 +114,7 @@ function strictEquals(expected: any, actual: any): boolean {
  * });
  *
  * @example
- * // Strict order and arguments
+ * // Strict order and parameters
  * describeEval("payment flow", {
  *   data: async () => [{
  *     input: "Process payment",
@@ -122,7 +124,7 @@ function strictEquals(expected: any, actual: any): boolean {
  *     ]
  *   }],
  *   task: myTask,
- *   scorers: [ToolCallScorer({ ordered: true, strictArgs: true })]
+ *   scorers: [ToolCallScorer({ ordered: true, params: "strict" })]
  * });
  */
 export function ToolCallScorer(
@@ -130,11 +132,18 @@ export function ToolCallScorer(
 ): ScoreFn<ToolCallScorerOptions> {
   const {
     ordered = false,
-    strictArgs = false,
-    allowExtraTools = true,
-    requireAllTools = true,
-    argMatcher = strictArgs ? strictEquals : fuzzyMatch,
+    requireAll = true,
+    allowExtras = true,
+    params = "strict",
   } = config;
+
+  // Determine the argument matcher
+  const argMatcher =
+    typeof params === "function"
+      ? params
+      : params === "strict"
+        ? strictEquals
+        : fuzzyMatch;
 
   return async (opts) => {
     const expectedTools = opts.expectedTools || [];
@@ -163,14 +172,14 @@ export function ToolCallScorer(
     if (ordered) {
       return evaluateOrderedTools(expectedTools, actualCalls, {
         argMatcher,
-        allowExtraTools,
+        allowExtraTools: allowExtras,
       });
     }
 
     return evaluateUnorderedTools(expectedTools, actualCalls, {
       argMatcher,
-      requireAllTools,
-      allowExtraTools,
+      requireAllTools: requireAll,
+      allowExtraTools: allowExtras,
     });
   };
 }

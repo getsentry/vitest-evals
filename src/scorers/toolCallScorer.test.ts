@@ -57,7 +57,7 @@ describe("ToolCallScorer", () => {
     });
 
     test("fails with extra tools when not allowed", async () => {
-      const scorer = ToolCallScorer({ allowExtraTools: false });
+      const scorer = ToolCallScorer({ allowExtras: false });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
         { name: "weather_api", arguments: { location: "Seattle" } },
@@ -75,8 +75,8 @@ describe("ToolCallScorer", () => {
       );
     });
 
-    test("partial credit when requireAllTools is false", async () => {
-      const scorer = ToolCallScorer({ requireAllTools: false });
+    test("partial credit when requireAll is false", async () => {
+      const scorer = ToolCallScorer({ requireAll: false });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
       ];
@@ -155,8 +155,8 @@ describe("ToolCallScorer", () => {
   });
 
   describe("argument matching", () => {
-    test("fuzzy matching by default", async () => {
-      const scorer = ToolCallScorer();
+    test("fuzzy matching when specified", async () => {
+      const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
         {
           name: "search",
@@ -175,7 +175,7 @@ describe("ToolCallScorer", () => {
     });
 
     test("fuzzy matching with numbers", async () => {
-      const scorer = ToolCallScorer();
+      const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
         { name: "calculate", arguments: { value: 100.001 } },
       ];
@@ -189,7 +189,7 @@ describe("ToolCallScorer", () => {
     });
 
     test("fuzzy matching with arrays", async () => {
-      const scorer = ToolCallScorer();
+      const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
         {
           name: "filter",
@@ -207,8 +207,8 @@ describe("ToolCallScorer", () => {
       expect(result.score).toBe(1.0);
     });
 
-    test("strict matching when enabled", async () => {
-      const scorer = ToolCallScorer({ strictArgs: true });
+    test("strict params require exact arguments", async () => {
+      const scorer = ToolCallScorer({ params: "strict" });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "Weather in SEATTLE" } },
       ];
@@ -224,8 +224,8 @@ describe("ToolCallScorer", () => {
       expect(result.metadata?.rationale).toContain("incorrect arguments");
     });
 
-    test("strict matching with exact match", async () => {
-      const scorer = ToolCallScorer({ strictArgs: true });
+    test("strict params pass with exact match", async () => {
+      const scorer = ToolCallScorer({ params: "strict" });
       const toolCalls: ToolCall[] = [
         {
           name: "search",
@@ -246,9 +246,9 @@ describe("ToolCallScorer", () => {
       expect(result.score).toBe(1.0);
     });
 
-    test("custom argument matcher", async () => {
+    test("custom params matcher", async () => {
       const scorer = ToolCallScorer({
-        argMatcher: (expected, actual) => {
+        params: (expected, actual) => {
           // Case-insensitive location matching
           if (expected.location && actual.location) {
             return (
@@ -273,7 +273,7 @@ describe("ToolCallScorer", () => {
     });
 
     test("detects wrong arguments", async () => {
-      const scorer = ToolCallScorer();
+      const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "restaurants" } },
       ];
@@ -345,7 +345,7 @@ describe("ToolCallScorer", () => {
       expect(result.score).toBe(1.0);
     });
 
-    test("handles null/undefined in fuzzy matching", async () => {
+    test("handles null/undefined matching", async () => {
       const scorer = ToolCallScorer();
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: null, filters: undefined } },
@@ -360,9 +360,9 @@ describe("ToolCallScorer", () => {
     });
   });
 
-  describe("ordered with arguments", () => {
+  describe("ordered with strict params", () => {
     test("validates arguments in ordered mode", async () => {
-      const scorer = ToolCallScorer({ ordered: true, strictArgs: true });
+      const scorer = ToolCallScorer({ ordered: true, params: "strict" });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
         { name: "filter", arguments: { location: "Seattle" } },

@@ -166,7 +166,7 @@ describeEval("AI SDK Weather Assistant", {
   ],
   task: weatherAssistantTask,
   scorers: [
-    // Use the built-in ToolCallScorer with fuzzy matching (default)
+    // Use the built-in ToolCallScorer with default strict matching
     ToolCallScorer(),
 
     // Custom scorer for weather-specific validation
@@ -235,7 +235,7 @@ describeEval("Tool Argument Validation", {
   },
   scorers: [
     ToolCallScorer({
-      strictArgs: true, // Require exact argument matching
+      params: "strict", // Require exact parameter matching
     }),
   ],
   threshold: 1.0,
@@ -272,8 +272,7 @@ describeEval("Flexible Argument Matching", {
   },
   scorers: [
     ToolCallScorer({
-      // Default fuzzy matching handles case differences
-      // and extra arguments automatically
+      params: "fuzzy", // Handles case differences and extra arguments
     }),
   ],
   threshold: 1.0,
