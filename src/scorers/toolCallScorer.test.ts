@@ -246,6 +246,28 @@ describe("ToolCallScorer", () => {
       expect(result.score).toBe(1.0);
     });
 
+    test("strict params ignore object key order", async () => {
+      const scorer = ToolCallScorer({ params: "strict" });
+      const toolCalls: ToolCall[] = [
+        {
+          name: "search",
+          arguments: { location: "Seattle", query: "weather", limit: 10 },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          {
+            name: "search",
+            arguments: { query: "weather", limit: 10, location: "Seattle" },
+          },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
     test("custom params matcher", async () => {
       const scorer = ToolCallScorer({
         params: (expected, actual) => {
@@ -346,7 +368,7 @@ describe("ToolCallScorer", () => {
     });
 
     test("handles null/undefined matching", async () => {
-      const scorer = ToolCallScorer();
+      const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: null, filters: undefined } },
       ];

@@ -81,10 +81,40 @@ function fuzzyMatch(expected: any, actual: any): boolean {
 }
 
 /**
- * Strict equality comparison
+ * Strict equality comparison (deep equals)
  */
 function strictEquals(expected: any, actual: any): boolean {
-  return JSON.stringify(expected) === JSON.stringify(actual);
+  // Handle primitive types and null/undefined
+  if (expected === actual) return true;
+  if (expected == null || actual == null) return false;
+
+  // Must be same type
+  if (typeof expected !== typeof actual) return false;
+
+  // Handle arrays
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual)) return false;
+    if (expected.length !== actual.length) return false;
+    return expected.every((item, i) => strictEquals(item, actual[i]));
+  }
+
+  // Handle objects
+  if (typeof expected === "object") {
+    const expectedKeys = Object.keys(expected).sort();
+    const actualKeys = Object.keys(actual).sort();
+
+    // Must have same keys
+    if (expectedKeys.length !== actualKeys.length) return false;
+    if (!expectedKeys.every((key, i) => key === actualKeys[i])) return false;
+
+    // All values must match
+    return expectedKeys.every((key) =>
+      strictEquals(expected[key], actual[key]),
+    );
+  }
+
+  // Primitive types
+  return expected === actual;
 }
 
 /**
