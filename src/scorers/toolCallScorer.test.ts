@@ -152,6 +152,28 @@ describe("ToolCallScorer", () => {
         "All tools called in expected order",
       );
     });
+
+    test("partial credit in ordered mode when requireAll is false", async () => {
+      const scorer = ToolCallScorer({ ordered: true, requireAll: false });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "filter", arguments: {} },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search" },
+          { name: "weather_api" },
+          { name: "format" },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1 / 3);
+      expect(result.metadata?.rationale).toContain("Partial match: 1/3");
+      expect(result.metadata?.matched).toBe(1);
+      expect(result.metadata?.total).toBe(3);
+    });
   });
 
   describe("argument matching", () => {

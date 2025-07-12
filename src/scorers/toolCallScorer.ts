@@ -203,6 +203,7 @@ export function ToolCallScorer(
       return evaluateOrderedTools(expectedTools, actualCalls, {
         argMatcher,
         allowExtras,
+        requireAllTools: requireAll,
       });
     }
 
@@ -223,6 +224,7 @@ function evaluateOrderedTools(
   options: {
     argMatcher: (expected: any, actual: any) => boolean;
     allowExtras: boolean;
+    requireAllTools: boolean;
   },
 ) {
   let expectedIndex = 0;
@@ -270,10 +272,27 @@ function evaluateOrderedTools(
   // Check if all expected tools were matched
   if (expectedIndex < expected.length) {
     const missing = expected.slice(expectedIndex).map((t) => t.name);
+
+    if (options.requireAllTools) {
+      return {
+        score: 0.0,
+        metadata: {
+          rationale: `Missing required tools in sequence: ${missing.join(", ")}`,
+        },
+      };
+    }
+
+    // Partial credit when requireAllTools is false
+    const matchedCount = expectedIndex;
+    const totalCount = expected.length;
+    const score = totalCount > 0 ? matchedCount / totalCount : 1.0;
+
     return {
-      score: 0.0,
+      score,
       metadata: {
-        rationale: `Missing required tools in sequence: ${missing.join(", ")}`,
+        rationale: `Partial match: ${matchedCount}/${totalCount} tools called in order (missing: ${missing.join(", ")})`,
+        matched: matchedCount,
+        total: totalCount,
       },
     };
   }
