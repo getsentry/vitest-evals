@@ -202,14 +202,14 @@ export function ToolCallScorer(
     if (ordered) {
       return evaluateOrderedTools(expectedTools, actualCalls, {
         argMatcher,
-        allowExtraTools: allowExtras,
+        allowExtras,
       });
     }
 
     return evaluateUnorderedTools(expectedTools, actualCalls, {
       argMatcher,
       requireAllTools: requireAll,
-      allowExtraTools: allowExtras,
+      allowExtras,
     });
   };
 }
@@ -222,7 +222,7 @@ function evaluateOrderedTools(
   actual: ToolCall[],
   options: {
     argMatcher: (expected: any, actual: any) => boolean;
-    allowExtraTools: boolean;
+    allowExtras: boolean;
   },
 ) {
   let expectedIndex = 0;
@@ -253,7 +253,7 @@ function evaluateOrderedTools(
       }
       expectedIndex++;
       actualIndex++;
-    } else if (options.allowExtraTools) {
+    } else if (options.allowExtras) {
       // Skip extra tool
       actualIndex++;
     } else {
@@ -279,7 +279,7 @@ function evaluateOrderedTools(
   }
 
   // Check for extra tools at the end if not allowed
-  if (!options.allowExtraTools && actualIndex < actual.length) {
+  if (!options.allowExtras && actualIndex < actual.length) {
     const extra = actual.slice(actualIndex).map((t) => t.name);
     return {
       score: 0.0,
@@ -306,7 +306,7 @@ function evaluateUnorderedTools(
   options: {
     argMatcher: (expected: any, actual: any) => boolean;
     requireAllTools: boolean;
-    allowExtraTools: boolean;
+    allowExtras: boolean;
   },
 ) {
   const matchedExpected = new Set<number>();
@@ -363,7 +363,7 @@ function evaluateUnorderedTools(
     .filter((_, i) => !matchedActual.has(i))
     .map((t) => t.name);
 
-  if (!options.allowExtraTools && extraTools.length > 0) {
+  if (!options.allowExtras && extraTools.length > 0) {
     issues.push(`Unexpected extra tools: ${extraTools.join(", ")}`);
   }
 
@@ -372,10 +372,7 @@ function evaluateUnorderedTools(
   const expectedTotal = expected.length;
 
   // If we have any critical issues (wrong tools, missing tools when required, or extra tools when not allowed)
-  if (
-    issues.length > 0 &&
-    (options.requireAllTools || !options.allowExtraTools)
-  ) {
+  if (issues.length > 0 && (options.requireAllTools || !options.allowExtras)) {
     return {
       score: 0.0,
       metadata: {

@@ -58,7 +58,7 @@ import { ToolCallScorer } from "vitest-evals/scorers/toolCallScorer";
 
 describeEval("tool usage", {
   data: async () => [
-    { input: "Search weather", expectedTools: ["weather_api"] }
+    { input: "Search weather", expectedTools: [{ name: "weather_api" }] }
   ],
   task: weatherTask,
   scorers: [ToolCallScorer()]
