@@ -426,4 +426,120 @@ describe("ToolCallScorer", () => {
       );
     });
   });
+
+  describe("complex scenarios", () => {
+    test("handles duplicate tool calls correctly", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "search", arguments: { query: "weather" } },
+        { name: "format", arguments: { type: "json" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search", arguments: { query: "weather" } },
+          { name: "format", arguments: { type: "json" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toContain("plus extra: search");
+    });
+
+    test("handles multiple expected instances of same tool", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weather" } },
+        { name: "search", arguments: { query: "news" } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "search", arguments: { query: "weather" } },
+          { name: "search", arguments: { query: "news" } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("fuzzy matching allows extra properties", async () => {
+      const scorer = ToolCallScorer({ params: "fuzzy" });
+      const toolCalls: ToolCall[] = [
+        {
+          name: "api_call",
+          arguments: {
+            timeout: 5000.5,
+            retries: 3,
+            debug: true,
+          },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          {
+            name: "api_call",
+            arguments: {
+              timeout: 5000,
+            },
+          },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+
+    test("strict matching with nested objects", async () => {
+      const scorer = ToolCallScorer({ params: "strict" });
+      const toolCalls: ToolCall[] = [
+        {
+          name: "api_call",
+          arguments: {
+            config: {
+              timeout: 5000,
+              headers: { "Content-Type": "application/json" },
+            },
+          },
+        },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          {
+            name: "api_call",
+            arguments: {
+              config: {
+                headers: { "Content-Type": "application/json" },
+                timeout: 5000,
+              },
+            },
+          },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0); // Should pass due to order-independent comparison
+    });
+
+    test("handles empty arrays and objects", async () => {
+      const scorer = ToolCallScorer();
+      const toolCalls: ToolCall[] = [
+        { name: "process", arguments: { items: [], config: {} } },
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [
+          { name: "process", arguments: { items: [], config: {} } },
+        ],
+        toolCalls,
+      });
+      expect(result.score).toBe(1.0);
+    });
+  });
 });
