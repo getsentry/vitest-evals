@@ -139,6 +139,7 @@ When testing with AI SDKs:
 4. Test timeout handling
 
 Example:
+
 ```typescript
 import { generateText } from 'ai'
 import { vi } from 'vitest'
@@ -216,6 +217,7 @@ pnpm test -- --inspect
 
 ### Pre-commit Checks
 Always run before committing:
+
 ```bash
 pnpm run lint && pnpm run typecheck && pnpm test
 ```

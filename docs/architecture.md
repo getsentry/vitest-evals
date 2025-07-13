@@ -37,6 +37,7 @@ export function describeEval(
 Scorers are the pluggable evaluation functions that determine output quality.
 
 #### Scorer Interface
+
 ```typescript
 type ScoreFn<TOptions extends BaseScorerOptions = BaseScorerOptions> = (
   opts: TOptions,

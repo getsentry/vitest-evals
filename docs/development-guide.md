@@ -9,6 +9,7 @@
 - Familiarity with Vitest
 
 ### Initial Setup
+
 ```bash
 # Clone the repository
 git clone <repo-url>
@@ -46,6 +47,7 @@ Follow this process:
 ### 3. Quality Checks
 
 Before committing, always run:
+
 ```bash
 pnpm run lint        # Code style (biome)
 pnpm test           # All tests pass
@@ -65,6 +67,7 @@ Determine:
 ### Step 2: Define Types
 
 Add to `src/index.ts` if needed:
+
 ```typescript
 interface YourScorerOptions extends BaseScorerOptions {
   expected: string
@@ -79,6 +82,7 @@ interface YourScorerOptions extends BaseScorerOptions {
 ### Step 3: Write Tests First
 
 Create `src/scorers/yourScorer.test.ts`:
+
 ```typescript
 import { describe, test, expect } from 'vitest'
 import { YourScorer } from './yourScorer'
@@ -107,6 +111,7 @@ describe('YourScorer', () => {
 ### Step 4: Implement the Scorer
 
 Create `src/scorers/yourScorer.ts`:
+
 ```typescript
 import type { ScoreFn, BaseScorerOptions } from '../index'
 import type { YourScorerOptions } from '../index'
@@ -142,11 +147,13 @@ function calculateScore(
 ### Step 5: Export the Scorer
 
 Add to `src/scorers/index.ts`:
+
 ```typescript
 export { YourScorer } from './yourScorer'
 ```
 
 And to `src/index.ts`:
+
 ```typescript
 export { YourScorer } from './scorers'
 ```
@@ -154,6 +161,7 @@ export { YourScorer } from './scorers'
 ### Step 6: Document Usage
 
 Update README.md with examples:
+
 ```typescript
 import { describeEval, YourScorer } from 'vitest-evals'
 
@@ -174,6 +182,7 @@ describeEval('custom scoring test', {
 ### TypeScript Best Practices
 
 1. **Explicit Types**
+
 ```typescript
 // Good
 const score: number = 0.5
@@ -185,6 +194,7 @@ const params = { expected: 'value' }  // Implicit any
 ```
 
 2. **Const Assertions**
+
 ```typescript
 // Good
 export const SCORE_THRESHOLDS = {
@@ -202,6 +212,7 @@ export const SCORE_THRESHOLDS = {
 ```
 
 3. **Error Handling**
+
 ```typescript
 // Good
 if (!params.expected) {
@@ -225,6 +236,7 @@ if (!params.expected) {
 ### Documentation Standards
 
 1. **JSDoc for Public APIs**
+
 ```typescript
 /**
  * Evaluates the similarity between output and expected text
@@ -238,6 +250,7 @@ export const TextScorer: Scorer<TextScorerParams> = (output, params) => {
 ```
 
 2. **Inline Comments**
+
 ```typescript
 // Normalize scores to 0-1 range
 const normalizedScore = Math.max(0, Math.min(1, rawScore))
@@ -251,6 +264,7 @@ if (!output && !params.expected) {
 ## Debugging Tips
 
 ### 1. Use Test Debugging
+
 ```typescript
 test.only('debug specific test', () => {
   // Isolate problematic test
@@ -263,6 +277,7 @@ test('verbose output', () => {
 ```
 
 ### 2. Add Metadata
+
 ```typescript
 return {
   score,
@@ -275,6 +290,7 @@ return {
 ```
 
 ### 3. Use Vitest UI
+
 ```bash
 pnpm test -- --ui
 ```
@@ -282,6 +298,7 @@ pnpm test -- --ui
 ## Performance Optimization
 
 ### 1. Lazy Loading
+
 ```typescript
 // Only import heavy dependencies when needed
 const calculateScore = async (output: string) => {
@@ -291,6 +308,7 @@ const calculateScore = async (output: string) => {
 ```
 
 ### 2. Memoization
+
 ```typescript
 import { memoize } from '../utils'
 
@@ -300,6 +318,7 @@ const expensiveCalculation = memoize((input: string) => {
 ```
 
 ### 3. Batch Operations
+
 ```typescript
 export const BatchScorer: Scorer<BatchParams> = async (output, params) => {
   const results = await Promise.all(
