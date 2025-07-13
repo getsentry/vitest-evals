@@ -44,7 +44,12 @@ export const FuzzyMatchScorer: ScoreFn<FuzzyMatchOptions> = async (opts) => {
   
   // Simple character-based similarity
   const maxLen = Math.max(output.length, expected.length)
-  if (maxLen === 0) return { score: 1 }
+  if (maxLen === 0) return { 
+    score: 1, 
+    metadata: { 
+      rationale: 'Both strings are empty, resulting in a perfect match'
+    } 
+  }
   
   let matches = 0
   for (let i = 0; i < maxLen; i++) {
