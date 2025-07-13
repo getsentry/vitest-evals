@@ -1,7 +1,62 @@
 import { assert, describe, expect, test } from "vitest";
 import "vitest";
 
-export type TaskFn = (input: string) => Promise<string>;
+/**
+ * Represents a tool/function call made during task execution.
+ * Supports various LLM provider formats and use cases.
+ */
+export type ToolCall = {
+  // Core fields (required for basic usage)
+  name: string;
+  arguments: Record<string, any>;
+
+  // Result and timing
+  result?: any;
+  error?: {
+    code?: string;
+    message: string;
+    details?: any;
+  };
+  timestamp?: number;
+  duration_ms?: number;
+
+  // Identification and correlation
+  id?: string;
+  parent_id?: string; // For nested/chained calls
+
+  // Status tracking
+  status?: "pending" | "executing" | "completed" | "failed" | "cancelled";
+
+  // Provider-specific fields
+  type?: "function" | "retrieval" | "code_interpreter" | "web_search" | string;
+
+  // Additional metadata
+  [key: string]: any; // Allow provider-specific fields
+};
+
+export type TaskResult = {
+  result: string;
+  toolCalls?: ToolCall[];
+};
+
+/**
+ * Task function that processes an input and returns either a string result
+ * or a TaskResult object containing the result and any tool calls made.
+ *
+ * @param input - The input string to process
+ * @returns Promise resolving to either a string or TaskResult object
+ *
+ * @example
+ * // Simple tasks can just return a string
+ * const simpleTask: TaskFn = async (input) => "The answer is 42";
+ *
+ * // Tasks that use tools should return TaskResult
+ * const taskWithTools: TaskFn = async (input) => ({
+ *   result: "The answer is 42",
+ *   toolCalls: [{ name: "calculate", arguments: { expr: "6*7" }, result: 42 }]
+ * });
+ */
+export type TaskFn = (input: string) => Promise<string | TaskResult>;
 
 export type Score = {
   score: number | null;
@@ -11,17 +66,20 @@ export type Score = {
   };
 };
 
-export type ScoreFn = (
-  opts: {
-    input: string;
-    output: string;
-  } & Record<string, unknown>,
+export interface BaseScorerOptions {
+  input: string;
+  output: string;
+  toolCalls?: ToolCall[];
+}
+
+export type ScoreFn<TOptions extends BaseScorerOptions = BaseScorerOptions> = (
+  opts: TOptions,
 ) => Promise<Score> | Score;
 
 export type ToEval<R = unknown> = (
   expected: string,
   taskFn: TaskFn,
-  scoreFn: ScoreFn,
+  scoreFn: ScoreFn<any>,
   threshold?: number,
 ) => Promise<R>;
 
@@ -37,6 +95,7 @@ declare module "vitest" {
     eval?: {
       scores: (Score & { name: string })[];
       avgScore: number;
+      toolCalls?: ToolCall[];
     };
   }
 }
@@ -47,6 +106,7 @@ expect.extend({
    *
    * @param expected - The expected (ground truth) answer
    * @param taskFn - Async function that processes the input and returns the model output
+   *                 Can return either a string or TaskResult object with result and optional toolCalls
    * @param scoreFn - Function that evaluates the model output against the expected answer
    * @param threshold - Minimum acceptable score (0-1), defaults to 1.0
    *
@@ -56,8 +116,12 @@ expect.extend({
    *   expect("What is the capital of France?").toEval(
    *     "Paris",
    *     async (input) => {
-   *       // Query LLM here
-   *       return "Paris";
+   *       const response = await queryLLM(input);
+   *       // Recommended: return TaskResult
+   *       return {
+   *         result: response.text,
+   *         toolCalls: response.toolCalls || []
+   *       };
    *     },
    *     checkFactuality,
    *     0.8
@@ -70,14 +134,18 @@ expect.extend({
     input: string,
     expected: string,
     taskFn: TaskFn,
-    scoreFn: ScoreFn,
+    scoreFn: ScoreFn<any>,
     threshold = 1.0,
   ) {
     const { isNot } = this;
 
-    const output = await taskFn(input);
+    const taskOutput = await taskFn(input);
+    const output =
+      typeof taskOutput === "string" ? taskOutput : taskOutput.result;
+    const toolCalls =
+      typeof taskOutput === "object" ? taskOutput.toolCalls : undefined;
 
-    let result = scoreFn({ input, expected, output });
+    let result = scoreFn({ input, expected, output, toolCalls });
     if (result instanceof Promise) {
       result = await result;
     }
@@ -94,8 +162,9 @@ expect.extend({
  *
  * @param name - The name of the test suite
  * @param options - Configuration options
- * @param options.data - Async function that returns an array of test cases with input and expected values
+ * @param options.data - Async function that returns an array of test cases with input and any additional fields
  * @param options.task - Function that processes the input and returns the model output
+ *                       Can return either a string or TaskResult object with result and optional toolCalls
  * @param options.skipIf - Optional function that determines if tests should be skipped
  * @param options.scorers - Array of scoring functions that evaluate model outputs
  * @param options.threshold - Minimum acceptable average score (0-1), defaults to 1.0
@@ -103,17 +172,41 @@ expect.extend({
  *
  * @example
  * ```javascript
+ * // Recommended: TaskResult format with tool tracking
  * describeEval("capital cities test", {
  *   data: async () => [{
  *     input: "What is the capital of France?",
  *     expected: "Paris"
  *   }],
  *   task: async (input) => {
- *     // Query LLM here
- *     return "Paris";
+ *     const response = await queryLLM(input);
+ *     return {
+ *       result: response.text,
+ *       toolCalls: response.toolCalls || []
+ *     };
  *   },
  *   scorers: [checkFactuality],
  *   threshold: 0.8
+ * });
+ *
+ * // Example with tool usage evaluation
+ * describeEval("tool usage test", {
+ *   data: async () => [{
+ *     input: "Search for weather in Seattle",
+ *     expectedTools: [{ name: "weather_api", arguments: { location: "Seattle" } }]
+ *   }],
+ *   task: async (input) => {
+ *     return {
+ *       result: "The weather in Seattle is 65°F",
+ *       toolCalls: [{
+ *         name: "weather_api",
+ *         arguments: { location: "Seattle" },
+ *         result: { temp: 65, condition: "partly cloudy" }
+ *       }]
+ *     };
+ *   },
+ *   scorers: [ToolCallScorer()],
+ *   threshold: 1.0
  * });
  * ```
  */
@@ -129,10 +222,10 @@ export function describeEval(
     // a single factuality check
     timeout = 60000,
   }: {
-    data: () => Promise<{ input: string; expected: string }[]>;
+    data: () => Promise<Array<{ input: string } & Record<string, any>>>;
     task: TaskFn;
     skipIf?: () => boolean;
-    scorers: ScoreFn[];
+    scorers: ScoreFn<any>[];
     threshold?: number | null;
     timeout?: number;
   },
@@ -147,11 +240,15 @@ export function describeEval(
           timeout,
         },
         async ({ task: testTask }) => {
-          const output = await task(input);
+          const taskOutput = await task(input);
+          const output =
+            typeof taskOutput === "string" ? taskOutput : taskOutput.result;
+          const toolCalls =
+            typeof taskOutput === "object" ? taskOutput.toolCalls : undefined;
 
           const scores = await Promise.all(
             scorers.map((scorer) => {
-              const result = scorer({ input, ...params, output });
+              const result = scorer({ input, ...params, output, toolCalls });
               if (result instanceof Promise) {
                 return result;
               }
@@ -169,6 +266,7 @@ export function describeEval(
           testTask.meta.eval = {
             scores: scoresWithName,
             avgScore,
+            ...(toolCalls && { toolCalls }),
           };
 
           if (threshold) {
@@ -252,3 +350,6 @@ export function wrapText(text: string, width = 80): string {
 
   return lines.join("\n");
 }
+
+// Export built-in scorers
+export { ToolCallScorer, type ToolCallScorerOptions } from "./scorers";

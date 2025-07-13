@@ -1,214 +1,246 @@
 # vitest-evals
 
-This project is a prototype of extending vitest to support basic _Evals_ functionality. Evals are a type of testing that is most commonly deployed to _evaluate_ the results of calls to language models. This allows you to utilize them with a pattern of testing you're familiar with, working well with your existing continuous integration toolchain.
+Evaluate LLM outputs using the familiar Vitest testing framework.
 
-This is heavily inspired by [Evalite](https://www.evalite.dev/), but opts for a vitest-native approach to maximize the compatibility of the existing ecosystem. This means you can use it with your existing toolchain, including reporting such as code coverage and xunit.
-
-## Use
+## Installation
 
 ```shell
 npm install -D vitest-evals
 ```
 
-You've likely already got a mechanism for passing the user input into your model, for example:
-
-```javascript
-async function answerQuestion(prompt: string) {
-  const model = openai("gpt-4o");
-  const { text } = await generateText({
-    model,
-    prompt,
-  });
-  return text;
-}
-```
-
-You'll use this as the `task` within your evals, and then you simply need to define a set of scenarios
-and a way to validate if the LLM is responding as you desire:
+## Quick Start
 
 ```javascript
 import { describeEval } from "vitest-evals";
-import { Factuality } from "autoevals";
 
-describeEval("my evals", {
-  data: async () => {
-    // The scenarios you wish to evaluate
-    return [
-      {
-        input: "What is the capital of France?",
-        expected: "Paris",
-      }
-    ];
+describeEval("capital cities", {
+  data: async () => [
+    { input: "What is the capital of France?", expected: "Paris" },
+    { input: "What is the capital of Japan?", expected: "Tokyo" }
+  ],
+  task: async (input) => {
+    const response = await queryLLM(input);
+    return response; // Simple string return
   },
+  scorers: [async ({ output, expected }) => ({
+    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
+  })],
+  threshold: 0.8
+});
+```
 
-  task: answerQuestion,
+## Tasks
 
-  // Scorers determine if the response was acceptable - in this case we're using
-  // a secondary LLM prompt to judge the response of the first.
-  scorers: [Factuality],
+Tasks process inputs and return outputs. Two formats are supported:
 
-  // The threshold required for the average score for this eval to pass. This will be
-  // based on the scorers you've provided, and in the case of Factuality, we might be
-  // ok with a 60% score (see the implementation for why).
-  threshold: 0.6,
+```javascript
+// Simple: just return a string
+const task = async (input) => "response";
 
-  // The timeout for each test. Defaults to 10s. You may need to increase this if your model
-  // provider has high latency or you're using a large number of scorers.
-  // timeout: 60000,
+// With tool tracking: return a TaskResult
+const task = async (input) => ({
+  result: "response",
+  toolCalls: [
+    { name: "search", arguments: { query: "..." }, result: {...} }
+  ]
+});
+```
 
-  // A check to determine if these tests should run. This is helpful to control tests so they only
-  // in certain situations, for example if a model providers API key is defined.
-  // skipIf: () => !process.env.OPENAI_API_KEY
-})
+## Scorers
+
+Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own:
+
+```javascript
+// Built-in scorer
+import { ToolCallScorer } from "vitest-evals";
+// Or import individually
+import { ToolCallScorer } from "vitest-evals/scorers/toolCallScorer";
+
+describeEval("tool usage", {
+  data: async () => [
+    { input: "Search weather", expectedTools: [{ name: "weather_api" }] }
+  ],
+  task: weatherTask,
+  scorers: [ToolCallScorer()]
+});
+
+// Custom scorer
+const LengthScorer = async ({ output }) => ({
+  score: output.length > 50 ? 1.0 : 0.0
+});
+
+// TypeScript scorer with custom options
+import { type ScoreFn, type BaseScorerOptions } from "vitest-evals";
+
+interface CustomOptions extends BaseScorerOptions {
+  minLength: number;
+}
+
+const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
+  score: opts.output.length >= opts.minLength ? 1.0 : 0.0
+});
+```
+
+### Built-in Scorers
+
+#### ToolCallScorer
+Evaluates if the expected tools were called with correct arguments.
+
+```javascript
+// Basic usage - strict matching, any order
+describeEval("search test", {
+  data: async () => [{
+    input: "Find Italian restaurants",
+    expectedTools: [
+      { name: "search", arguments: { type: "restaurant" } },
+      { name: "filter", arguments: { cuisine: "italian" } }
+    ]
+  }],
+  task: myTask,
+  scorers: [ToolCallScorer()]
+});
+
+// Strict evaluation - exact order and parameters
+scorers: [ToolCallScorer({ 
+  ordered: true,      // Tools must be in exact order
+  params: "strict"    // Parameters must match exactly
+})]
+
+// Flexible evaluation
+scorers: [ToolCallScorer({
+  requireAll: false,   // Partial matches give partial credit
+  allowExtras: false   // No additional tools allowed
+})]
+```
+
+**Default behavior:**
+- Strict parameter matching (exact equality required)
+- Any order allowed
+- Extra tools allowed  
+- All expected tools required
+
+## AI SDK Integration
+
+See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a complete example with the Vercel AI SDK.
+
+Transform provider responses to our format:
+
+```javascript
+// Vercel AI SDK
+const { text, toolCalls, toolResults } = await generateText(...);
+return {
+  result: text,
+  toolCalls: toolCalls?.map((call, i) => ({
+    id: call.toolCallId,
+    name: call.toolName,
+    arguments: call.args,
+    result: toolResults?.[i]?.result,
+    status: toolResults?.[i]?.error ? 'failed' : 'completed'
+  }))
+};
+```
+
+## Advanced Usage
+
+### Advanced Scorers
+
+#### Using autoevals
+
+For sophisticated evaluation, use autoevals scorers:
+
+```javascript
+import { Factuality, ClosedQA } from "autoevals";
+
+scorers: [
+  Factuality, // LLM-based factuality checking
+  ClosedQA.partial({
+    criteria: "Does the answer mention Paris?"
+  })
+]
+```
+
+#### Custom LLM-based Factuality Scorer
+
+Here's an example of implementing your own LLM-based factuality scorer using the Vercel AI SDK:
+
+```javascript
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const Factuality = (model = openai('gpt-4o')) => async ({ input, output, expected }) => {
+  if (!expected) {
+    return { score: 1.0, metadata: { rationale: "No expected answer" } };
+  }
+
+  const { object } = await generateObject({
+    model,
+    prompt: `
+      Compare the factual content of the submitted answer with the expert answer.
+      
+      Question: ${input}
+      Expert: ${expected}
+      Submission: ${output}
+      
+      Options:
+      (A) Subset of expert answer
+      (B) Superset of expert answer  
+      (C) Same content as expert
+      (D) Contradicts expert answer
+      (E) Different but factually equivalent
+    `,
+    schema: z.object({
+      answer: z.enum(['A', 'B', 'C', 'D', 'E']),
+      rationale: z.string()
+    })
+  });
+
+  const scores = { A: 0.4, B: 0.6, C: 1, D: 0, E: 1 };
+  return {
+    score: scores[object.answer],
+    metadata: { rationale: object.rationale, answer: object.answer }
+  };
+};
+
+// Usage
+scorers: [Factuality()]
+```
+
+### Skip Tests Conditionally
+
+```javascript
+describeEval("gpt-4 tests", {
+  skipIf: () => !process.env.OPENAI_API_KEY,
+  // ...
+});
 ```
 
 ### Existing Test Suites
 
 ```javascript
-// import `vitest-evals` to expose `expect().toEval()`
-// This can also be done via `setupFiles` pattern in `vitest`.
 import "vitest-evals";
-import { Factuality } from "autoevals";
 
-describe("my test suite", () => {
-  it("kind of works", () => {
-    expect("What is the capital of France?").toEval(
-      "Paris",
-      answerQuestion,
-      Factuality,
-      0.8
-    );
+test("capital check", () => {
+  const simpleFactuality = async ({ output, expected }) => ({
+    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
   });
+  
+  expect("What is the capital of France?").toEval(
+    "Paris",
+    answerQuestion,
+    simpleFactuality,
+    0.8
+  );
 });
 ```
 
-### Scoring
+## Configuration
 
-Scorers are compatible with the `autoevals` interface, but are also simple to implement on your own:
+### Separate Eval Configuration
 
-```javascript
-export const Contains = async (opts: {
-  input: string,
-  expected: string,
-  output: string,
-}) => {
-  return {
-    score: output.indexOf(expected) !== -1 ? 1.0 : 0.0,
-  };
-};
-```
-
-For something more realistic, here's a reimplementation of the Factuality scorer from `autoevals`, with some flexibility
-on the model, enabling you to evaluate against multiple models:
-
-````javascript
-import { generateObject, type LanguageModel } from "ai";
-import { z } from "zod";
-
-/**
- * A Factuality checker utilizing the `ai` SDK based on the implementation in `autoevals`.
- *
- * @param model - The language model to utilize (via `ai`).
- *
- * @example
- * ```javascript
- * import { openai } from "@ai-sdk/openai";
- *
- * scorers: [Factuality(openai("gpt-4o"))]
- * ```
- */
-export function Factuality(model: LanguageModel) {
-  return async Factuality(opts: {
-    input: string;
-    output: string;
-    expected?: string;
-  }) => {
-    const { object } = await generateObject({
-      model,
-      /**
-       * Prompt implementation from `autoevals`:
-       *
-       * {@link https://github.com/braintrustdata/autoevals/blob/5aa20a0a9eb8fc9e07e9e5722ebf71c68d082f32/templates/factuality.yaml}
-       */
-      prompt: `
-        You are comparing a submitted answer to an expert answer on a given question. Here is the data:
-        [BEGIN DATA]
-        ************
-        [Question]: ${opts.input}
-        ************
-        [Expert]: ${opts.expected}
-        ************
-        [Submission]: ${opts.output}
-        ************
-        [END DATA]
-
-        Compare the factual content of the submitted answer with the expert answer. Ignore any differences in style, grammar, or punctuation.
-        The submitted answer may either be a subset or superset of the expert answer, or it may conflict with it. Determine which case applies. Answer the question by selecting one of the following options:
-        (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
-        (B) The submitted answer is a superset of the expert answer and is fully consistent with it.
-        (C) The submitted answer contains all the same details as the expert answer.
-        (D) There is a disagreement between the submitted answer and the expert answer.
-        (E) The answers differ, but these differences don't matter from the perspective of factuality.
-      `,
-      schema: z.object({
-        answer: z.enum(["A", "B", "C", "D", "E"]).describe("Your selection."),
-        rationale: z
-          .string()
-          .describe("Why you chose this answer. Be very detailed."),
-      }),
-    });
-
-    const scores = {
-      A: 0.4,
-      B: 0.6,
-      C: 1,
-      D: 0,
-      E: 1,
-    };
-
-    return {
-      score: scores[object.answer],
-      metadata: {
-        rationale: object.rationale,
-      },
-    };
-  };
-}
-````
-
-#### Compatibility with `autoevals`
-
-We maintain compatibility with the [autoevals package](https://github.com/braintrustdata/autoevals) from Braintrust. To use it you'll typically need to use te `partial` helper provided on the scorers. For example, with the `ClosedQA` scorer:
+Create `vitest.evals.config.ts`:
 
 ```javascript
-import { describeEval } from "vitest-evals";
-import { ClosedQA } from "autoevals";
-
-describeEval("my evals", {
-  data: async () => {
-    // The scenarios you wish to evaluate
-    return [
-      {
-        input: "What is the capital of France?",
-        expected: "Paris",
-      }
-    ];
-  },
-  task: answerQuestion,
-  scorers: [ClosedQA.partial({
-    criteria: "Does the submission indicate that the question is out of scope?",
-  })],
-  threshold: 0.6,
-})
-```
-
-### Separating Evals
-
-An alternative to `skipIf` for controlling if evals run is creating an separate `vitest` configuration for them. This gives a lot of advantages, particularly allowing you to maintain two completely separate test suites. A good pattern you can enable with this is a filename-based-test selector:
-
-```javascript
-// vitest.evals.config.ts
-/// <reference types="vitest" />
 import { defineConfig } from "vitest/config";
 import defaultConfig from "./vitest.config";
 
@@ -216,41 +248,20 @@ export default defineConfig({
   ...defaultConfig,
   test: {
     ...defaultConfig.test,
-    // run `eval` files rather than typical `test` files
-    include: ["src/**/*.eval.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+    include: ["src/**/*.eval.{js,ts}"],
   },
 });
 ```
 
-In the above, we're telling it to only match only `*.eval.*` files (vs the typical `*.test.*` or `*.spec.*`). We're also inheriting from our default `vitest.config.ts`. This gives us a clean way to run only tests, or run only evals:
+Run evals separately:
 
 ```shell
 vitest --config=vitest.evals.config.ts
 ```
 
-Its recommended to add this to your `package.json`, such as under an `eval` helper:
-
-```javascript
-// package.json
-{
-  // ...
-  "scripts": {
-    // ...
-    "eval": "vitest --config=vitest.evals.config.ts",
-  }
-}
-```
-
-You can then run your evals using `npm run eval`.
-
 ## Development
 
-Nothing fancy here.
-
-```javascript
-pnpm install
-```
-
-```javascript
-pnpm test
+```shell
+npm install
+npm test
 ```
