@@ -205,7 +205,10 @@ describe("StructuredOutputScorer", () => {
     });
 
     test("allows type coercion", async () => {
-      const scorer = StructuredOutputScorer({ match: "fuzzy" });
+      const scorer = StructuredOutputScorer({
+        match: "fuzzy",
+        fuzzyOptions: { coerceTypes: true },
+      });
       const result = await scorer({
         input: "test",
         output: JSON.stringify({

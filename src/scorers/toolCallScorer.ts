@@ -2,6 +2,7 @@ import type { ScoreFn, BaseScorerOptions, ToolCall } from "../index";
 import {
   type BaseMatcherConfig,
   type MatchStrategy,
+  type FuzzyMatchOptions,
   createMatcher,
 } from "./utils";
 
@@ -28,6 +29,12 @@ export interface ToolCallScorerConfig extends BaseMatcherConfig {
    * @default "strict"
    */
   params?: MatchStrategy;
+
+  /**
+   * Options for fuzzy matching when params="fuzzy"
+   * @default { substring: true } for tool calls
+   */
+  fuzzyOptions?: FuzzyMatchOptions;
 }
 
 /**
@@ -78,10 +85,11 @@ export function ToolCallScorer(
     requireAll = true,
     allowExtras = true,
     params = "strict",
+    fuzzyOptions = { substring: true }, // Default: substring matching for tools
   } = config;
 
   // Determine the argument matcher
-  const argMatcher = createMatcher(params, "tool");
+  const argMatcher = createMatcher(params, fuzzyOptions);
 
   return async (opts) => {
     const expectedTools = opts.expectedTools || [];

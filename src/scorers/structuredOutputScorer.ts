@@ -2,6 +2,7 @@ import type { ScoreFn, BaseScorerOptions } from "../index";
 import {
   type BaseMatcherConfig,
   type MatchStrategy,
+  type FuzzyMatchOptions,
   createMatcher,
   formatValue,
   debugLog,
@@ -28,6 +29,12 @@ export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
    * @default "error"
    */
   errorField?: string | null;
+
+  /**
+   * Options for fuzzy matching when match="fuzzy"
+   * @default {} for structured output (no substring matching by default)
+   */
+  fuzzyOptions?: FuzzyMatchOptions;
 }
 
 /**
@@ -102,13 +109,14 @@ export function StructuredOutputScorer(
     allowExtras = true,
     debug = false,
     errorField = "error",
+    fuzzyOptions = {}, // Default: no special fuzzy options for structured output
   } = config;
 
   // Determine the field matcher - handle 3-parameter custom functions for structured output
   const fieldMatcher =
     typeof match === "function"
       ? match // Use custom function directly with its original signature
-      : createMatcher(match, "structured");
+      : createMatcher(match, fuzzyOptions);
 
   return async (opts) => {
     const expected = opts.expected || {};

@@ -20,4 +20,5 @@ export {
   debugLog,
   type BaseMatcherConfig,
   type MatchStrategy,
+  type FuzzyMatchOptions,
 } from "./utils";
