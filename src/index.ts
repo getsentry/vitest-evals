@@ -60,9 +60,9 @@ export type TaskFn = (input: string) => Promise<string | TaskResult>;
 
 export type Score = {
   score: number | null;
-  metadata?: { 
-    rationale?: string; 
-    output?: string; 
+  metadata?: {
+    rationale?: string;
+    output?: any;
   } & Record<string, any>;
 };
 
@@ -296,11 +296,23 @@ export function formatScores(scores: (Score & { name: string })[]) {
         ((s.score ?? 0) < 1.0 && s.metadata?.rationale) ||
         s.metadata?.output
       ) {
+        // Format output - handle both strings and objects
+        let formattedOutput = "";
+        if (s.metadata?.output !== undefined) {
+          const output = s.metadata.output;
+          if (typeof output === "string") {
+            formattedOutput = `\n\n## Response\n\n${wrapText(output)}`;
+          } else {
+            // For objects, stringify with proper formatting
+            formattedOutput = `\n\n## Response\n\n${wrapText(JSON.stringify(output, null, 2))}`;
+          }
+        }
+
         return `${scoreLine}${
           s.metadata?.rationale
             ? `\n\n## Rationale\n\n${wrapText(s.metadata.rationale)}`
             : ""
-        }${s.metadata?.output ? `\n\n## Response\n\n${wrapText(s.metadata.output)}` : ""}`;
+        }${formattedOutput}`;
       }
       return scoreLine;
     })
