@@ -55,18 +55,18 @@
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.23",
     "@biomejs/biome": "^1.9.4",
-    "@vitest/coverage-v8": "^3.1.1",
+    "@vitest/coverage-v8": "^3.2.4",
     "ai": "^4.3.19",
     "autoevals": "^0.0.127",
     "dotenv-cli": "^8.0.0",
-    "lint-staged": "^15.5.0",
-    "openai": "^4.97.0",
-    "simple-git-hooks": "^2.12.1",
-    "tinyrainbow": "*",
-    "tsup": "^8.4.0",
+    "lint-staged": "^15.5.2",
+    "openai": "^4.104.0",
+    "simple-git-hooks": "^2.13.0",
+    "tinyrainbow": "^2.0.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "*",
-    "zod": "^3.24.4"
+    "vitest": "^3.2.4",
+    "zod": "^3.25.76"
   },
   "simple-git-hooks": {
     "pre-commit": "npm exec lint-staged --concurrent false"

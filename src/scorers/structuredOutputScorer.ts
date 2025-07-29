@@ -95,7 +95,7 @@ export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
  *   scorers: [StructuredOutputScorer({
  *     match: (expected, actual, key) => {
  *       if (key === "age") return actual >= 18 && actual <= 100;
- *       return strictEquals(expected, actual);
+ *       return expected === actual; // Use strict equality for other fields
  *     }
  *   })]
  * });
