@@ -396,6 +396,41 @@ describe("StructuredOutputScorer", () => {
   });
 
   describe("edge cases", () => {
+    test("fuzzy matching only validates expected fields exist, ignoring extra fields", async () => {
+      const scorer = StructuredOutputScorer({ match: "fuzzy" });
+
+      // Test: When output has extra fields beyond what's expected
+      const result = await scorer({
+        input: "test",
+        output: JSON.stringify({
+          a: 1,
+          b: 2, // Extra property in nested object
+        }),
+        expected: {
+          a: 1,
+        },
+      });
+
+      // Fuzzy match passes - it only validates expected fields are present
+      expect(result.score).toBe(1.0);
+
+      // Compare with strict matching behavior
+      const strictScorer = StructuredOutputScorer({ match: "strict" });
+      const strictResult = await strictScorer({
+        input: "test",
+        output: JSON.stringify({
+          a: 1,
+          b: 2,
+        }),
+        expected: {
+          a: 1,
+        },
+      });
+
+      // Note: Even strict mode allows extra top-level fields by default (allowExtras: true)
+      expect(strictResult.score).toBe(1.0);
+    });
+
     test("handles undefined and null values", async () => {
       const scorer = StructuredOutputScorer();
       const result = await scorer({
@@ -427,6 +462,40 @@ describe("StructuredOutputScorer", () => {
       });
 
       expect(result.score).toBe(1.0);
+    });
+
+    test("fuzzy array matching requires unique matches for duplicate expected items", async () => {
+      const scorer = StructuredOutputScorer({ match: "fuzzy" });
+
+      // Test case: Expected array has duplicates [1, 1, 2]
+      // Actual array is missing one duplicate [1, 2]
+      const result = await scorer({
+        input: "test",
+        output: JSON.stringify({
+          items: [1, 2], // Only has one "1"
+        }),
+        expected: {
+          items: [1, 1, 2], // Expects two "1"s
+        },
+      });
+
+      // Should fail: can't find a unique match for second "1"
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain(
+        "Missing required fields: items",
+      );
+
+      // Verify it works correctly when all duplicates are present
+      const validResult = await scorer({
+        input: "test",
+        output: JSON.stringify({
+          items: [1, 1, 2, 3], // Has two 1's, one 2, plus extra
+        }),
+        expected: {
+          items: [1, 1, 2], // Expects two 1's and one 2
+        },
+      });
+      expect(validResult.score).toBe(1.0);
     });
 
     test("handles arrays with objects", async () => {

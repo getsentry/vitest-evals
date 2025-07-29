@@ -182,9 +182,22 @@ export function fuzzyMatch(
   // For arrays, apply configured order handling
   if (Array.isArray(expected) && Array.isArray(actual)) {
     if (ignoreArrayOrder) {
-      return expected.every((expItem) =>
-        actual.some((actItem) => fuzzyMatch(expItem, actItem, options)),
-      );
+      // Create a copy of actual to track consumed items
+      const actualCopy = [...actual];
+
+      // Try to find a unique match for each expected item
+      return expected.every((expItem) => {
+        const matchIndex = actualCopy.findIndex((actItem) =>
+          fuzzyMatch(expItem, actItem, options),
+        );
+
+        if (matchIndex !== -1) {
+          // Remove the matched item so it can't be matched again
+          actualCopy.splice(matchIndex, 1);
+          return true;
+        }
+        return false;
+      });
     }
     return (
       expected.length === actual.length &&
