@@ -8,7 +8,7 @@ import "vitest";
 export type ToolCall = {
   // Core fields (required for basic usage)
   name: string;
-  arguments: Record<string, any>;
+  arguments?: Record<string, any>;
 
   // Result and timing
   result?: any;
@@ -63,6 +63,7 @@ export type Score = {
   metadata?: {
     rationale?: string;
     output?: string;
+    [key: string]: any; // Allow additional metadata fields
   };
 };
 
@@ -352,4 +353,9 @@ export function wrapText(text: string, width = 80): string {
 }
 
 // Export built-in scorers
-export { ToolCallScorer, type ToolCallScorerOptions } from "./scorers";
+export {
+  ToolCallScorer,
+  type ToolCallScorerOptions,
+  StructuredOutputScorer,
+  type StructuredOutputScorerOptions,
+} from "./scorers";
