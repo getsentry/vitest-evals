@@ -36,6 +36,13 @@ export interface StructuredOutputScorerConfig {
    * @default false
    */
   debug?: boolean;
+
+  /**
+   * Field name to check for errors in the output
+   * Set to null to disable error checking
+   * @default "error"
+   */
+  errorField?: string | null;
 }
 
 /**
@@ -53,7 +60,12 @@ function fuzzyMatch(expected: any, actual: any, key: string): boolean {
   }
 
   // Null/undefined handling
-  if (expected == null || actual == null) {
+  if (
+    expected === null ||
+    expected === undefined ||
+    actual === null ||
+    actual === undefined
+  ) {
     return expected === actual;
   }
 
@@ -92,9 +104,15 @@ function fuzzyMatch(expected: any, actual: any, key: string): boolean {
     return expected === (actual.toLowerCase() === "true" || actual === "1");
   }
 
-  // For primitives with type coercion (e.g., "1" matches 1)
-  // biome-ignore lint/suspicious/noDoubleEquals: Intentional for fuzzy matching with type coercion
-  return expected == actual;
+  // For primitives with explicit type coercion (e.g., "1" matches 1)
+  if (typeof expected === "string" && typeof actual === "number") {
+    return Number.parseFloat(expected) === actual;
+  }
+  if (typeof expected === "number" && typeof actual === "string") {
+    return expected === Number.parseFloat(actual);
+  }
+  // For all other cases, ensure types match before comparison
+  return expected === actual;
 }
 
 /**
@@ -103,7 +121,13 @@ function fuzzyMatch(expected: any, actual: any, key: string): boolean {
 function strictEquals(expected: any, actual: any): boolean {
   // Handle primitive types and null/undefined
   if (expected === actual) return true;
-  if (expected == null || actual == null) return false;
+  if (
+    expected === null ||
+    expected === undefined ||
+    actual === null ||
+    actual === undefined
+  )
+    return false;
 
   // Must be same type
   if (typeof expected !== typeof actual) return false;
@@ -205,6 +229,7 @@ export function StructuredOutputScorer(
     requireAll = true,
     allowExtras = true,
     debug = false,
+    errorField = "error",
   } = config;
 
   // Determine the field matcher
@@ -244,11 +269,16 @@ export function StructuredOutputScorer(
     }
 
     // Check for error field in output (common pattern for API responses)
-    if (parsed.error && parsed.error !== "" && parsed.error !== null) {
+    if (
+      errorField !== null &&
+      parsed[errorField] &&
+      parsed[errorField] !== "" &&
+      parsed[errorField] !== null
+    ) {
       return {
         score: 0.0,
         metadata: {
-          rationale: `Output contains error: ${parsed.error}`,
+          rationale: `Output contains error: ${parsed[errorField]}`,
           output,
         },
       };

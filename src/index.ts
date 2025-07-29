@@ -8,7 +8,7 @@ import "vitest";
 export type ToolCall = {
   // Core fields (required for basic usage)
   name: string;
-  arguments?: Record<string, any>;
+  arguments: Record<string, any>;
 
   // Result and timing
   result?: any;
