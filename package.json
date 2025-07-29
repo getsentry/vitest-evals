@@ -34,7 +34,8 @@
     "lint": "biome lint",
     "lint:fix": "biome lint --fix",
     "prepare": "npm run build && simple-git-hooks",
-    "test": "dotenv -e .env -e .env.local -- vitest --reporter=./src/reporter.ts",
+    "test": "dotenv -e .env -e .env.local -- vitest run --reporter=./src/reporter.ts",
+    "test:watch": "dotenv -e .env -e .env.local -- vitest --reporter=./src/reporter.ts",
     "test:ci": "dotenv -e .env -e .env.local -- vitest run --coverage --reporter=./src/reporter.ts --reporter=junit --outputFile=tests.junit.xml"
   },
   "repository": {

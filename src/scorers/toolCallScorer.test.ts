@@ -448,6 +448,43 @@ describe("ToolCallScorer", () => {
       expect(result.metadata?.rationale).toContain("plus extra: search");
     });
 
+    test("single actual tool call should not satisfy multiple identical expected calls", async () => {
+      const scorer = ToolCallScorer({ requireAll: false });
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        toolCalls: [{ name: "retry", arguments: {} }],
+        expectedTools: [
+          { name: "retry", arguments: {} },
+          { name: "retry", arguments: {} },
+          { name: "retry", arguments: {} },
+        ],
+      });
+      // Strict counting: 3 expected, 1 actual = 1/3 = 0.33 score
+      expect(result.score).toBe(1 / 3);
+    });
+
+    test("fuzzyOptions should merge with defaults, not replace them", async () => {
+      // This test shows the fuzzyOptions merging behavior - user options are merged with defaults
+      const scorer = ToolCallScorer({
+        params: "fuzzy",
+        fuzzyOptions: { caseInsensitive: false }, // Only override one option
+      });
+      const toolCalls: ToolCall[] = [
+        { name: "search", arguments: { query: "weath" } }, // substring of "weather"
+      ];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search", arguments: { query: "weather" } }],
+        toolCalls,
+      });
+
+      // Passes because substring: true is still active (merged from defaults)
+      // even though we only overrode caseInsensitive
+      expect(result.score).toBe(1.0);
+    });
+
     test("handles multiple expected instances of same tool", async () => {
       const scorer = ToolCallScorer();
       const toolCalls: ToolCall[] = [

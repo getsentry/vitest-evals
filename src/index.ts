@@ -8,27 +8,7 @@ import "vitest";
 export type ToolCall = {
   // Core fields (required for basic usage)
   name: string;
-  arguments: Record<string, any>;
-
-  // Result and timing
-  result?: any;
-  error?: {
-    code?: string;
-    message: string;
-    details?: any;
-  };
-  timestamp?: number;
-  duration_ms?: number;
-
-  // Identification and correlation
-  id?: string;
-  parent_id?: string; // For nested/chained calls
-
-  // Status tracking
-  status?: "pending" | "executing" | "completed" | "failed" | "cancelled";
-
-  // Provider-specific fields
-  type?: "function" | "retrieval" | "code_interpreter" | "web_search" | string;
+  arguments?: Record<string, any>;
 
   // Additional metadata
   [key: string]: any; // Allow provider-specific fields

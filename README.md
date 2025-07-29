@@ -126,17 +126,20 @@ See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a com
 Transform provider responses to our format:
 
 ```javascript
-// Vercel AI SDK
-const { text, toolCalls, toolResults } = await generateText(...);
+// Vercel AI SDK - use maxSteps and extract from steps
+const { text, steps } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: input,
+  tools: { myTool: myToolDefinition },
+  maxSteps: 5 // Required for reliable tool call detection
+});
+
 return {
   result: text,
-  toolCalls: toolCalls?.map((call, i) => ({
-    id: call.toolCallId,
+  toolCalls: steps.flatMap(step => step.toolCalls).map((call) => ({
     name: call.toolName,
     arguments: call.args,
-    result: toolResults?.[i]?.result,
-    status: toolResults?.[i]?.error ? 'failed' : 'completed'
-  }))
+  })),
 };
 ```
 

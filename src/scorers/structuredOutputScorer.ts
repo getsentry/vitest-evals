@@ -38,6 +38,20 @@ export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
 }
 
 /**
+ * Format mismatch details for error messages
+ */
+function formatMismatchDetails(
+  mismatches: Array<{ key: string; expected: any; actual: any }>,
+): string {
+  return mismatches
+    .map(
+      (m) =>
+        `${m.key}: expected ${formatValue(m.expected)}, got ${formatValue(m.actual)}`,
+    )
+    .join("; ");
+}
+
+/**
  * A configurable scorer for evaluating structured outputs (e.g., JSON) from LLM responses.
  *
  * Similar to ToolCallScorer but for validating structured data outputs like API queries,
@@ -204,12 +218,7 @@ export function StructuredOutputScorer(
 
     // Handle various failure conditions
     if (requireAll && mismatches.length > 0) {
-      const mismatchDetails = mismatches
-        .map(
-          (m) =>
-            `${m.key}: expected ${formatValue(m.expected)}, got ${formatValue(m.actual)}`,
-        )
-        .join("; ");
+      const mismatchDetails = formatMismatchDetails(mismatches);
       return {
         score: 0.0,
         metadata: {
@@ -242,12 +251,7 @@ export function StructuredOutputScorer(
     }
 
     // Partial match
-    const mismatchDetails = mismatches
-      .map(
-        (m) =>
-          `${m.key}: expected ${formatValue(m.expected)}, got ${formatValue(m.actual)}`,
-      )
-      .join("; ");
+    const mismatchDetails = formatMismatchDetails(mismatches);
 
     return {
       score,

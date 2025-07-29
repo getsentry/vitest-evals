@@ -46,6 +46,9 @@ export interface FuzzyMatchOptions {
 
   /**
    * For strings: use substring matching instead of exact match
+   * When enabled, either string can contain the other as a substring:
+   * - "weather" matches "weath" (expected contains actual)
+   * - "weather forecast" matches "weather" (actual contains expected)
    * @default false
    */
   substring?: boolean;
@@ -100,21 +103,131 @@ export function strictEquals(
 
   // Handle objects
   if (typeof expected === "object") {
-    const expectedKeys = Object.keys(expected).sort();
-    const actualKeys = Object.keys(actual).sort();
+    const expectedKeys = Object.keys(expected);
+    const actualKeys = Object.keys(actual);
 
-    // Must have same keys
+    // Must have same number of keys
     if (expectedKeys.length !== actualKeys.length) return false;
-    if (!expectedKeys.every((key, i) => key === actualKeys[i])) return false;
 
-    // All values must match
-    return expectedKeys.every((key) =>
-      strictEquals(expected[key], actual[key], context),
+    // All expected keys must exist in actual and have matching values
+    return expectedKeys.every(
+      (key) =>
+        key in actual && strictEquals(expected[key], actual[key], context),
     );
   }
 
-  // Primitive types
-  return expected === actual;
+  // All other primitive types already handled by line 84
+  return false;
+}
+
+/**
+ * Fuzzy string matching with configurable options
+ */
+function fuzzyMatchString(
+  expected: string,
+  actual: string,
+  options: FuzzyMatchOptions,
+): boolean {
+  const { caseInsensitive = true, substring = false } = options;
+
+  const expectedStr = caseInsensitive ? expected.toLowerCase() : expected;
+  const actualStr = caseInsensitive ? actual.toLowerCase() : actual;
+
+  return substring
+    ? actualStr.includes(expectedStr) || expectedStr.includes(actualStr)
+    : expectedStr === actualStr;
+}
+
+/**
+ * Fuzzy number matching with tolerance
+ */
+function fuzzyMatchNumber(
+  expected: number,
+  actual: number,
+  options: FuzzyMatchOptions,
+): boolean {
+  const { numericTolerance = 0.001 } = options;
+
+  const tolerance = Math.max(
+    Math.abs(expected) * numericTolerance,
+    numericTolerance,
+  );
+  return Math.abs(expected - actual) <= tolerance;
+}
+
+/**
+ * Fuzzy array matching with optional order independence
+ */
+function fuzzyMatchArray(
+  expected: any[],
+  actual: any[],
+  options: FuzzyMatchOptions,
+  context?: string,
+): boolean {
+  const { ignoreArrayOrder = true } = options;
+
+  if (ignoreArrayOrder) {
+    // Track which actual items have been consumed
+    const actualUsed = actual.map(() => false);
+
+    // Try to find a unique match for each expected item
+    return expected.every((expItem) => {
+      // Find first unused actual item that matches
+      for (let i = 0; i < actual.length; i++) {
+        if (actualUsed[i]) continue; // Already used
+
+        if (fuzzyMatch(expItem, actual[i], options, context)) {
+          actualUsed[i] = true; // Mark as used
+          return true;
+        }
+      }
+      return false; // No match found
+    });
+  }
+
+  return (
+    expected.length === actual.length &&
+    expected.every((item, i) => fuzzyMatch(item, actual[i], options, context))
+  );
+}
+
+/**
+ * Fuzzy object matching (subset matching)
+ */
+function fuzzyMatchObject(
+  expected: object,
+  actual: object,
+  options: FuzzyMatchOptions,
+  context?: string,
+): boolean {
+  return Object.entries(expected).every(
+    ([k, value]) =>
+      k in actual && fuzzyMatch(value, (actual as any)[k], options, context),
+  );
+}
+
+/**
+ * Type coercion matching
+ */
+function fuzzyMatchWithCoercion(
+  expected: any,
+  actual: any,
+  options: FuzzyMatchOptions,
+): boolean {
+  // Boolean coercion
+  if (typeof expected === "boolean" && typeof actual === "string") {
+    return expected === (actual.toLowerCase() === "true" || actual === "1");
+  }
+
+  // Number-string coercion
+  if (typeof expected === "string" && typeof actual === "number") {
+    return Number.parseFloat(expected) === actual;
+  }
+  if (typeof expected === "number" && typeof actual === "string") {
+    return expected === Number.parseFloat(actual);
+  }
+
+  return false;
 }
 
 /**
@@ -126,13 +239,8 @@ export function fuzzyMatch(
   options: FuzzyMatchOptions = {},
   context?: string,
 ): boolean {
-  const {
-    caseInsensitive = true,
-    substring = false,
-    numericTolerance = 0.001,
-    ignoreArrayOrder = true,
-    coerceTypes = false,
-  } = options;
+  const { coerceTypes = false } = options;
+
   // Handle regex patterns
   if (expected instanceof RegExp) {
     return typeof actual === "string" && expected.test(actual);
@@ -153,78 +261,32 @@ export function fuzzyMatch(
     return expected === actual;
   }
 
-  // For objects, check if actual has all expected properties
+  // Type-specific matching
+  if (typeof expected === "string" && typeof actual === "string") {
+    return fuzzyMatchString(expected, actual, options);
+  }
+
+  if (typeof expected === "number" && typeof actual === "number") {
+    return fuzzyMatchNumber(expected, actual, options);
+  }
+
+  if (Array.isArray(expected) && Array.isArray(actual)) {
+    return fuzzyMatchArray(expected, actual, options, context);
+  }
+
   if (
     typeof expected === "object" &&
     typeof actual === "object" &&
     !Array.isArray(expected) &&
     !Array.isArray(actual)
   ) {
-    return Object.entries(expected).every(
-      ([k, value]) =>
-        k in actual && fuzzyMatch(value, actual[k], options, context),
-    );
-  }
-
-  // For strings, apply configured matching rules
-  if (typeof expected === "string" && typeof actual === "string") {
-    const expectedStr = caseInsensitive ? expected.toLowerCase() : expected;
-    const actualStr = caseInsensitive ? actual.toLowerCase() : actual;
-
-    return substring
-      ? actualStr.includes(expectedStr)
-      : expectedStr === actualStr;
-  }
-
-  // For numbers, apply configured tolerance
-  if (typeof expected === "number" && typeof actual === "number") {
-    const tolerance = Math.max(
-      Math.abs(expected) * numericTolerance,
-      numericTolerance,
-    );
-    return Math.abs(expected - actual) <= tolerance;
-  }
-
-  // For arrays, apply configured order handling
-  if (Array.isArray(expected) && Array.isArray(actual)) {
-    if (ignoreArrayOrder) {
-      // Create a copy of actual to track consumed items
-      const actualCopy = [...actual];
-
-      // Try to find a unique match for each expected item
-      return expected.every((expItem) => {
-        const matchIndex = actualCopy.findIndex((actItem) =>
-          fuzzyMatch(expItem, actItem, options, context),
-        );
-
-        if (matchIndex !== -1) {
-          // Remove the matched item so it can't be matched again
-          actualCopy.splice(matchIndex, 1);
-          return true;
-        }
-        return false;
-      });
-    }
-    return (
-      expected.length === actual.length &&
-      expected.every((item, i) => fuzzyMatch(item, actual[i], options, context))
-    );
+    return fuzzyMatchObject(expected, actual, options, context);
   }
 
   // Handle type coercion if enabled
   if (coerceTypes) {
-    // Boolean coercion
-    if (typeof expected === "boolean" && typeof actual === "string") {
-      return expected === (actual.toLowerCase() === "true" || actual === "1");
-    }
-
-    // Number-string coercion
-    if (typeof expected === "string" && typeof actual === "number") {
-      return Number.parseFloat(expected) === actual;
-    }
-    if (typeof expected === "number" && typeof actual === "string") {
-      return expected === Number.parseFloat(actual);
-    }
+    const coercionResult = fuzzyMatchWithCoercion(expected, actual, options);
+    if (coercionResult) return true;
   }
 
   // For all other cases, strict equality
@@ -278,7 +340,30 @@ export function calculatePartialScore(
 }
 
 /**
- * Helper for debugging matcher results
+ * Logger interface for debug output
+ */
+export interface Logger {
+  log: (message: string, ...args: any[]) => void;
+}
+
+/**
+ * Default logger that respects NODE_ENV and can be disabled
+ */
+const defaultLogger: Logger = {
+  log: (message: string, ...args: any[]) => {
+    // Only log in development or test environments, or when explicitly enabled
+    if (
+      process.env.NODE_ENV === "development" ||
+      process.env.NODE_ENV === "test" ||
+      process.env.VITEST_EVALS_DEBUG === "true"
+    ) {
+      console.log(message, ...args);
+    }
+  },
+};
+
+/**
+ * Helper for debugging matcher results with configurable logging
  */
 export function debugLog(
   context: string,
@@ -289,11 +374,12 @@ export function debugLog(
     mismatches?: Array<{ key: string; expected: any; actual: any }>;
     extras?: string[];
   },
+  logger: Logger = defaultLogger,
 ): void {
-  console.log(`${context} debug:`);
-  console.log("Expected:", data.expected);
-  console.log("Actual:", data.actual);
-  if (data.matches) console.log("Matches:", data.matches);
-  if (data.mismatches) console.log("Mismatches:", data.mismatches);
-  if (data.extras) console.log("Extras:", data.extras);
+  logger.log(`${context} debug:`);
+  logger.log("Expected:", data.expected);
+  logger.log("Actual:", data.actual);
+  if (data.matches) logger.log("Matches:", data.matches);
+  if (data.mismatches) logger.log("Mismatches:", data.mismatches);
+  if (data.extras) logger.log("Extras:", data.extras);
 }
