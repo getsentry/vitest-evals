@@ -60,11 +60,10 @@ export type TaskFn = (input: string) => Promise<string | TaskResult>;
 
 export type Score = {
   score: number | null;
-  metadata?: {
-    rationale?: string;
-    output?: string;
-    [key: string]: any; // Allow additional metadata fields
-  };
+  metadata?: { 
+    rationale?: string; 
+    output?: string; 
+  } & Record<string, any>;
 };
 
 export interface BaseScorerOptions {
