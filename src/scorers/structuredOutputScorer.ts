@@ -112,7 +112,8 @@ export function StructuredOutputScorer(
     fuzzyOptions = {}, // Default: no special fuzzy options for structured output
   } = config;
 
-  // Determine the field matcher - handle 3-parameter custom functions for structured output
+  // Determine the field matcher. If a custom function is provided, it will be used directly
+  // with its original signature. Note that createMatcher only supports two parameters: match and fuzzyOptions.
   const fieldMatcher =
     typeof match === "function"
       ? match // Use custom function directly with its original signature
