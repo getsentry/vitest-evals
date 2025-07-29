@@ -453,6 +453,38 @@ describe("StructuredOutputScorer", () => {
       expect(result.metadata?.rationale).toBe("All expected fields match");
     });
 
+    test("explicitly tests undefined field expectations vs missing JSON fields", async () => {
+      const scorer = StructuredOutputScorer();
+
+      // Explicit test: expecting undefined should match missing JSON field
+      const resultUndefinedExpected = await scorer({
+        input: "test",
+        output: JSON.stringify({ name: "test" }), // field 'missing' is absent
+        expected: {
+          name: "test",
+          missing: undefined, // we expect undefined
+        },
+      });
+
+      expect(resultUndefinedExpected.score).toBe(1.0);
+      expect(resultUndefinedExpected.metadata?.rationale).toBe(
+        "All expected fields match",
+      );
+
+      // Contrasting test: expecting a value should NOT match missing JSON field
+      const resultValueExpected = await scorer({
+        input: "test",
+        output: JSON.stringify({ name: "test" }), // field 'missing' is absent
+        expected: {
+          name: "test",
+          missing: "should-be-here", // we expect a string value
+        },
+      });
+
+      expect(resultValueExpected.score).toBe(0.0);
+      expect(resultValueExpected.metadata?.rationale).toContain("missing");
+    });
+
     test("handles empty objects", async () => {
       const scorer = StructuredOutputScorer();
       const result = await scorer({
