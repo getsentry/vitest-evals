@@ -171,12 +171,7 @@ export function StructuredOutputScorer(
     for (const [key, expectedValue] of Object.entries(expected)) {
       const actualValue = parsed[key];
 
-      // Handle both 2-parameter (shared utilities) and 3-parameter (custom) functions
-      const isMatch =
-        typeof match === "function"
-          ? fieldMatcher(expectedValue, actualValue, key)
-          : fieldMatcher(expectedValue, actualValue);
-
+      const isMatch = fieldMatcher(expectedValue, actualValue, key);
       if (isMatch) {
         matches.push(key);
       } else {

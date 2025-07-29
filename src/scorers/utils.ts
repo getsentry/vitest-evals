@@ -231,13 +231,13 @@ export function fuzzyMatch(
 export function createMatcher<T = any>(
   strategy: MatchStrategy<T>,
   options?: FuzzyMatchOptions,
-): (expected: T, actual: T) => boolean {
+): (expected: T, actual: T, context?: string) => boolean {
   if (typeof strategy === "function") {
-    return (expected, actual) => strategy(expected, actual);
+    return (expected, actual, context) => strategy(expected, actual, context);
   }
 
   if (strategy === "strict") {
-    return strictEquals;
+    return (expected, actual) => strictEquals(expected, actual);
   }
 
   return (expected, actual) => fuzzyMatch(expected, actual, options || {});
