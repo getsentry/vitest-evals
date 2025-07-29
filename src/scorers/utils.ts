@@ -72,7 +72,11 @@ export interface FuzzyMatchOptions {
 /**
  * Strict equality comparison (deep equals)
  */
-export function strictEquals(expected: any, actual: any): boolean {
+export function strictEquals(
+  expected: any,
+  actual: any,
+  context?: string,
+): boolean {
   // Handle primitive types and null/undefined
   if (expected === actual) return true;
   if (
@@ -91,7 +95,7 @@ export function strictEquals(expected: any, actual: any): boolean {
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual)) return false;
     if (expected.length !== actual.length) return false;
-    return expected.every((item, i) => strictEquals(item, actual[i]));
+    return expected.every((item, i) => strictEquals(item, actual[i], context));
   }
 
   // Handle objects
@@ -105,7 +109,7 @@ export function strictEquals(expected: any, actual: any): boolean {
 
     // All values must match
     return expectedKeys.every((key) =>
-      strictEquals(expected[key], actual[key]),
+      strictEquals(expected[key], actual[key], context),
     );
   }
 
@@ -120,6 +124,7 @@ export function fuzzyMatch(
   expected: any,
   actual: any,
   options: FuzzyMatchOptions = {},
+  context?: string,
 ): boolean {
   const {
     caseInsensitive = true,
@@ -156,7 +161,8 @@ export function fuzzyMatch(
     !Array.isArray(actual)
   ) {
     return Object.entries(expected).every(
-      ([k, value]) => k in actual && fuzzyMatch(value, actual[k], options),
+      ([k, value]) =>
+        k in actual && fuzzyMatch(value, actual[k], options, context),
     );
   }
 
@@ -188,7 +194,7 @@ export function fuzzyMatch(
       // Try to find a unique match for each expected item
       return expected.every((expItem) => {
         const matchIndex = actualCopy.findIndex((actItem) =>
-          fuzzyMatch(expItem, actItem, options),
+          fuzzyMatch(expItem, actItem, options, context),
         );
 
         if (matchIndex !== -1) {
@@ -201,7 +207,7 @@ export function fuzzyMatch(
     }
     return (
       expected.length === actual.length &&
-      expected.every((item, i) => fuzzyMatch(item, actual[i], options))
+      expected.every((item, i) => fuzzyMatch(item, actual[i], options, context))
     );
   }
 
@@ -237,10 +243,12 @@ export function createMatcher<T = any>(
   }
 
   if (strategy === "strict") {
-    return (expected, actual) => strictEquals(expected, actual);
+    return (expected, actual, context) =>
+      strictEquals(expected, actual, context);
   }
 
-  return (expected, actual) => fuzzyMatch(expected, actual, options || {});
+  return (expected, actual, context) =>
+    fuzzyMatch(expected, actual, options || {}, context);
 }
 
 /**
