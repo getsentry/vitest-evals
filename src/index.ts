@@ -77,8 +77,11 @@ export type ScoreFn<TOptions extends BaseScorerOptions = BaseScorerOptions> = (
   opts: TOptions,
 ) => Promise<Score> | Score;
 
+/**
+ * @deprecated Use describeEval() instead for better test organization and multiple scorers support
+ */
 export type ToEval<R = unknown> = (
-  expected: string,
+  expected: any,
   taskFn: TaskFn,
   scoreFn: ScoreFn<any>,
   threshold?: number,
@@ -105,7 +108,8 @@ expect.extend({
   /**
    * Evaluates a language model output against an expected answer using a scoring function.
    *
-   * @param expected - The expected (ground truth) answer
+   * @deprecated Use describeEval() instead for better test organization and multiple scorers support
+   * @param expected - The expected (ground truth) answer, can be any type depending on the scorer
    * @param taskFn - Async function that processes the input and returns the model output
    *                 Can return either a string or TaskResult object with result and optional toolCalls
    * @param scoreFn - Function that evaluates the model output against the expected answer
@@ -133,7 +137,7 @@ expect.extend({
   // TODO: this needs to be support true extensibility with Eval scorers
   toEval: async function toEval(
     input: string,
-    expected: string,
+    expected: any,
     taskFn: TaskFn,
     scoreFn: ScoreFn<any>,
     threshold = 1.0,
