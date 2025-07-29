@@ -217,6 +217,10 @@ describeEval("gpt-4 tests", {
 
 ### Existing Test Suites
 
+For integration with existing Vitest test suites, you can use the `.toEval()` matcher:
+
+> **⚠️ Deprecated**: The `.toEval()` helper is deprecated. Use `describeEval()` instead for better test organization and multiple scorers support. We may consider bringing back a similar check, but its currently too limited for many scorer implementations.
+
 ```javascript
 import "vitest-evals";
 
@@ -231,6 +235,23 @@ test("capital check", () => {
     simpleFactuality,
     0.8
   );
+});
+```
+
+**Recommended migration** to `describeEval()`:
+
+```javascript
+import { describeEval } from "vitest-evals";
+
+describeEval("capital check", {
+  data: async () => [
+    { input: "What is the capital of France?", expected: "Paris" }
+  ],
+  task: answerQuestion,
+  scorers: [async ({ output, expected }) => ({
+    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
+  })],
+  threshold: 0.8
 });
 ```
 
