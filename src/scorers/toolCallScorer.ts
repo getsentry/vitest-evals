@@ -1,4 +1,9 @@
 import type { ScoreFn, BaseScorerOptions, ToolCall } from "../index";
+import {
+  type BaseMatcherConfig,
+  type MatchStrategy,
+  createMatcher,
+} from "./utils";
 
 export interface ToolCallScorerOptions extends BaseScorerOptions {
   // Expected tools are now defined in the test data
@@ -8,25 +13,12 @@ export interface ToolCallScorerOptions extends BaseScorerOptions {
   }>;
 }
 
-export interface ToolCallScorerConfig {
+export interface ToolCallScorerConfig extends BaseMatcherConfig {
   /**
    * Whether tools must be called in the exact order specified
    * @default false
    */
   ordered?: boolean;
-
-  /**
-   * Whether all expected tools must be called for a passing score
-   * When false: gives partial credit based on tools matched
-   * @default true
-   */
-  requireAll?: boolean;
-
-  /**
-   * Whether to allow additional tool calls beyond those expected
-   * @default true
-   */
-  allowExtras?: boolean;
 
   /**
    * How to match tool arguments/parameters
@@ -35,86 +27,7 @@ export interface ToolCallScorerConfig {
    * - Custom function: Your own comparison logic
    * @default "strict"
    */
-  params?: "strict" | "fuzzy" | ((expected: any, actual: any) => boolean);
-}
-
-/**
- * Default fuzzy matching for arguments
- */
-function fuzzyMatch(expected: any, actual: any): boolean {
-  // Null/undefined handling
-  if (expected == null || actual == null) {
-    return expected === actual;
-  }
-
-  // For objects, check if actual has all expected properties
-  if (
-    typeof expected === "object" &&
-    typeof actual === "object" &&
-    !Array.isArray(expected)
-  ) {
-    return Object.entries(expected).every(
-      ([key, value]) => key in actual && fuzzyMatch(value, actual[key]),
-    );
-  }
-
-  // For strings, case-insensitive substring match
-  if (typeof expected === "string" && typeof actual === "string") {
-    return actual.toLowerCase().includes(expected.toLowerCase());
-  }
-
-  // For numbers, allow small differences (0.1% or 0.001, whichever is larger)
-  if (typeof expected === "number" && typeof actual === "number") {
-    const tolerance = Math.max(Math.abs(expected) * 0.001, 0.001);
-    return Math.abs(expected - actual) <= tolerance;
-  }
-
-  // For arrays, check if all expected items exist in actual (order doesn't matter in fuzzy mode)
-  if (Array.isArray(expected) && Array.isArray(actual)) {
-    return expected.every((expItem) =>
-      actual.some((actItem) => fuzzyMatch(expItem, actItem)),
-    );
-  }
-
-  // Otherwise strict equality
-  return expected === actual;
-}
-
-/**
- * Strict equality comparison (deep equals)
- */
-function strictEquals(expected: any, actual: any): boolean {
-  // Handle primitive types and null/undefined
-  if (expected === actual) return true;
-  if (expected == null || actual == null) return false;
-
-  // Must be same type
-  if (typeof expected !== typeof actual) return false;
-
-  // Handle arrays
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) return false;
-    if (expected.length !== actual.length) return false;
-    return expected.every((item, i) => strictEquals(item, actual[i]));
-  }
-
-  // Handle objects
-  if (typeof expected === "object") {
-    const expectedKeys = Object.keys(expected).sort();
-    const actualKeys = Object.keys(actual).sort();
-
-    // Must have same keys
-    if (expectedKeys.length !== actualKeys.length) return false;
-    if (!expectedKeys.every((key, i) => key === actualKeys[i])) return false;
-
-    // All values must match
-    return expectedKeys.every((key) =>
-      strictEquals(expected[key], actual[key]),
-    );
-  }
-
-  // Primitive types
-  return expected === actual;
+  params?: MatchStrategy;
 }
 
 /**
@@ -168,12 +81,7 @@ export function ToolCallScorer(
   } = config;
 
   // Determine the argument matcher
-  const argMatcher =
-    typeof params === "function"
-      ? params
-      : params === "strict"
-        ? strictEquals
-        : fuzzyMatch;
+  const argMatcher = createMatcher(params, "tool");
 
   return async (opts) => {
     const expectedTools = opts.expectedTools || [];

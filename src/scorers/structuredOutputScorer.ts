@@ -1,11 +1,18 @@
 import type { ScoreFn, BaseScorerOptions } from "../index";
+import {
+  type BaseMatcherConfig,
+  type MatchStrategy,
+  createMatcher,
+  formatValue,
+  debugLog,
+} from "./utils";
 
 export interface StructuredOutputScorerOptions extends BaseScorerOptions {
   // Expected structured output defined in test data
   expected?: Record<string, any>;
 }
 
-export interface StructuredOutputScorerConfig {
+export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
   /**
    * How to match field values
    * - "strict": Exact equality required (default)
@@ -13,29 +20,7 @@ export interface StructuredOutputScorerConfig {
    * - Custom function: Your own comparison logic
    * @default "strict"
    */
-  match?:
-    | "strict"
-    | "fuzzy"
-    | ((expected: any, actual: any, key: string) => boolean);
-
-  /**
-   * Whether all expected fields must be present for a passing score
-   * When false: gives partial credit based on fields matched
-   * @default true
-   */
-  requireAll?: boolean;
-
-  /**
-   * Whether to allow additional fields beyond those expected
-   * @default true
-   */
-  allowExtras?: boolean;
-
-  /**
-   * Enable debug logging
-   * @default false
-   */
-  debug?: boolean;
+  match?: MatchStrategy;
 
   /**
    * Field name to check for errors in the output
@@ -43,119 +28,6 @@ export interface StructuredOutputScorerConfig {
    * @default "error"
    */
   errorField?: string | null;
-}
-
-/**
- * Default fuzzy matching for field values
- */
-function fuzzyMatch(expected: any, actual: any, key: string): boolean {
-  // Handle regex patterns
-  if (expected instanceof RegExp) {
-    return typeof actual === "string" && expected.test(actual);
-  }
-
-  // Handle functions (custom validators)
-  if (typeof expected === "function") {
-    return expected(actual);
-  }
-
-  // Null/undefined handling
-  if (
-    expected === null ||
-    expected === undefined ||
-    actual === null ||
-    actual === undefined
-  ) {
-    return expected === actual;
-  }
-
-  // For objects, check if actual has all expected properties
-  if (
-    typeof expected === "object" &&
-    typeof actual === "object" &&
-    !Array.isArray(expected)
-  ) {
-    return Object.entries(expected).every(
-      ([k, value]) =>
-        k in actual && fuzzyMatch(value, actual[k], `${key}.${k}`),
-    );
-  }
-
-  // For strings, case-insensitive comparison
-  if (typeof expected === "string" && typeof actual === "string") {
-    return expected.toLowerCase() === actual.toLowerCase();
-  }
-
-  // For numbers, allow small differences (0.1% or 0.001, whichever is larger)
-  if (typeof expected === "number" && typeof actual === "number") {
-    const tolerance = Math.max(Math.abs(expected) * 0.001, 0.001);
-    return Math.abs(expected - actual) <= tolerance;
-  }
-
-  // For arrays, check if all expected items exist in actual (order doesn't matter in fuzzy mode)
-  if (Array.isArray(expected) && Array.isArray(actual)) {
-    return expected.every((expItem) =>
-      actual.some((actItem) => fuzzyMatch(expItem, actItem, key)),
-    );
-  }
-
-  // Handle boolean coercion
-  if (typeof expected === "boolean" && typeof actual === "string") {
-    return expected === (actual.toLowerCase() === "true" || actual === "1");
-  }
-
-  // For primitives with explicit type coercion (e.g., "1" matches 1)
-  if (typeof expected === "string" && typeof actual === "number") {
-    return Number.parseFloat(expected) === actual;
-  }
-  if (typeof expected === "number" && typeof actual === "string") {
-    return expected === Number.parseFloat(actual);
-  }
-  // For all other cases, ensure types match before comparison
-  return expected === actual;
-}
-
-/**
- * Strict equality comparison (deep equals)
- */
-function strictEquals(expected: any, actual: any): boolean {
-  // Handle primitive types and null/undefined
-  if (expected === actual) return true;
-  if (
-    expected === null ||
-    expected === undefined ||
-    actual === null ||
-    actual === undefined
-  )
-    return false;
-
-  // Must be same type
-  if (typeof expected !== typeof actual) return false;
-
-  // Handle arrays
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) return false;
-    if (expected.length !== actual.length) return false;
-    return expected.every((item, i) => strictEquals(item, actual[i]));
-  }
-
-  // Handle objects
-  if (typeof expected === "object") {
-    const expectedKeys = Object.keys(expected).sort();
-    const actualKeys = Object.keys(actual).sort();
-
-    // Must have same keys
-    if (expectedKeys.length !== actualKeys.length) return false;
-    if (!expectedKeys.every((key, i) => key === actualKeys[i])) return false;
-
-    // All values must match
-    return expectedKeys.every((key) =>
-      strictEquals(expected[key], actual[key]),
-    );
-  }
-
-  // Primitive types
-  return expected === actual;
 }
 
 /**
@@ -232,13 +104,11 @@ export function StructuredOutputScorer(
     errorField = "error",
   } = config;
 
-  // Determine the field matcher
+  // Determine the field matcher - handle 3-parameter custom functions for structured output
   const fieldMatcher =
     typeof match === "function"
-      ? match
-      : match === "strict"
-        ? (expected: any, actual: any) => strictEquals(expected, actual)
-        : fuzzyMatch;
+      ? match // Use custom function directly with its original signature
+      : createMatcher(match, "structured");
 
   return async (opts) => {
     const expected = opts.expected || {};
@@ -293,7 +163,13 @@ export function StructuredOutputScorer(
     for (const [key, expectedValue] of Object.entries(expected)) {
       const actualValue = parsed[key];
 
-      if (fieldMatcher(expectedValue, actualValue, key)) {
+      // Handle both 2-parameter (shared utilities) and 3-parameter (custom) functions
+      const isMatch =
+        typeof match === "function"
+          ? fieldMatcher(expectedValue, actualValue, key)
+          : fieldMatcher(expectedValue, actualValue);
+
+      if (isMatch) {
         matches.push(key);
       } else {
         mismatches.push({ key, expected: expectedValue, actual: actualValue });
@@ -309,12 +185,13 @@ export function StructuredOutputScorer(
     }
 
     if (debug) {
-      console.log("StructuredOutputScorer debug:");
-      console.log("Expected:", expected);
-      console.log("Actual:", parsed);
-      console.log("Matches:", matches);
-      console.log("Mismatches:", mismatches);
-      console.log("Extras:", extras);
+      debugLog("StructuredOutputScorer", {
+        expected,
+        actual: parsed,
+        matches,
+        mismatches,
+        extras,
+      });
     }
 
     // Calculate score and rationale
@@ -377,16 +254,4 @@ export function StructuredOutputScorer(
       },
     };
   };
-}
-
-/**
- * Format a value for display in error messages
- */
-function formatValue(value: any): string {
-  if (value === undefined) return "undefined";
-  if (value === null) return "null";
-  if (value instanceof RegExp) return value.toString();
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
 }
