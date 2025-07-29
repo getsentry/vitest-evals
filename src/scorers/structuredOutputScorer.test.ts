@@ -241,6 +241,44 @@ describe("StructuredOutputScorer", () => {
 
       expect(result.score).toBe(1.0);
     });
+
+    test("supports function validators in fuzzy mode", async () => {
+      const scorer = StructuredOutputScorer({ match: "fuzzy" });
+      const result = await scorer({
+        input: "test",
+        output: JSON.stringify({
+          age: 25,
+          email: "user@example.com",
+          role: "admin",
+        }),
+        expected: {
+          age: (value: number) => value >= 18 && value <= 100,
+          email: (value: string) => value.includes("@"),
+          role: (value: string) => ["admin", "user", "guest"].includes(value),
+        },
+      });
+
+      expect(result.score).toBe(1.0);
+      expect(result.metadata?.rationale).toBe("All expected fields match");
+    });
+
+    test("handles failing function validators in fuzzy mode", async () => {
+      const scorer = StructuredOutputScorer({ match: "fuzzy" });
+      const result = await scorer({
+        input: "test",
+        output: JSON.stringify({
+          age: 150, // Outside valid range
+          email: "invalid-email", // No @ symbol
+        }),
+        expected: {
+          age: (value: number) => value >= 18 && value <= 100,
+          email: (value: string) => value.includes("@"),
+        },
+      });
+
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.rationale).toContain("Missing required fields");
+    });
   });
 
   describe("custom matching", () => {
