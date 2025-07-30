@@ -16,16 +16,18 @@ import { describeEval } from "vitest-evals";
 describeEval("capital cities", {
   data: async () => [
     { input: "What is the capital of France?", expected: "Paris" },
-    { input: "What is the capital of Japan?", expected: "Tokyo" }
+    { input: "What is the capital of Japan?", expected: "Tokyo" },
   ],
   task: async (input) => {
     const response = await queryLLM(input);
     return response; // Simple string return
   },
-  scorers: [async ({ output, expected }) => ({
-    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
-  })],
-  threshold: 0.8
+  scorers: [
+    async ({ output, expected }) => ({
+      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
+    }),
+  ],
+  threshold: 0.8,
 });
 ```
 
@@ -58,15 +60,15 @@ import { ToolCallScorer } from "vitest-evals/scorers/toolCallScorer";
 
 describeEval("tool usage", {
   data: async () => [
-    { input: "Search weather", expectedTools: [{ name: "weather_api" }] }
+    { input: "Search weather", expectedTools: [{ name: "weather_api" }] },
   ],
   task: weatherTask,
-  scorers: [ToolCallScorer()]
+  scorers: [ToolCallScorer()],
 });
 
 // Custom scorer
 const LengthScorer = async ({ output }) => ({
-  score: output.length > 50 ? 1.0 : 0.0
+  score: output.length > 50 ? 1.0 : 0.0,
 });
 
 // TypeScript scorer with custom options
@@ -77,46 +79,54 @@ interface CustomOptions extends BaseScorerOptions {
 }
 
 const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
-  score: opts.output.length >= opts.minLength ? 1.0 : 0.0
+  score: opts.output.length >= opts.minLength ? 1.0 : 0.0,
 });
 ```
 
 ### Built-in Scorers
 
 #### ToolCallScorer
+
 Evaluates if the expected tools were called with correct arguments.
 
 ```javascript
 // Basic usage - strict matching, any order
 describeEval("search test", {
-  data: async () => [{
-    input: "Find Italian restaurants",
-    expectedTools: [
-      { name: "search", arguments: { type: "restaurant" } },
-      { name: "filter", arguments: { cuisine: "italian" } }
-    ]
-  }],
+  data: async () => [
+    {
+      input: "Find Italian restaurants",
+      expectedTools: [
+        { name: "search", arguments: { type: "restaurant" } },
+        { name: "filter", arguments: { cuisine: "italian" } },
+      ],
+    },
+  ],
   task: myTask,
-  scorers: [ToolCallScorer()]
+  scorers: [ToolCallScorer()],
 });
 
 // Strict evaluation - exact order and parameters
-scorers: [ToolCallScorer({ 
-  ordered: true,      // Tools must be in exact order
-  params: "strict"    // Parameters must match exactly
-})]
+scorers: [
+  ToolCallScorer({
+    ordered: true, // Tools must be in exact order
+    params: "strict", // Parameters must match exactly
+  }),
+];
 
 // Flexible evaluation
-scorers: [ToolCallScorer({
-  requireAll: false,   // Partial matches give partial credit
-  allowExtras: false   // No additional tools allowed
-})]
+scorers: [
+  ToolCallScorer({
+    requireAll: false, // Partial matches give partial credit
+    allowExtras: false, // No additional tools allowed
+  }),
+];
 ```
 
 **Default behavior:**
+
 - Strict parameter matching (exact equality required)
 - Any order allowed
-- Extra tools allowed  
+- Extra tools allowed
 - All expected tools required
 
 ## AI SDK Integration
@@ -126,20 +136,20 @@ See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a com
 Transform provider responses to our format:
 
 ```javascript
-// Vercel AI SDK - use maxSteps and extract from steps
 const { text, steps } = await generateText({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   prompt: input,
   tools: { myTool: myToolDefinition },
-  maxSteps: 5 // Required for reliable tool call detection
 });
 
 return {
   result: text,
-  toolCalls: steps.flatMap(step => step.toolCalls).map((call) => ({
-    name: call.toolName,
-    arguments: call.args,
-  })),
+  toolCalls: steps
+    .flatMap((step) => step.toolCalls)
+    .map((call) => ({
+      name: call.toolName,
+      arguments: call.args,
+    })),
 };
 ```
 
@@ -157,9 +167,9 @@ import { Factuality, ClosedQA } from "autoevals";
 scorers: [
   Factuality, // LLM-based factuality checking
   ClosedQA.partial({
-    criteria: "Does the answer mention Paris?"
-  })
-]
+    criteria: "Does the answer mention Paris?",
+  }),
+];
 ```
 
 #### Custom LLM-based Factuality Scorer
@@ -167,18 +177,20 @@ scorers: [
 Here's an example of implementing your own LLM-based factuality scorer using the Vercel AI SDK:
 
 ```javascript
-import { generateObject } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { z } from 'zod';
+import { generateObject } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 
-const Factuality = (model = openai('gpt-4o')) => async ({ input, output, expected }) => {
-  if (!expected) {
-    return { score: 1.0, metadata: { rationale: "No expected answer" } };
-  }
+const Factuality =
+  (model = openai("gpt-4o")) =>
+  async ({ input, output, expected }) => {
+    if (!expected) {
+      return { score: 1.0, metadata: { rationale: "No expected answer" } };
+    }
 
-  const { object } = await generateObject({
-    model,
-    prompt: `
+    const { object } = await generateObject({
+      model,
+      prompt: `
       Compare the factual content of the submitted answer with the expert answer.
       
       Question: ${input}
@@ -192,21 +204,21 @@ const Factuality = (model = openai('gpt-4o')) => async ({ input, output, expecte
       (D) Contradicts expert answer
       (E) Different but factually equivalent
     `,
-    schema: z.object({
-      answer: z.enum(['A', 'B', 'C', 'D', 'E']),
-      rationale: z.string()
-    })
-  });
+      schema: z.object({
+        answer: z.enum(["A", "B", "C", "D", "E"]),
+        rationale: z.string(),
+      }),
+    });
 
-  const scores = { A: 0.4, B: 0.6, C: 1, D: 0, E: 1 };
-  return {
-    score: scores[object.answer],
-    metadata: { rationale: object.rationale, answer: object.answer }
+    const scores = { A: 0.4, B: 0.6, C: 1, D: 0, E: 1 };
+    return {
+      score: scores[object.answer],
+      metadata: { rationale: object.rationale, answer: object.answer },
+    };
   };
-};
 
 // Usage
-scorers: [Factuality()]
+scorers: [Factuality()];
 ```
 
 ### Skip Tests Conditionally
@@ -229,9 +241,9 @@ import "vitest-evals";
 
 test("capital check", () => {
   const simpleFactuality = async ({ output, expected }) => ({
-    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
+    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
   });
-  
+
   expect("What is the capital of France?").toEval(
     "Paris",
     answerQuestion,
@@ -248,13 +260,15 @@ import { describeEval } from "vitest-evals";
 
 describeEval("capital check", {
   data: async () => [
-    { input: "What is the capital of France?", expected: "Paris" }
+    { input: "What is the capital of France?", expected: "Paris" },
   ],
   task: answerQuestion,
-  scorers: [async ({ output, expected }) => ({
-    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0
-  })],
-  threshold: 0.8
+  scorers: [
+    async ({ output, expected }) => ({
+      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
+    }),
+  ],
+  threshold: 0.8,
 });
 ```
 
