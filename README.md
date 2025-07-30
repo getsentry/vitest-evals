@@ -181,9 +181,7 @@ import { generateObject } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 
-const Factuality =
-  (model = openai("gpt-4o")) =>
-  async ({ input, output, expected }) => {
+const Factuality = (model = openai("gpt-4o")) => async ({ input, output, expected }) => {
     if (!expected) {
       return { score: 1.0, metadata: { rationale: "No expected answer" } };
     }
