@@ -8,27 +8,7 @@ import "vitest";
 export type ToolCall = {
   // Core fields (required for basic usage)
   name: string;
-  arguments: Record<string, any>;
-
-  // Result and timing
-  result?: any;
-  error?: {
-    code?: string;
-    message: string;
-    details?: any;
-  };
-  timestamp?: number;
-  duration_ms?: number;
-
-  // Identification and correlation
-  id?: string;
-  parent_id?: string; // For nested/chained calls
-
-  // Status tracking
-  status?: "pending" | "executing" | "completed" | "failed" | "cancelled";
-
-  // Provider-specific fields
-  type?: "function" | "retrieval" | "code_interpreter" | "web_search" | string;
+  arguments?: Record<string, any>;
 
   // Additional metadata
   [key: string]: any; // Allow provider-specific fields
@@ -62,8 +42,8 @@ export type Score = {
   score: number | null;
   metadata?: {
     rationale?: string;
-    output?: string;
-  };
+    output?: any;
+  } & Record<string, any>;
 };
 
 export interface BaseScorerOptions {
@@ -76,8 +56,11 @@ export type ScoreFn<TOptions extends BaseScorerOptions = BaseScorerOptions> = (
   opts: TOptions,
 ) => Promise<Score> | Score;
 
+/**
+ * @deprecated Use describeEval() instead for better test organization and multiple scorers support
+ */
 export type ToEval<R = unknown> = (
-  expected: string,
+  expected: any,
   taskFn: TaskFn,
   scoreFn: ScoreFn<any>,
   threshold?: number,
@@ -104,7 +87,8 @@ expect.extend({
   /**
    * Evaluates a language model output against an expected answer using a scoring function.
    *
-   * @param expected - The expected (ground truth) answer
+   * @deprecated Use describeEval() instead for better test organization and multiple scorers support
+   * @param expected - The expected (ground truth) answer, can be any type depending on the scorer
    * @param taskFn - Async function that processes the input and returns the model output
    *                 Can return either a string or TaskResult object with result and optional toolCalls
    * @param scoreFn - Function that evaluates the model output against the expected answer
@@ -132,7 +116,7 @@ expect.extend({
   // TODO: this needs to be support true extensibility with Eval scorers
   toEval: async function toEval(
     input: string,
-    expected: string,
+    expected: any,
     taskFn: TaskFn,
     scoreFn: ScoreFn<any>,
     threshold = 1.0,
@@ -292,11 +276,23 @@ export function formatScores(scores: (Score & { name: string })[]) {
         ((s.score ?? 0) < 1.0 && s.metadata?.rationale) ||
         s.metadata?.output
       ) {
+        // Format output - handle both strings and objects
+        let formattedOutput = "";
+        if (s.metadata?.output !== undefined) {
+          const output = s.metadata.output;
+          if (typeof output === "string") {
+            formattedOutput = `\n\n## Response\n\n${wrapText(output)}`;
+          } else {
+            // For objects, stringify with proper formatting
+            formattedOutput = `\n\n## Response\n\n${wrapText(JSON.stringify(output, null, 2))}`;
+          }
+        }
+
         return `${scoreLine}${
           s.metadata?.rationale
             ? `\n\n## Rationale\n\n${wrapText(s.metadata.rationale)}`
             : ""
-        }${s.metadata?.output ? `\n\n## Response\n\n${wrapText(s.metadata.output)}` : ""}`;
+        }${formattedOutput}`;
       }
       return scoreLine;
     })
@@ -352,4 +348,9 @@ export function wrapText(text: string, width = 80): string {
 }
 
 // Export built-in scorers
-export { ToolCallScorer, type ToolCallScorerOptions } from "./scorers";
+export {
+  ToolCallScorer,
+  type ToolCallScorerOptions,
+  StructuredOutputScorer,
+  type StructuredOutputScorerOptions,
+} from "./scorers";

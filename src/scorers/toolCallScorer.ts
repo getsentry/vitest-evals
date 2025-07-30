@@ -1,4 +1,10 @@
 import type { ScoreFn, BaseScorerOptions, ToolCall } from "../index";
+import {
+  type BaseMatcherConfig,
+  type MatchStrategy,
+  type FuzzyMatchOptions,
+  createMatcher,
+} from "./utils";
 
 export interface ToolCallScorerOptions extends BaseScorerOptions {
   // Expected tools are now defined in the test data
@@ -8,7 +14,7 @@ export interface ToolCallScorerOptions extends BaseScorerOptions {
   }>;
 }
 
-export interface ToolCallScorerConfig {
+export interface ToolCallScorerConfig extends BaseMatcherConfig {
   /**
    * Whether tools must be called in the exact order specified
    * @default false
@@ -16,105 +22,36 @@ export interface ToolCallScorerConfig {
   ordered?: boolean;
 
   /**
-   * Whether all expected tools must be called for a passing score
-   * When false: gives partial credit based on tools matched
-   * @default true
-   */
-  requireAll?: boolean;
-
-  /**
-   * Whether to allow additional tool calls beyond those expected
-   * @default true
-   */
-  allowExtras?: boolean;
-
-  /**
    * How to match tool arguments/parameters
    * - "strict": Exact equality required (default)
-   * - "fuzzy": Case-insensitive, subset matching, numeric tolerance
+   * - "fuzzy": Flexible matching with tolerance for differences
+   *   - Case-insensitive string matching
+   *   - Numeric tolerance for small differences
+   *   - Unordered array comparison
+   *   - Subset matching for objects (actual can have extra properties)
    * - Custom function: Your own comparison logic
+   *
+   * NOTE: Each expected tool call requires a unique actual tool call to match.
+   * Multiple identical expected tools need separate actual tool calls.
+   *
    * @default "strict"
    */
-  params?: "strict" | "fuzzy" | ((expected: any, actual: any) => boolean);
-}
+  params?: MatchStrategy;
 
-/**
- * Default fuzzy matching for arguments
- */
-function fuzzyMatch(expected: any, actual: any): boolean {
-  // Null/undefined handling
-  if (expected == null || actual == null) {
-    return expected === actual;
-  }
-
-  // For objects, check if actual has all expected properties
-  if (
-    typeof expected === "object" &&
-    typeof actual === "object" &&
-    !Array.isArray(expected)
-  ) {
-    return Object.entries(expected).every(
-      ([key, value]) => key in actual && fuzzyMatch(value, actual[key]),
-    );
-  }
-
-  // For strings, case-insensitive substring match
-  if (typeof expected === "string" && typeof actual === "string") {
-    return actual.toLowerCase().includes(expected.toLowerCase());
-  }
-
-  // For numbers, allow small differences (0.1% or 0.001, whichever is larger)
-  if (typeof expected === "number" && typeof actual === "number") {
-    const tolerance = Math.max(Math.abs(expected) * 0.001, 0.001);
-    return Math.abs(expected - actual) <= tolerance;
-  }
-
-  // For arrays, check if all expected items exist in actual (order doesn't matter in fuzzy mode)
-  if (Array.isArray(expected) && Array.isArray(actual)) {
-    return expected.every((expItem) =>
-      actual.some((actItem) => fuzzyMatch(expItem, actItem)),
-    );
-  }
-
-  // Otherwise strict equality
-  return expected === actual;
-}
-
-/**
- * Strict equality comparison (deep equals)
- */
-function strictEquals(expected: any, actual: any): boolean {
-  // Handle primitive types and null/undefined
-  if (expected === actual) return true;
-  if (expected == null || actual == null) return false;
-
-  // Must be same type
-  if (typeof expected !== typeof actual) return false;
-
-  // Handle arrays
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) return false;
-    if (expected.length !== actual.length) return false;
-    return expected.every((item, i) => strictEquals(item, actual[i]));
-  }
-
-  // Handle objects
-  if (typeof expected === "object") {
-    const expectedKeys = Object.keys(expected).sort();
-    const actualKeys = Object.keys(actual).sort();
-
-    // Must have same keys
-    if (expectedKeys.length !== actualKeys.length) return false;
-    if (!expectedKeys.every((key, i) => key === actualKeys[i])) return false;
-
-    // All values must match
-    return expectedKeys.every((key) =>
-      strictEquals(expected[key], actual[key]),
-    );
-  }
-
-  // Primitive types
-  return expected === actual;
+  /**
+   * Options for fuzzy matching when params="fuzzy"
+   * These options are MERGED with defaults, not replaced.
+   *
+   * Default fuzzy options for tool calls:
+   * - substring: true (allow substring matching for strings)
+   * - caseInsensitive: true (ignore case differences)
+   * - ignoreArrayOrder: true (arrays can be in different orders)
+   * - numericTolerance: 0.001 (0.1% tolerance for numbers)
+   * - coerceTypes: false (no automatic type conversion)
+   *
+   * @default { substring: true, caseInsensitive: true, ignoreArrayOrder: true }
+   */
+  fuzzyOptions?: FuzzyMatchOptions;
 }
 
 /**
@@ -165,15 +102,24 @@ export function ToolCallScorer(
     requireAll = true,
     allowExtras = true,
     params = "strict",
+    fuzzyOptions: userFuzzyOptions,
   } = config;
 
+  // Merge user fuzzyOptions with defaults for tool calls
+  const defaultFuzzyOptions: FuzzyMatchOptions = {
+    substring: true,
+    caseInsensitive: true,
+    ignoreArrayOrder: true,
+    numericTolerance: 0.001,
+    coerceTypes: false,
+  };
+  const fuzzyOptions: FuzzyMatchOptions = {
+    ...defaultFuzzyOptions,
+    ...userFuzzyOptions,
+  };
+
   // Determine the argument matcher
-  const argMatcher =
-    typeof params === "function"
-      ? params
-      : params === "strict"
-        ? strictEquals
-        : fuzzyMatch;
+  const argMatcher = createMatcher(params, fuzzyOptions);
 
   return async (opts) => {
     const expectedTools = opts.expectedTools || [];
@@ -243,12 +189,16 @@ function evaluateOrderedTools(
           act.arguments || {},
         );
         if (!argsMatch) {
+          // Give partial credit for tools matched up to this point
+          const partialScore = expectedIndex / expected.length;
           return {
-            score: 0.5,
+            score: partialScore,
             metadata: {
-              rationale: `Tool '${exp.name}' called with incorrect arguments at position ${expectedIndex + 1}`,
+              rationale: `Tool '${exp.name}' called with incorrect arguments at position ${expectedIndex + 1} (${expectedIndex}/${expected.length} tools matched correctly)`,
               expected: exp.arguments,
               actual: act.arguments,
+              matched: expectedIndex,
+              total: expected.length,
             },
           };
         }
@@ -318,6 +268,11 @@ function evaluateOrderedTools(
 
 /**
  * Evaluate tools that can be called in any order
+ *
+ * Simple logic:
+ * 1. Start with copies of expected and actual tool arrays
+ * 2. For each expected tool, find and remove a matching actual tool
+ * 3. Remaining expected = missing, remaining actual = extras
  */
 function evaluateUnorderedTools(
   expected: Array<{ name: string; arguments?: any }>,
@@ -328,67 +283,67 @@ function evaluateUnorderedTools(
     allowExtras: boolean;
   },
 ) {
-  const matchedExpected = new Set<number>();
-  const matchedActual = new Set<number>();
+  // Work with copies so we can remove items
+  const remainingExpected = [...expected];
+  const remainingActual = [...actual];
   const issues: string[] = [];
 
-  // Try to match each expected tool
-  for (let i = 0; i < expected.length; i++) {
-    const exp = expected[i];
-    let found = false;
+  // For each expected tool, find and remove a matching actual tool
+  for (let i = remainingExpected.length - 1; i >= 0; i--) {
+    const expectedTool = remainingExpected[i];
 
-    // Look for a matching actual tool call
-    for (let j = 0; j < actual.length; j++) {
-      if (matchedActual.has(j)) continue;
-
-      const act = actual[j];
-      if (exp.name === act.name) {
-        // Check arguments if specified
-        if (exp.arguments !== undefined) {
-          const argsMatch = options.argMatcher(
-            exp.arguments,
-            act.arguments || {},
-          );
-          if (!argsMatch) {
-            continue; // Try to find another call with matching args
-          }
-        }
-
-        // Found a match
-        matchedExpected.add(i);
-        matchedActual.add(j);
-        found = true;
-        break;
+    // Find a matching actual tool
+    const matchIndex = remainingActual.findIndex((actualTool) => {
+      // Check if this actual tool matches the expected tool
+      if (expectedTool.name !== actualTool.name) {
+        return false;
       }
-    }
 
-    if (!found) {
-      if (exp.arguments !== undefined) {
-        // Check if tool was called but with wrong args
-        const wrongArgsCalls = actual.filter((a) => a.name === exp.name);
-        if (wrongArgsCalls.length > 0) {
-          issues.push(`Tool '${exp.name}' called but with incorrect arguments`);
-        } else {
-          issues.push(`Missing required tool: ${exp.name}`);
-        }
-      } else {
-        issues.push(`Missing required tool: ${exp.name}`);
+      // Check arguments if specified
+      if (expectedTool.arguments !== undefined) {
+        return options.argMatcher(
+          expectedTool.arguments,
+          actualTool.arguments || {},
+        );
       }
+
+      return true;
+    });
+
+    if (matchIndex !== -1) {
+      // Found a match - remove both
+      remainingExpected.splice(i, 1);
+      remainingActual.splice(matchIndex, 1);
     }
   }
 
-  // Check for extra tools
-  const extraTools = actual
-    .filter((_, i) => !matchedActual.has(i))
-    .map((t) => t.name);
+  // Generate issues for missing tools
+  for (const missingTool of remainingExpected) {
+    if (missingTool.arguments !== undefined) {
+      // Check if tool was called but with wrong args
+      const wrongArgsCalls = actual.filter((a) => a.name === missingTool.name);
+      if (wrongArgsCalls.length > 0) {
+        issues.push(
+          `Tool '${missingTool.name}' called but with incorrect arguments`,
+        );
+      } else {
+        issues.push(`Missing required tool: ${missingTool.name}`);
+      }
+    } else {
+      issues.push(`Missing required tool: ${missingTool.name}`);
+    }
+  }
+
+  // Extra tools = remaining actual tools
+  const extraTools = remainingActual.map((tool) => tool.name);
 
   if (!options.allowExtras && extraTools.length > 0) {
     issues.push(`Unexpected extra tools: ${extraTools.join(", ")}`);
   }
 
   // Calculate score
-  const expectedMatched = matchedExpected.size;
-  const expectedTotal = expected.length;
+  const expectedMatched = expected.length - remainingExpected.length;
+  const score = expected.length > 0 ? expectedMatched / expected.length : 1.0;
 
   // If we have any critical issues (wrong tools, missing tools when required, or extra tools when not allowed)
   if (issues.length > 0 && (options.requireAllTools || !options.allowExtras)) {
@@ -399,9 +354,6 @@ function evaluateUnorderedTools(
       },
     };
   }
-
-  // Partial credit when not all required
-  const score = expectedTotal > 0 ? expectedMatched / expectedTotal : 1.0;
 
   if (score === 1.0) {
     const extraInfo =
@@ -419,7 +371,7 @@ function evaluateUnorderedTools(
     metadata: {
       rationale: issues.join("; "),
       matched: expectedMatched,
-      total: expectedTotal,
+      total: expected.length,
     },
   };
 }
