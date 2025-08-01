@@ -129,6 +129,69 @@ scorers: [
 - Extra tools allowed
 - All expected tools required
 
+#### StructuredOutputScorer
+
+Evaluates if the output matches expected structured data (JSON).
+
+```javascript
+// Basic usage - strict matching
+describeEval("query generation", {
+  data: async () => [
+    {
+      input: "Show me errors from today",
+      expected: {
+        dataset: "errors",
+        query: "",
+        sort: "-timestamp",
+        timeRange: { statsPeriod: "24h" }
+      }
+    }
+  ],
+  task: myTask,
+  scorers: [StructuredOutputScorer()]
+});
+
+// Fuzzy matching with regex patterns
+scorers: [
+  StructuredOutputScorer({
+    match: "fuzzy", // More flexible matching
+  })
+];
+
+// Custom validation
+scorers: [
+  StructuredOutputScorer({
+    match: (expected, actual, key) => {
+      if (key === "age") return actual >= 18 && actual <= 100;
+      return expected === actual;
+    }
+  })
+];
+
+// Partial credit for incomplete matches
+scorers: [
+  StructuredOutputScorer({
+    requireAll: false, // Partial matches give partial credit
+    allowExtras: false, // No additional fields allowed
+  })
+];
+```
+
+**Features:**
+
+- **Strict matching** (default): Exact equality for all fields
+- **Fuzzy matching**: Case-insensitive strings, numeric tolerance (0.1%), regex patterns, unordered arrays
+- **Custom matchers**: Define your own validation logic per field
+- **Error detection**: Automatically fails if output contains an error field
+- **Partial credit**: Optional scoring based on percentage of matching fields
+
+**Default behavior:**
+
+- Strict field matching (exact equality required)
+- Extra fields allowed
+- All expected fields required
+- Checks for "error" field in output
+
 ## AI SDK Integration
 
 See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a complete example with the Vercel AI SDK.
