@@ -9,6 +9,10 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   build-publish:
     runs-on: ubuntu-latest
