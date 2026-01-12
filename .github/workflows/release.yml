@@ -5,6 +5,7 @@ on:
       version:
         description: Version to release (or "auto")
         required: false
+        default: 'auto'
       force:
         description: Force a release even when there are release-blockers
         required: false
