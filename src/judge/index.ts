@@ -51,6 +51,12 @@ export async function _evaluate(
   ctx: TestTaskContext,
   opts: JudgeOptions,
 ): Promise<void> {
+  if (!defaultModel) {
+    throw new Error(
+      "No model configured. Call configure({ model }) before using judgeIt.",
+    );
+  }
+
   let output: string;
   try {
     output = await opts.task();
@@ -67,12 +73,6 @@ export async function _evaluate(
       avgScore: 0,
     };
     throw error;
-  }
-
-  if (!defaultModel) {
-    throw new Error(
-      "No model configured. Call configure({ model }) before using judgeIt.",
-    );
   }
 
   const { object } = await generateObject({

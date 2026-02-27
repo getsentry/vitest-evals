@@ -1,4 +1,11 @@
-import { assert, describe, expect, test } from "vitest";
+import {
+  assert,
+  beforeEach as vitestBeforeEach,
+  afterEach as vitestAfterEach,
+  describe,
+  expect,
+  test,
+} from "vitest";
 import "vitest";
 
 /**
@@ -205,21 +212,34 @@ export function describeEval(
     // increase default test timeout as 5s is usually not enough for
     // a single factuality check
     timeout = 60000,
+    beforeEach: beforeEachHook,
+    afterEach: afterEachHook,
   }: {
-    data: () => Promise<Array<{ input: string } & Record<string, any>>>;
+    data: () => Promise<
+      Array<{ input: string; name?: string } & Record<string, any>>
+    >;
     task: TaskFn;
     skipIf?: () => boolean;
     scorers: ScoreFn<any>[];
     threshold?: number | null;
     timeout?: number;
+    beforeEach?: () => void | Promise<void>;
+    afterEach?: () => void | Promise<void>;
   },
 ) {
   return describe(name, async () => {
+    if (beforeEachHook) {
+      vitestBeforeEach(beforeEachHook);
+    }
+    if (afterEachHook) {
+      vitestAfterEach(afterEachHook);
+    }
+
     const testFn = skipIf ? test.skipIf(skipIf()) : test;
     // TODO: should data just be a generator?
-    for (const { input, ...params } of await data()) {
+    for (const { input, name: testName, ...params } of await data()) {
       testFn(
-        input,
+        testName ?? input,
         {
           timeout,
         },
@@ -353,4 +373,9 @@ export {
   type ToolCallScorerOptions,
   StructuredOutputScorer,
   type StructuredOutputScorerOptions,
+  LLMJudge,
+  type LLMJudgeConfig,
+  Factuality,
+  type FactualityConfig,
+  type FactualityScorerOptions,
 } from "./scorers";
