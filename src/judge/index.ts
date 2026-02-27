@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { assert, test } from "vitest";
-import { wrapText } from "../index";
+import { wrapText } from "../wrapText";
 
 type LanguageModel = Parameters<typeof generateObject>[0]["model"];
 

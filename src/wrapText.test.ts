@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { wrapText } from "./index";
+import { wrapText } from "./wrapText";
 
 describe("wrapText", () => {
   test("should return the original text if it's shorter than the width", () => {
