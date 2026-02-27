@@ -10,14 +10,6 @@ export {
   type StructuredOutputScorerConfig,
 } from "./structuredOutputScorer";
 
-export {
-  LLMJudge,
-  Factuality,
-  type LLMJudgeConfig,
-  type FactualityConfig,
-  type FactualityScorerOptions,
-} from "./llmJudge";
-
 // Shared utilities for custom scorer implementations
 export {
   strictEquals,

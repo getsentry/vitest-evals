@@ -27,11 +27,6 @@
       "require": "./dist/scorers/toolCallScorer.js",
       "import": "./dist/scorers/toolCallScorer.mjs"
     },
-    "./scorers/llmJudge": {
-      "types": "./dist/scorers/llmJudge.d.ts",
-      "require": "./dist/scorers/llmJudge.js",
-      "import": "./dist/scorers/llmJudge.mjs"
-    },
     "./judge": {
       "types": "./dist/judge/index.d.ts",
       "require": "./dist/judge/index.js",

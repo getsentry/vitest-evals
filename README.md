@@ -8,31 +8,23 @@ End-to-end evaluation framework for AI agents, built on Vitest.
 npm install -D vitest-evals
 ```
 
-For LLM-as-a-judge scorers (`LLMJudge`, `Factuality`), also install:
-
-```shell
-npm install -D ai zod @ai-sdk/openai
-```
-
 ## Quick Start
 
 ```javascript
-import { describeEval, LLMJudge } from "vitest-evals";
-import { openai } from "@ai-sdk/openai";
+import { describeEval } from "vitest-evals";
 
 describeEval("deploy agent", {
   data: async () => [
-    { input: "Deploy the latest release to production" },
-    { input: "Roll back the last deploy" },
+    { input: "Deploy the latest release to production", expected: "deployed" },
+    { input: "Roll back the last deploy", expected: "rolled back" },
   ],
   task: async (input) => {
     const response = await myAgent.run(input);
     return response;
   },
   scorers: [
-    LLMJudge({
-      model: openai("gpt-4o"),
-      criteria: "Response should acknowledge the request and provide a clear status update",
+    async ({ output, expected }) => ({
+      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
     }),
   ],
   threshold: 0.8,
@@ -83,52 +75,13 @@ describeEval("agent with database", {
   },
   data: async () => [{ input: "Find recent errors" }],
   task: myAgentTask,
-  scorers: [LLMJudge({ model, criteria: "Returns relevant errors" })],
+  scorers: [async ({ output }) => ({ score: output.includes("error") ? 1.0 : 0.0 })],
 });
 ```
 
 ## Scorers
 
 Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own.
-
-### LLMJudge
-
-Scores output against arbitrary criteria using an LLM. No expected answer needed — the primary scorer for E2E agent testing.
-
-```javascript
-import { LLMJudge } from "vitest-evals";
-import { openai } from "@ai-sdk/openai";
-
-scorers: [
-  LLMJudge({
-    model: openai("gpt-4o"),
-    criteria: "Response should be helpful, accurate, and mention specific error codes",
-  }),
-];
-```
-
-Requires `ai` and `zod` as peer dependencies.
-
-### Factuality
-
-Compares output against an expected answer using an LLM to classify the factual relationship.
-
-```javascript
-import { Factuality } from "vitest-evals";
-import { openai } from "@ai-sdk/openai";
-
-describeEval("factual responses", {
-  data: async () => [
-    { input: "When did the deploy finish?", expected: "The deploy succeeded at 3pm" },
-  ],
-  task: myTask,
-  scorers: [Factuality({ model: openai("gpt-4o") })],
-});
-```
-
-Scores: equivalent (1.0), different-but-factual (1.0), superset (0.6), subset (0.4), contradictory (0.0).
-
-Requires `ai` and `zod` as peer dependencies.
 
 ### ToolCallScorer
 

@@ -13,20 +13,20 @@ export function configure(opts: { model: LanguageModel }) {
 
 const JUDGE_SYSTEM = `You are assessing a submitted output based on a given criterion. Ignore differences in style, grammar, punctuation, or length. Focus only on whether the criterion is met.`;
 
-const JUDGE_PROMPT = (output: string, criteria: string) => `[BEGIN DATA]
-***
-[Submission]: ${output}
-***
-[Criterion]: ${criteria}
-***
-[END DATA]
+const JUDGE_PROMPT = (output: string, criteria: string) => `<submission>
+${output}
+</submission>
 
-Does the submission meet the criterion? Select one option:
-(A) The criterion is fully met with no issues
-(B) The criterion is mostly met with minor gaps
-(C) The criterion is partially met with notable gaps
-(D) The criterion is barely met or only tangentially addressed
-(E) The criterion is not met at all`;
+<criteria>
+${criteria}
+</criteria>
+
+Does the submission meet the criteria? Select one option:
+(A) The criteria is fully met with no issues
+(B) The criteria is mostly met with minor gaps
+(C) The criteria is partially met with notable gaps
+(D) The criteria is barely met or only tangentially addressed
+(E) The criteria is not met at all`;
 
 const CHOICE_SCORES: Record<string, number> = {
   A: 1.0,
