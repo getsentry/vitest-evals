@@ -75,15 +75,31 @@ export async function _evaluate(
     throw error;
   }
 
-  const { object } = await generateObject({
-    model: defaultModel,
-    schema: z.object({
-      answer: z.enum(["A", "B", "C", "D", "E"]),
-      rationale: z.string(),
-    }),
-    system: EVAL_SYSTEM,
-    prompt: EVAL_PROMPT(output, opts.criteria),
-  });
+  let object: { answer: string; rationale: string };
+  try {
+    ({ object } = await generateObject({
+      model: defaultModel,
+      schema: z.object({
+        answer: z.enum(["A", "B", "C", "D", "E"]),
+        rationale: z.string(),
+      }),
+      system: EVAL_SYSTEM,
+      prompt: EVAL_PROMPT(output, opts.criteria),
+    }));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    ctx.task.meta.eval = {
+      scores: [
+        {
+          score: 0,
+          name: "evaluate",
+          metadata: { rationale: `Judge failed: ${errorMessage}` },
+        },
+      ],
+      avgScore: 0,
+    };
+    throw error;
+  }
 
   const score = CHOICE_SCORES[object.answer];
   const threshold = opts.threshold ?? 1.0;

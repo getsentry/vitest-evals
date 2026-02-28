@@ -99,6 +99,32 @@ describe("evaluate", () => {
     expect(mockGenerateObject).not.toHaveBeenCalled();
   });
 
+  test("sets score 0 and re-throws when generateObject fails", async () => {
+    const apiError = new Error("API rate limit exceeded");
+    mockGenerateObject.mockRejectedValueOnce(apiError);
+
+    const ctx = makeContext();
+    await expect(
+      _evaluate(ctx, {
+        task: async () => "some output",
+        criteria: "anything",
+      }),
+    ).rejects.toThrow(apiError);
+
+    expect(ctx.task.meta.eval).toEqual({
+      scores: [
+        {
+          score: 0,
+          name: "evaluate",
+          metadata: {
+            rationale: "Judge failed: API rate limit exceeded",
+          },
+        },
+      ],
+      avgScore: 0,
+    });
+  });
+
   test("throws when no model is configured", async () => {
     configure({ model: undefined as any });
 
