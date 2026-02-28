@@ -1,5 +1,13 @@
-import { assert, describe, expect, test } from "vitest";
+import {
+  assert,
+  beforeEach as vitestBeforeEach,
+  afterEach as vitestAfterEach,
+  describe,
+  expect,
+  test,
+} from "vitest";
 import "vitest";
+import { wrapText } from "./wrapText";
 
 /**
  * Represents a tool/function call made during task execution.
@@ -205,21 +213,34 @@ export function describeEval(
     // increase default test timeout as 5s is usually not enough for
     // a single factuality check
     timeout = 60000,
+    beforeEach: beforeEachHook,
+    afterEach: afterEachHook,
   }: {
-    data: () => Promise<Array<{ input: string } & Record<string, any>>>;
+    data: () => Promise<
+      Array<{ input: string; name?: string } & Record<string, any>>
+    >;
     task: TaskFn;
     skipIf?: () => boolean;
     scorers: ScoreFn<any>[];
     threshold?: number | null;
     timeout?: number;
+    beforeEach?: () => void | Promise<void>;
+    afterEach?: () => void | Promise<void>;
   },
 ) {
   return describe(name, async () => {
+    if (beforeEachHook) {
+      vitestBeforeEach(beforeEachHook);
+    }
+    if (afterEachHook) {
+      vitestAfterEach(afterEachHook);
+    }
+
     const testFn = skipIf ? test.skipIf(skipIf()) : test;
     // TODO: should data just be a generator?
-    for (const { input, ...params } of await data()) {
+    for (const { input, name: testName, ...params } of await data()) {
       testFn(
-        input,
+        testName ?? input,
         {
           timeout,
         },
@@ -299,53 +320,7 @@ export function formatScores(scores: (Score & { name: string })[]) {
     .join("\n\n");
 }
 
-/**
- * Wraps text to fit within a specified width, breaking at word boundaries.
- *
- * @param text - The text to wrap
- * @param width - The maximum width in characters (default: 80)
- * @returns The wrapped text with line breaks
- *
- * @example
- * ```javascript
- * const wrapped = wrapText("This is a very long text that needs to be wrapped to fit within an 80 character width.", 20);
- * console.log(wrapped);
- * // Output:
- * // This is a very
- * // long text that
- * // needs to be
- * // wrapped to fit
- * // within an 80
- * // character width.
- * ```
- */
-export function wrapText(text: string, width = 80): string {
-  if (!text || text.length <= width) {
-    return text;
-  }
-
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    // If adding this word would exceed the width, start a new line
-    if (currentLine.length + word.length + 1 > width) {
-      lines.push(currentLine.trim());
-      currentLine = word;
-    } else {
-      // Add the word to the current line
-      currentLine += (currentLine ? " " : "") + word;
-    }
-  }
-
-  // Add the last line if it's not empty
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines.join("\n");
-}
+export { wrapText } from "./wrapText";
 
 // Export built-in scorers
 export {

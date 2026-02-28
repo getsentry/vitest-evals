@@ -1,6 +1,6 @@
 # vitest-evals
 
-Evaluate LLM outputs using the familiar Vitest testing framework.
+End-to-end evaluation framework for AI agents, built on Vitest.
 
 ## Installation
 
@@ -13,14 +13,14 @@ npm install -D vitest-evals
 ```javascript
 import { describeEval } from "vitest-evals";
 
-describeEval("capital cities", {
+describeEval("deploy agent", {
   data: async () => [
-    { input: "What is the capital of France?", expected: "Paris" },
-    { input: "What is the capital of Japan?", expected: "Tokyo" },
+    { input: "Deploy the latest release to production", expected: "deployed" },
+    { input: "Roll back the last deploy", expected: "rolled back" },
   ],
   task: async (input) => {
-    const response = await queryLLM(input);
-    return response; // Simple string return
+    const response = await myAgent.run(input);
+    return response;
   },
   scorers: [
     async ({ output, expected }) => ({
@@ -48,25 +48,117 @@ const task = async (input) => ({
 });
 ```
 
-## Scorers
+## Test Data
 
-Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own:
+Each test case requires an `input` field. Use `name` to give tests a descriptive label:
 
 ```javascript
-// Built-in scorer
+data: async () => [
+  { name: "simple deploy", input: "Deploy to staging" },
+  { name: "deploy with rollback", input: "Deploy to prod, roll back if errors" },
+],
+```
+
+Additional fields (like `expected`, `expectedTools`) are passed through to scorers.
+
+## Lifecycle Hooks
+
+Use `beforeEach` and `afterEach` for setup and teardown:
+
+```javascript
+describeEval("agent with database", {
+  beforeEach: async () => {
+    await db.seed();
+  },
+  afterEach: async () => {
+    await db.clean();
+  },
+  data: async () => [{ input: "Find recent errors" }],
+  task: myAgentTask,
+  scorers: [async ({ output }) => ({ score: output.includes("error") ? 1.0 : 0.0 })],
+});
+```
+
+## Scorers
+
+Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own.
+
+### ToolCallScorer
+
+Evaluates if the expected tools were called with correct arguments.
+
+```javascript
 import { ToolCallScorer } from "vitest-evals";
-// Or import individually
-import { ToolCallScorer } from "vitest-evals/scorers/toolCallScorer";
 
 describeEval("tool usage", {
   data: async () => [
-    { input: "Search weather", expectedTools: [{ name: "weather_api" }] },
+    {
+      input: "Find Italian restaurants",
+      expectedTools: [
+        { name: "search", arguments: { type: "restaurant" } },
+        { name: "filter", arguments: { cuisine: "italian" } },
+      ],
+    },
   ],
-  task: weatherTask,
+  task: myTask,
   scorers: [ToolCallScorer()],
 });
 
-// Custom scorer
+// Strict order and parameters
+scorers: [ToolCallScorer({ ordered: true, params: "strict" })];
+
+// Flexible evaluation
+scorers: [ToolCallScorer({ requireAll: false, allowExtras: false })];
+```
+
+**Default behavior:**
+
+- Strict parameter matching (exact equality required)
+- Any order allowed
+- Extra tools allowed
+- All expected tools required
+
+### StructuredOutputScorer
+
+Evaluates if the output matches expected structured data (JSON).
+
+```javascript
+import { StructuredOutputScorer } from "vitest-evals";
+
+describeEval("query generation", {
+  data: async () => [
+    {
+      input: "Show me errors from today",
+      expected: {
+        dataset: "errors",
+        query: "",
+        sort: "-timestamp",
+        timeRange: { statsPeriod: "24h" },
+      },
+    },
+  ],
+  task: myTask,
+  scorers: [StructuredOutputScorer()],
+});
+
+// Fuzzy matching
+scorers: [StructuredOutputScorer({ match: "fuzzy" })];
+
+// Custom validation
+scorers: [
+  StructuredOutputScorer({
+    match: (expected, actual, key) => {
+      if (key === "age") return actual >= 18 && actual <= 100;
+      return expected === actual;
+    },
+  }),
+];
+```
+
+### Custom Scorers
+
+```javascript
+// Inline scorer
 const LengthScorer = async ({ output }) => ({
   score: output.length > 50 ? 1.0 : 0.0,
 });
@@ -82,115 +174,6 @@ const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
   score: opts.output.length >= opts.minLength ? 1.0 : 0.0,
 });
 ```
-
-### Built-in Scorers
-
-#### ToolCallScorer
-
-Evaluates if the expected tools were called with correct arguments.
-
-```javascript
-// Basic usage - strict matching, any order
-describeEval("search test", {
-  data: async () => [
-    {
-      input: "Find Italian restaurants",
-      expectedTools: [
-        { name: "search", arguments: { type: "restaurant" } },
-        { name: "filter", arguments: { cuisine: "italian" } },
-      ],
-    },
-  ],
-  task: myTask,
-  scorers: [ToolCallScorer()],
-});
-
-// Strict evaluation - exact order and parameters
-scorers: [
-  ToolCallScorer({
-    ordered: true, // Tools must be in exact order
-    params: "strict", // Parameters must match exactly
-  }),
-];
-
-// Flexible evaluation
-scorers: [
-  ToolCallScorer({
-    requireAll: false, // Partial matches give partial credit
-    allowExtras: false, // No additional tools allowed
-  }),
-];
-```
-
-**Default behavior:**
-
-- Strict parameter matching (exact equality required)
-- Any order allowed
-- Extra tools allowed
-- All expected tools required
-
-#### StructuredOutputScorer
-
-Evaluates if the output matches expected structured data (JSON).
-
-```javascript
-// Basic usage - strict matching
-describeEval("query generation", {
-  data: async () => [
-    {
-      input: "Show me errors from today",
-      expected: {
-        dataset: "errors",
-        query: "",
-        sort: "-timestamp",
-        timeRange: { statsPeriod: "24h" }
-      }
-    }
-  ],
-  task: myTask,
-  scorers: [StructuredOutputScorer()]
-});
-
-// Fuzzy matching with regex patterns
-scorers: [
-  StructuredOutputScorer({
-    match: "fuzzy", // More flexible matching
-  })
-];
-
-// Custom validation
-scorers: [
-  StructuredOutputScorer({
-    match: (expected, actual, key) => {
-      if (key === "age") return actual >= 18 && actual <= 100;
-      return expected === actual;
-    }
-  })
-];
-
-// Partial credit for incomplete matches
-scorers: [
-  StructuredOutputScorer({
-    requireAll: false, // Partial matches give partial credit
-    allowExtras: false, // No additional fields allowed
-  })
-];
-```
-
-**Features:**
-
-- **Strict matching** (default): Exact equality for all fields
-- **Fuzzy matching**: Case-insensitive strings, numeric tolerance (0.1%), regex patterns, unordered arrays
-- **Custom matchers**: Define your own validation logic per field
-- **Error detection**: Automatically fails if output contains an error field
-- **Partial credit**: Optional scoring based on percentage of matching fields
-
-**Default behavior:**
-
-- Strict field matching (exact equality required)
-- Extra fields allowed
-- All expected fields required
-- Checks for "error" field in output
 
 ## AI SDK Integration
 
@@ -218,68 +201,19 @@ return {
 
 ## Advanced Usage
 
-### Advanced Scorers
+### Using autoevals
 
-#### Using autoevals
-
-For sophisticated evaluation, use autoevals scorers:
+For evaluation using the autoevals library:
 
 ```javascript
 import { Factuality, ClosedQA } from "autoevals";
 
 scorers: [
-  Factuality, // LLM-based factuality checking
+  Factuality,
   ClosedQA.partial({
     criteria: "Does the answer mention Paris?",
   }),
 ];
-```
-
-#### Custom LLM-based Factuality Scorer
-
-Here's an example of implementing your own LLM-based factuality scorer using the Vercel AI SDK:
-
-```javascript
-import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
-const Factuality = (model = openai("gpt-4o")) => async ({ input, output, expected }) => {
-    if (!expected) {
-      return { score: 1.0, metadata: { rationale: "No expected answer" } };
-    }
-
-    const { object } = await generateObject({
-      model,
-      prompt: `
-      Compare the factual content of the submitted answer with the expert answer.
-      
-      Question: ${input}
-      Expert: ${expected}
-      Submission: ${output}
-      
-      Options:
-      (A) Subset of expert answer
-      (B) Superset of expert answer  
-      (C) Same content as expert
-      (D) Contradicts expert answer
-      (E) Different but factually equivalent
-    `,
-      schema: z.object({
-        answer: z.enum(["A", "B", "C", "D", "E"]),
-        rationale: z.string(),
-      }),
-    });
-
-    const scores = { A: 0.4, B: 0.6, C: 1, D: 0, E: 1 };
-    return {
-      score: scores[object.answer],
-      metadata: { rationale: object.rationale, answer: object.answer },
-    };
-  };
-
-// Usage
-scorers: [Factuality()];
 ```
 
 ### Skip Tests Conditionally
@@ -295,7 +229,7 @@ describeEval("gpt-4 tests", {
 
 For integration with existing Vitest test suites, you can use the `.toEval()` matcher:
 
-> **⚠️ Deprecated**: The `.toEval()` helper is deprecated. Use `describeEval()` instead for better test organization and multiple scorers support. We may consider bringing back a similar check, but its currently too limited for many scorer implementations.
+> **Deprecated**: The `.toEval()` helper is deprecated. Use `describeEval()` instead for better test organization and multiple scorers support.
 
 ```javascript
 import "vitest-evals";
@@ -311,25 +245,6 @@ test("capital check", () => {
     simpleFactuality,
     0.8
   );
-});
-```
-
-**Recommended migration** to `describeEval()`:
-
-```javascript
-import { describeEval } from "vitest-evals";
-
-describeEval("capital check", {
-  data: async () => [
-    { input: "What is the capital of France?", expected: "Paris" },
-  ],
-  task: answerQuestion,
-  scorers: [
-    async ({ output, expected }) => ({
-      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
-    }),
-  ],
-  threshold: 0.8,
 });
 ```
 
@@ -361,6 +276,6 @@ vitest --config=vitest.evals.config.ts
 ## Development
 
 ```shell
-npm install
-npm test
+pnpm install
+pnpm test
 ```

@@ -7,12 +7,13 @@ export default class DefaultEvalReporter extends DefaultReporter {
     const meta = test.meta();
     const testResult = test.result();
 
-    if (!meta.eval || testResult.state === "failed") {
+    if (!meta.eval) {
       super.printTestCase(moduleState, test);
       return;
     }
 
     const padding = this.getTestIndentation(test.task);
+    const icon = testResult.state === "failed" ? c.red("✗ ") : "  ";
     const colorFn =
       meta.eval.avgScore < 0.5
         ? c.red
@@ -20,7 +21,7 @@ export default class DefaultEvalReporter extends DefaultReporter {
           ? c.yellow
           : c.green;
     this.log(
-      `${padding}  ${this.getTestName(test.task, c.dim(" > "))} [${colorFn(meta.eval.avgScore.toFixed(2))}]`,
+      `${padding}${icon}${this.getTestName(test.task, c.dim(" > "))} [${colorFn(meta.eval.avgScore.toFixed(2))}]`,
     );
   }
 }
