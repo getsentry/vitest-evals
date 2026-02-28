@@ -1,14 +1,14 @@
 import { describeEval, ToolCallScorer, StructuredOutputScorer } from "./index";
-import { generateText, generateObject } from "ai";
+import { generateText, generateObject, tool, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 
-const weatherTool = {
+const weatherTool = tool({
   description: "Get current weather for a location",
-  parameters: z.object({
+  inputSchema: z.object({
     location: z.string().describe("The city/location to get weather for"),
   }),
-  execute: async ({ location }: { location: string }) => {
+  execute: async ({ location }) => {
     // Only works for Seattle - forces correct tool usage
     if (location.toLowerCase() !== "seattle") {
       throw new Error(
@@ -21,14 +21,14 @@ const weatherTool = {
       temperature: 72,
     };
   },
-};
+});
 
-const databaseTool = {
+const databaseTool = tool({
   description: "Look up specific user data from internal database",
-  parameters: z.object({
+  inputSchema: z.object({
     userId: z.string().describe("The user ID to look up"),
   }),
-  execute: async ({ userId }: { userId: string }) => {
+  execute: async ({ userId }) => {
     // Only works for user123 - forces correct tool usage
     if (userId !== "user123") {
       throw new Error(`User ${userId} not found in database`);
@@ -39,7 +39,7 @@ const databaseTool = {
       email: "john.doe@company.com",
     };
   },
-};
+});
 
 describeEval("@ai/sdk ToolCallScorer", {
   data: async () => [
@@ -68,7 +68,7 @@ describeEval("@ai/sdk ToolCallScorer", {
         getWeather: weatherTool,
         lookupUser: databaseTool,
       },
-      maxSteps: 5,
+      stopWhen: stepCountIs(5),
     });
 
     return {
@@ -77,7 +77,7 @@ describeEval("@ai/sdk ToolCallScorer", {
         .flatMap((step) => step.toolCalls)
         .map((call) => ({
           name: call.toolName,
-          arguments: call.args,
+          arguments: call.input as Record<string, any>,
         })),
     };
   },
@@ -125,8 +125,8 @@ describeEval("@ai/sdk StructuredOutputScorer", {
   skipIf: () => !process.env.OPENAI_API_KEY,
 });
 
-// Test without maxSteps to verify if it's truly required
-describeEval("@ai/sdk ToolCallScorer (No maxSteps)", {
+// Test without stopWhen to verify single-step default behavior
+describeEval("@ai/sdk ToolCallScorer (No stopWhen)", {
   data: async () => [
     {
       input: "What's the weather like in Seattle?",
@@ -144,7 +144,7 @@ describeEval("@ai/sdk ToolCallScorer (No maxSteps)", {
         getWeather: weatherTool,
         lookupUser: databaseTool,
       },
-      // NO maxSteps here
+      // NO stopWhen here — defaults to stepCountIs(1)
     });
 
     return {
@@ -153,7 +153,7 @@ describeEval("@ai/sdk ToolCallScorer (No maxSteps)", {
         .flatMap((step) => step.toolCalls)
         .map((call) => ({
           name: call.toolName,
-          arguments: call.args,
+          arguments: call.input as Record<string, any>,
         })),
     };
   },

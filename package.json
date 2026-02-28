@@ -57,8 +57,8 @@
   "peerDependencies": {
     "tinyrainbow": "*",
     "vitest": "*",
-    "ai": "^4.0.0",
-    "zod": "^3.0.0"
+    "ai": ">=4.0.0",
+    "zod": ">=3.0.0"
   },
   "peerDependenciesMeta": {
     "ai": {
@@ -69,10 +69,10 @@
     }
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.23",
+    "@ai-sdk/openai": "^2.0.0",
     "@biomejs/biome": "^1.9.4",
     "@vitest/coverage-v8": "^3.2.4",
-    "ai": "^4.3.19",
+    "ai": "^6.0.0",
     "autoevals": "^0.0.127",
     "dotenv-cli": "^8.0.0",
     "lint-staged": "^15.5.2",
@@ -82,7 +82,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.76"
+    "zod": "^4.0.0"
   },
   "simple-git-hooks": {
     "pre-commit": "npm exec lint-staged --concurrent false"
