@@ -11,9 +11,9 @@ export function configure(opts: { model: LanguageModel }) {
   defaultModel = opts.model;
 }
 
-const JUDGE_SYSTEM = `You are assessing a submitted output based on a given criterion. Ignore differences in style, grammar, punctuation, or length. Focus only on whether the criterion is met.`;
+const EVAL_SYSTEM = `You are assessing a submitted output based on a given criterion. Ignore differences in style, grammar, punctuation, or length. Focus only on whether the criterion is met.`;
 
-const JUDGE_PROMPT = (output: string, criteria: string) => `<submission>
+const EVAL_PROMPT = (output: string, criteria: string) => `<submission>
 ${output}
 </submission>
 
@@ -36,7 +36,7 @@ const CHOICE_SCORES: Record<string, number> = {
   E: 0.0,
 };
 
-interface JudgeOptions {
+interface EvaluateOptions {
   task: () => Promise<string>;
   criteria: string;
   threshold?: number;
@@ -49,7 +49,7 @@ interface TestTaskContext {
 /** @internal Core evaluation logic, exported for testing. */
 export async function _evaluate(
   ctx: TestTaskContext,
-  opts: JudgeOptions,
+  opts: EvaluateOptions,
 ): Promise<void> {
   if (!defaultModel) {
     throw new Error(
@@ -66,7 +66,7 @@ export async function _evaluate(
       scores: [
         {
           score: 0,
-          name: "judge",
+          name: "evaluate",
           metadata: { rationale: `Task failed: ${errorMessage}` },
         },
       ],
@@ -81,8 +81,8 @@ export async function _evaluate(
       answer: z.enum(["A", "B", "C", "D", "E"]),
       rationale: z.string(),
     }),
-    system: JUDGE_SYSTEM,
-    prompt: JUDGE_PROMPT(output, opts.criteria),
+    system: EVAL_SYSTEM,
+    prompt: EVAL_PROMPT(output, opts.criteria),
   });
 
   const score = CHOICE_SCORES[object.answer];
@@ -92,7 +92,7 @@ export async function _evaluate(
     scores: [
       {
         score,
-        name: "judge",
+        name: "evaluate",
         metadata: { rationale: object.rationale, answer: object.answer },
       },
     ],
@@ -109,7 +109,7 @@ export async function _evaluate(
 
 export function evaluate(
   name: string,
-  opts: JudgeOptions & { timeout?: number },
+  opts: EvaluateOptions & { timeout?: number },
 ) {
   test(name, { timeout: opts.timeout ?? 60000 }, async ({ task: testTask }) => {
     await _evaluate({ task: testTask }, opts);

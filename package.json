@@ -27,10 +27,10 @@
       "require": "./dist/scorers/toolCallScorer.js",
       "import": "./dist/scorers/toolCallScorer.mjs"
     },
-    "./judge": {
-      "types": "./dist/judge/index.d.ts",
-      "require": "./dist/judge/index.js",
-      "import": "./dist/judge/index.mjs"
+    "./evaluate": {
+      "types": "./dist/evaluate/index.d.ts",
+      "require": "./dist/evaluate/index.js",
+      "import": "./dist/evaluate/index.mjs"
     }
   },
   "scripts": {

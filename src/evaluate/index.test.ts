@@ -22,7 +22,7 @@ describe("evaluate", () => {
     configure({ model: mockModel });
   });
 
-  test("sets eval metadata when task succeeds and judge scores", async () => {
+  test("sets eval metadata when task succeeds and scores", async () => {
     mockGenerateObject.mockResolvedValueOnce({
       object: {
         answer: "A",
@@ -40,7 +40,7 @@ describe("evaluate", () => {
       scores: [
         {
           score: 1.0,
-          name: "judge",
+          name: "evaluate",
           metadata: {
             rationale: "The output fully meets the criterion",
             answer: "A",
@@ -86,7 +86,7 @@ describe("evaluate", () => {
       scores: [
         {
           score: 0,
-          name: "judge",
+          name: "evaluate",
           metadata: {
             rationale: "Task failed: assertion failed: expected 1 to be 2",
           },
