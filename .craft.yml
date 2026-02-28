@@ -3,4 +3,3 @@ changelogPolicy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
 targets:
   - name: npm
-  - name: github
