@@ -53,7 +53,7 @@ export async function _evaluate(
 ): Promise<void> {
   if (!defaultModel) {
     throw new Error(
-      "No model configured. Call configure({ model }) before using judgeIt.",
+      "No model configured. Call configure({ model }) before using evaluate.",
     );
   }
 
@@ -107,7 +107,7 @@ export async function _evaluate(
   }
 }
 
-export function judgeIt(
+export function evaluate(
   name: string,
   opts: JudgeOptions & { timeout?: number },
 ) {

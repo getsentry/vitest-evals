@@ -16,7 +16,7 @@ function makeContext() {
   return { task: { meta: {} as Record<string, any> } };
 }
 
-describe("judgeIt", () => {
+describe("evaluate", () => {
   beforeEach(() => {
     mockGenerateObject.mockReset();
     configure({ model: mockModel });
@@ -109,7 +109,7 @@ describe("judgeIt", () => {
         criteria: "anything",
       }),
     ).rejects.toThrow(
-      "No model configured. Call configure({ model }) before using judgeIt.",
+      "No model configured. Call configure({ model }) before using evaluate.",
     );
   });
 
