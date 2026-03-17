@@ -2,155 +2,109 @@ import { wrapText } from "./wrapText";
 
 export type ToolCall = {
   name: string;
-  arguments?: any;
-  [key: string]: any;
+  arguments?: unknown;
+  [key: string]: unknown;
 };
 
-type EvalBasePart = {
-  [key: string]: any;
-};
-
-export type EvalTextPart = EvalBasePart & {
+export type TranscriptTextPart = {
   type: "text";
   text: string;
 };
 
-export type EvalImagePart = EvalBasePart & {
+export type TranscriptImagePart = {
   type: "image";
   image: unknown;
   mediaType?: string;
 };
 
-export type EvalFilePart = EvalBasePart & {
+export type TranscriptFilePart = {
   type: "file";
   data: unknown;
   mediaType: string;
   filename?: string;
 };
 
-export type EvalReasoningPart = EvalBasePart & {
-  type: "reasoning";
-  text: string;
+export type TranscriptPart =
+  | TranscriptTextPart
+  | TranscriptImagePart
+  | TranscriptFilePart;
+
+export type TranscriptMessage = {
+  role: "user" | "assistant";
+  parts: TranscriptPart[];
 };
 
-export type EvalToolCallPart = EvalBasePart & {
-  type: "tool-call";
-  toolName: string;
-  input?: unknown;
-  toolCallId?: string;
+export type Transcript = TranscriptMessage[];
+
+export type TaskInput = string | Transcript;
+
+export type TaskResult = {
+  transcript: Transcript;
+  toolCalls?: ToolCall[];
 };
-
-export type EvalToolResultPart = EvalBasePart & {
-  type: "tool-result";
-  toolName: string;
-  output: unknown;
-  toolCallId?: string;
-};
-
-export type EvalToolErrorPart = EvalBasePart & {
-  type: "tool-error";
-  toolName: string;
-  error?: unknown;
-  output?: unknown;
-  toolCallId?: string;
-};
-
-export type EvalSourcePart = EvalBasePart & {
-  type: "source";
-  source?: unknown;
-};
-
-export type EvalPart =
-  | EvalTextPart
-  | EvalImagePart
-  | EvalFilePart
-  | EvalReasoningPart
-  | EvalToolCallPart
-  | EvalToolResultPart
-  | EvalToolErrorPart
-  | EvalSourcePart;
-
-export type EvalMessage = {
-  role: "system" | "user" | "assistant" | "tool";
-  parts: EvalPart[];
-  metadata?: Record<string, unknown>;
-  [key: string]: any;
-};
-
-export type TaskInput = string | EvalMessage[];
-
-export type TaskResult =
-  | {
-      result: string;
-      messages?: never;
-      toolCalls?: ToolCall[];
-    }
-  | {
-      messages: EvalMessage[];
-      result?: never;
-      toolCalls?: ToolCall[];
-    };
 
 export type TaskOutput = string | TaskResult;
 
 export type EvalDataInput =
   | {
       input: string;
-      messages?: never;
+      transcript?: never;
     }
   | {
-      messages: EvalMessage[];
+      transcript: Transcript;
       input?: never;
     };
 
-export interface NormalizedInput {
+interface NormalizedInput {
   input: string;
-  inputMessages: EvalMessage[];
+  inputTranscript: Transcript;
 }
 
-export interface NormalizedOutput {
+interface NormalizedOutput {
   output: string;
-  outputMessages: EvalMessage[];
+  outputTranscript: Transcript;
   toolCalls?: ToolCall[];
 }
 
-export interface NormalizedScorerPayload
-  extends NormalizedInput,
-    NormalizedOutput {
-  messages: EvalMessage[];
+export interface NormalizedScorerPayload {
+  input: string;
+  output: string;
+  transcript: Transcript;
+  toolCalls?: ToolCall[];
 }
 
-const EMPTY_TEXT = "";
-
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function isEvalMessageArray(value: unknown): value is EvalMessage[] {
+export function isTranscript(value: unknown): value is Transcript {
   return (
     Array.isArray(value) &&
     value.every(
-      (item) =>
-        isRecord(item) &&
-        typeof item.role === "string" &&
-        Array.isArray(item.parts),
+      (message) =>
+        isRecord(message) &&
+        (message.role === "user" || message.role === "assistant") &&
+        Array.isArray(message.parts),
     )
   );
 }
 
-function textMessage(role: EvalMessage["role"], text: string): EvalMessage {
+function textMessage(
+  role: TranscriptMessage["role"],
+  text: string,
+): TranscriptMessage {
   return {
     role,
     parts: [{ type: "text", text }],
   };
 }
 
-function assertValidMessages(
-  messages: unknown,
+function assertValidTranscript(
+  transcript: unknown,
   fieldName: string,
-): asserts messages is EvalMessage[] {
-  if (!isEvalMessageArray(messages)) {
-    throw new Error(`${fieldName} must be an array of message objects.`);
+): asserts transcript is Transcript {
+  if (!isTranscript(transcript)) {
+    throw new Error(`${fieldName} must be an array of transcript messages.`);
   }
 }
 
@@ -165,14 +119,14 @@ function assertString(
 
 export function getTaskInput(
   input: string | undefined,
-  messages: EvalMessage[] | undefined,
+  transcript: Transcript | undefined,
 ): TaskInput {
   const hasInput = input !== undefined;
-  const hasMessages = messages !== undefined;
+  const hasTranscript = transcript !== undefined;
 
-  if (hasInput === hasMessages) {
+  if (hasInput === hasTranscript) {
     throw new Error(
-      "Each eval case must define exactly one of `input` or `messages`.",
+      "Each eval case must define exactly one of `input` or `transcript`.",
     );
   }
 
@@ -181,156 +135,46 @@ export function getTaskInput(
     return input;
   }
 
-  assertValidMessages(messages, "`messages`");
-  return messages;
+  assertValidTranscript(transcript, "`transcript`");
+  return transcript;
 }
 
 export function normalizeEvalInput(input: TaskInput): NormalizedInput {
   if (typeof input === "string") {
     return {
       input,
-      inputMessages: [textMessage("user", input)],
+      inputTranscript: [textMessage("user", input)],
     };
   }
 
-  assertValidMessages(input, "Eval input");
+  assertValidTranscript(input, "Eval input");
 
   return {
-    input: extractTextFromMessages(input),
-    inputMessages: input,
+    input: extractTextFromTranscript(input),
+    inputTranscript: input,
   };
-}
-
-function getTaskResultVariant(taskOutput: TaskResult): "result" | "messages" {
-  const hasResult = "result" in taskOutput && taskOutput.result !== undefined;
-  const hasMessages =
-    "messages" in taskOutput && taskOutput.messages !== undefined;
-
-  if (hasResult === hasMessages) {
-    throw new Error(
-      "Task results must define exactly one of `result` or `messages`.",
-    );
-  }
-
-  return hasResult ? "result" : "messages";
-}
-
-export function deriveToolCalls(messages: EvalMessage[]): ToolCall[] {
-  const orderedCalls: ToolCall[] = [];
-  const byId = new Map<string, ToolCall>();
-
-  function findOpenCall(toolName: string) {
-    for (let index = orderedCalls.length - 1; index >= 0; index -= 1) {
-      const call = orderedCalls[index];
-      if (
-        call.name === toolName &&
-        call.result === undefined &&
-        call.error === undefined
-      ) {
-        return call;
-      }
-    }
-    return undefined;
-  }
-
-  function upsertCall(part: {
-    toolName: string;
-    toolCallId?: string;
-    input?: unknown;
-  }) {
-    if (part.toolCallId) {
-      const existing = byId.get(part.toolCallId);
-      if (existing) {
-        if (part.input !== undefined) {
-          existing.arguments = part.input;
-        }
-        return existing;
-      }
-    }
-
-    const openCall = part.toolCallId ? undefined : findOpenCall(part.toolName);
-    if (openCall) {
-      if (part.input !== undefined) {
-        openCall.arguments = part.input;
-      }
-      return openCall;
-    }
-
-    const call: ToolCall = {
-      name: part.toolName,
-      ...(part.input !== undefined ? { arguments: part.input } : {}),
-    };
-
-    orderedCalls.push(call);
-    if (part.toolCallId) {
-      byId.set(part.toolCallId, call);
-    }
-    return call;
-  }
-
-  for (const message of messages) {
-    for (const part of message.parts) {
-      if (part.type === "tool-call") {
-        upsertCall(part);
-        continue;
-      }
-
-      if (part.type === "tool-result") {
-        const call =
-          (part.toolCallId ? byId.get(part.toolCallId) : undefined) ??
-          findOpenCall(part.toolName) ??
-          upsertCall(part);
-        call.result = part.output;
-        continue;
-      }
-
-      if (part.type === "tool-error") {
-        const call =
-          (part.toolCallId ? byId.get(part.toolCallId) : undefined) ??
-          findOpenCall(part.toolName) ??
-          upsertCall(part);
-        call.error = part.error ??
-          part.output ?? {
-            toolName: part.toolName,
-          };
-      }
-    }
-  }
-
-  return orderedCalls;
 }
 
 export function normalizeTaskOutput(taskOutput: TaskOutput): NormalizedOutput {
   if (typeof taskOutput === "string") {
     return {
       output: taskOutput,
-      outputMessages: [textMessage("assistant", taskOutput)],
+      outputTranscript: [textMessage("assistant", taskOutput)],
     };
   }
 
-  if (!isRecord(taskOutput)) {
+  if (!isRecord(taskOutput) || !("transcript" in taskOutput)) {
     throw new Error(
-      "Task output must be either a string or an object with `result` or `messages`.",
+      "Task output must be either a string or an object with `transcript`.",
     );
   }
 
-  const variant = getTaskResultVariant(taskOutput as TaskResult);
-
-  if (variant === "result") {
-    assertString(taskOutput.result, "`result`");
-    return {
-      output: taskOutput.result,
-      outputMessages: [textMessage("assistant", taskOutput.result)],
-      toolCalls: taskOutput.toolCalls,
-    };
-  }
-
-  assertValidMessages(taskOutput.messages, "`messages`");
+  assertValidTranscript(taskOutput.transcript, "`transcript`");
 
   return {
-    output: extractTextFromMessages(taskOutput.messages),
-    outputMessages: taskOutput.messages,
-    toolCalls: taskOutput.toolCalls ?? deriveToolCalls(taskOutput.messages),
+    output: extractTextFromTranscript(taskOutput.transcript),
+    outputTranscript: taskOutput.transcript,
+    toolCalls: taskOutput.toolCalls,
   };
 }
 
@@ -342,41 +186,34 @@ export function normalizeScorerPayload(
   const normalizedOutput = normalizeTaskOutput(taskOutput);
 
   return {
-    ...normalizedInput,
-    ...normalizedOutput,
-    messages: [
-      ...normalizedInput.inputMessages,
-      ...normalizedOutput.outputMessages,
-    ],
-  };
-}
-
-export function normalizeEvaluateOutput(taskOutput: TaskOutput): {
-  messages: EvalMessage[];
-  output: string;
-  toolCalls?: ToolCall[];
-} {
-  const normalizedOutput = normalizeTaskOutput(taskOutput);
-
-  return {
-    messages: normalizedOutput.outputMessages,
+    input: normalizedInput.input,
     output: normalizedOutput.output,
+    transcript: [
+      ...normalizedInput.inputTranscript,
+      ...normalizedOutput.outputTranscript,
+    ],
     toolCalls: normalizedOutput.toolCalls,
   };
 }
 
-function extractTextFromPart(part: EvalPart): string {
-  switch (part.type) {
-    case "text":
-    case "reasoning":
-      return part.text;
-    default:
-      return EMPTY_TEXT;
-  }
+export function normalizeEvaluateOutput(taskOutput: TaskOutput): {
+  transcript: Transcript;
+  output: string;
+} {
+  const normalizedOutput = normalizeTaskOutput(taskOutput);
+
+  return {
+    transcript: normalizedOutput.outputTranscript,
+    output: normalizedOutput.output,
+  };
 }
 
-export function extractTextFromMessages(messages: EvalMessage[]): string {
-  return messages
+function extractTextFromPart(part: TranscriptPart): string {
+  return part.type === "text" ? part.text : "";
+}
+
+export function extractTextFromTranscript(transcript: Transcript): string {
+  return transcript
     .flatMap((message) => message.parts.map(extractTextFromPart))
     .filter(Boolean)
     .join("\n");
@@ -403,33 +240,23 @@ function summarizeUnknown(value: unknown): string {
   }
 }
 
-function formatPartForDisplay(part: EvalPart): string {
+function formatPartForDisplay(part: TranscriptPart): string {
   switch (part.type) {
     case "text":
       return part.text;
-    case "reasoning":
-      return `[reasoning]\n${part.text}`;
     case "image":
       return `[image${part.mediaType ? ` ${part.mediaType}` : ""}]`;
     case "file":
       return `[file${part.filename ? ` ${part.filename}` : ""}${part.mediaType ? ` ${part.mediaType}` : ""}]`;
-    case "tool-call":
-      return `[tool-call ${part.toolName}]${part.input !== undefined ? ` ${summarizeUnknown(part.input)}` : ""}`;
-    case "tool-result":
-      return `[tool-result ${part.toolName}] ${summarizeUnknown(part.output)}`;
-    case "tool-error":
-      return `[tool-error ${part.toolName}] ${summarizeUnknown(part.error ?? part.output)}`;
-    case "source":
-      return `[source] ${summarizeUnknown(part.source ?? part)}`;
   }
 }
 
-export function formatMessages(messages: EvalMessage[]): string {
-  if (messages.length === 0) {
+export function formatTranscript(transcript: Transcript): string {
+  if (transcript.length === 0) {
     return "(empty transcript)";
   }
 
-  return messages
+  return transcript
     .map((message) => {
       const heading = `## ${message.role}`;
       const body = message.parts.length
@@ -445,8 +272,8 @@ export function formatEvalValue(value: unknown): string {
     return wrapText(value);
   }
 
-  if (isEvalMessageArray(value)) {
-    return formatMessages(value);
+  if (isTranscript(value)) {
+    return formatTranscript(value);
   }
 
   return wrapText(summarizeUnknown(value));
@@ -466,31 +293,18 @@ function pushJudgeText(content: Array<any>, text: string) {
   content.push({ type: "text", text });
 }
 
-export function toJudgeUserMessage(messages: EvalMessage[]) {
-  const visibleMessages = messages
-    .filter(
-      (message) => message.role === "user" || message.role === "assistant",
-    )
-    .map((message) => ({
-      ...message,
-      parts: message.parts.filter(
-        (part) =>
-          part.type === "text" || part.type === "image" || part.type === "file",
-      ),
-    }))
-    .filter((message) => message.parts.length > 0);
-
+export function toJudgeUserMessage(transcript: Transcript) {
   const content: Array<any> = [];
 
-  if (visibleMessages.length === 0) {
+  if (transcript.length === 0) {
     content.push({
       type: "text",
-      text: "(no user-facing transcript)",
+      text: "(empty transcript)",
     });
     return { role: "user" as const, content };
   }
 
-  visibleMessages.forEach((message, index) => {
+  transcript.forEach((message, index) => {
     if (index > 0) {
       pushJudgeText(content, "\n\n");
     }
@@ -535,7 +349,6 @@ export function toJudgeUserMessage(messages: EvalMessage[]) {
             ...(part.filename ? { filename: part.filename } : {}),
           });
           pushJudgeText(content, "\n");
-          return;
       }
     });
   });
@@ -553,6 +366,6 @@ export function getDefaultTestName(input: TaskInput): string {
     return input;
   }
 
-  const firstText = extractTextFromMessages(input).trim();
-  return firstText.length > 0 ? firstText : "message chain";
+  const firstText = extractTextFromTranscript(input).trim();
+  return firstText.length > 0 ? firstText : "transcript";
 }

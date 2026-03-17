@@ -9,7 +9,9 @@ import {
 import "vitest";
 import {
   type EvalDataInput,
-  type EvalMessage,
+  type Transcript,
+  type TranscriptMessage,
+  type TranscriptPart,
   type TaskInput,
   type TaskResult,
   type ToolCall,
@@ -22,7 +24,8 @@ import { wrapText } from "./wrapText";
 
 /**
  * Task function that processes an input and returns either a string result
- * or a TaskResult object containing response messages and any tool calls made.
+ * or a TaskResult object containing a multimodal response transcript and any
+ * tool calls made.
  */
 export type TaskFn = (input: TaskInput) => Promise<string | TaskResult>;
 
@@ -37,9 +40,7 @@ export type Score = {
 export interface BaseScorerOptions {
   input: string;
   output: string;
-  messages: EvalMessage[];
-  inputMessages: EvalMessage[];
-  outputMessages: EvalMessage[];
+  transcript: Transcript;
   toolCalls?: ToolCall[];
 }
 
@@ -81,11 +82,7 @@ function formatEvaluationOutputForDisplay(
     return formatEvalValue(taskOutput);
   }
 
-  if ("result" in taskOutput && taskOutput.result !== undefined) {
-    return formatEvalValue(taskOutput.result);
-  }
-
-  return formatEvalValue(taskOutput.messages);
+  return formatEvalValue(taskOutput.transcript);
 }
 
 expect.extend({
@@ -152,16 +149,16 @@ export function describeEval(
     for (const testCase of await data()) {
       const {
         input,
-        messages,
+        transcript,
         name: testName,
         ...params
       } = testCase as {
         input?: string;
-        messages?: EvalMessage[];
+        transcript?: Transcript;
         name?: string;
       } & Record<string, any>;
 
-      const taskInput = getTaskInput(input, messages);
+      const taskInput = getTaskInput(input, transcript);
 
       testFn(
         testName ?? getDefaultTestName(taskInput),
@@ -239,8 +236,9 @@ export function formatScores(scores: (Score & { name: string })[]) {
 export { wrapText } from "./wrapText";
 export type {
   EvalDataInput,
-  EvalMessage,
-  EvalPart,
+  Transcript,
+  TranscriptMessage,
+  TranscriptPart,
   TaskInput,
   TaskResult,
   ToolCall,

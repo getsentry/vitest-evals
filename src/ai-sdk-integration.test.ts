@@ -72,7 +72,12 @@ describeEval("@ai/sdk ToolCallScorer", {
     });
 
     return {
-      result: text,
+      transcript: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text }],
+        },
+      ],
       toolCalls: steps
         .flatMap((step) => step.toolCalls)
         .map((call) => ({
@@ -112,10 +117,7 @@ describeEval("@ai/sdk StructuredOutputScorer", {
       }),
     });
 
-    return {
-      result: JSON.stringify(object),
-      toolCalls: [],
-    };
+    return JSON.stringify(object);
   },
   scorers: [
     StructuredOutputScorer({
@@ -148,7 +150,12 @@ describeEval("@ai/sdk ToolCallScorer (No stopWhen)", {
     });
 
     return {
-      result: text,
+      transcript: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text }],
+        },
+      ],
       toolCalls: steps
         .flatMap((step) => step.toolCalls)
         .map((call) => ({

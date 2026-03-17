@@ -157,7 +157,7 @@ describe("evaluate", () => {
     expect(call.messages[1].content).toContain("must mention specific details");
   });
 
-  test("passes multimodal message chains to the judge", async () => {
+  test("passes multimodal transcripts to the judge", async () => {
     mockGenerateObject.mockResolvedValueOnce({
       object: { answer: "A", rationale: "Handled the transcript correctly" },
     } as any);
@@ -165,7 +165,7 @@ describe("evaluate", () => {
     const ctx = makeContext();
     await _evaluate(ctx, {
       task: async () => ({
-        messages: [
+        transcript: [
           {
             role: "user",
             parts: [
@@ -210,36 +210,21 @@ describe("evaluate", () => {
     const ctx = makeContext();
     await _evaluate(ctx, {
       task: async () => ({
-        messages: [
+        transcript: [
           {
             role: "user",
             parts: [{ type: "text", text: "What is the weather?" }],
           },
           {
             role: "assistant",
-            parts: [
-              {
-                type: "tool-call",
-                toolName: "getWeather",
-                toolCallId: "call-1",
-                input: { location: "Seattle" },
-              },
-            ],
-          },
-          {
-            role: "tool",
-            parts: [
-              {
-                type: "tool-result",
-                toolName: "getWeather",
-                toolCallId: "call-1",
-                output: { temperature: 72 },
-              },
-            ],
-          },
-          {
-            role: "assistant",
             parts: [{ type: "text", text: "It is 72F in Seattle." }],
+          },
+        ],
+        toolCalls: [
+          {
+            name: "getWeather",
+            arguments: { location: "Seattle" },
+            result: { temperature: 72 },
           },
         ],
       }),

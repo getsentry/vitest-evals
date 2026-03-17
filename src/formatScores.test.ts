@@ -73,7 +73,7 @@ describe("formatScores", () => {
     `);
   });
 
-  it("should format message-chain outputs", () => {
+  it("should format transcript outputs", () => {
     const scores = [
       {
         name: "Scorer A",

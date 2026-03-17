@@ -4,14 +4,10 @@ import {
   formatEvalValue,
   getTaskInput,
   normalizeScorerPayload,
-  type EvalMessage,
+  type Transcript,
 } from "./messages";
 
-const multimodalInput: EvalMessage[] = [
-  {
-    role: "system",
-    parts: [{ type: "text", text: "Answer concisely." }],
-  },
+const multimodalInput: Transcript = [
   {
     role: "user",
     parts: [
@@ -25,27 +21,28 @@ const multimodalInput: EvalMessage[] = [
   },
 ];
 
-const multimodalOutput: EvalMessage[] = [
+const multimodalOutput: Transcript = [
   {
     role: "assistant",
     parts: [{ type: "text", text: "A cat sitting on a chair." }],
   },
 ];
 
-describe("message normalization", () => {
-  test("toEval passes full message chains to scorers", async () => {
+describe("transcript normalization", () => {
+  test("toEval passes a combined transcript to scorers", async () => {
     const scorer = vi.fn(async (opts) => {
-      expect(opts.input).toBe("Answer concisely.\nDescribe this image");
+      expect(opts.input).toBe("Describe this image");
       expect(opts.output).toBe("A cat sitting on a chair.");
-      expect(opts.inputMessages).toEqual(multimodalInput);
-      expect(opts.outputMessages).toEqual(multimodalOutput);
-      expect(opts.messages).toEqual([...multimodalInput, ...multimodalOutput]);
+      expect(opts.transcript).toEqual([
+        ...multimodalInput,
+        ...multimodalOutput,
+      ]);
       return { score: 1 };
     });
 
     const task = vi.fn(async (input) => {
       expect(input).toEqual(multimodalInput);
-      return { messages: multimodalOutput };
+      return { transcript: multimodalOutput };
     });
 
     await expect(multimodalInput).toEval(
@@ -59,36 +56,27 @@ describe("message normalization", () => {
     expect(scorer).toHaveBeenCalledOnce();
   });
 
-  test("rejects eval cases that define both input and messages", () => {
+  test("rejects eval cases that define both input and transcript", () => {
     expect(() =>
       getTaskInput("hello", [
         { role: "user", parts: [{ type: "text", text: "world" }] },
       ]),
     ).toThrow(
-      "Each eval case must define exactly one of `input` or `messages`.",
+      "Each eval case must define exactly one of `input` or `transcript`.",
     );
   });
 
-  test("rejects task outputs that define both result and messages", () => {
+  test("rejects task outputs without a transcript", () => {
     expect(() =>
-      normalizeScorerPayload("hello", {
-        result: "hi",
-        messages: [
-          { role: "assistant", parts: [{ type: "text", text: "hi" }] },
-        ],
-      } as any),
+      normalizeScorerPayload("hello", { messages: [] } as any),
     ).toThrow(
-      "Task results must define exactly one of `result` or `messages`.",
+      "Task output must be either a string or an object with `transcript`.",
     );
   });
 
   test("formats transcripts safely for debug output", () => {
     expect(formatEvalValue(multimodalInput)).toMatchInlineSnapshot(`
-      "## system
-
-      Answer concisely.
-
-      ## user
+      "## user
 
       Describe this image
 
@@ -97,32 +85,33 @@ describe("message normalization", () => {
   });
 });
 
-describeEval("message chain scorer payload", {
+describeEval("transcript scorer payload", {
   data: async () => [
     {
-      name: "passes full chains through describeEval",
-      messages: multimodalInput,
+      name: "passes transcript through describeEval",
+      transcript: multimodalInput,
     },
   ],
   task: async (input) => {
     expect(input).toEqual(multimodalInput);
-    return { messages: multimodalOutput };
+    return { transcript: multimodalOutput };
   },
   scorers: [
     async (opts) => {
-      expect(opts.inputMessages).toEqual(multimodalInput);
-      expect(opts.outputMessages).toEqual(multimodalOutput);
-      expect(opts.messages).toEqual([...multimodalInput, ...multimodalOutput]);
+      expect(opts.transcript).toEqual([
+        ...multimodalInput,
+        ...multimodalOutput,
+      ]);
       expect(opts.output).toBe("A cat sitting on a chair.");
       return { score: 1 };
     },
   ],
 });
 
-describeEval("derived tool calls from message parts", {
+describeEval("explicit tool call metadata", {
   data: async () => [
     {
-      name: "tool calls are derived without an explicit toolCalls array",
+      name: "tool calls are passed separately from the transcript",
       input: "What is the weather in Seattle?",
       expectedTools: [
         { name: "getWeather", arguments: { location: "Seattle" } },
@@ -130,32 +119,17 @@ describeEval("derived tool calls from message parts", {
     },
   ],
   task: async () => ({
-    messages: [
-      {
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-call",
-            toolName: "getWeather",
-            toolCallId: "call-1",
-            input: { location: "Seattle" },
-          },
-        ],
-      },
-      {
-        role: "tool",
-        parts: [
-          {
-            type: "tool-result",
-            toolName: "getWeather",
-            toolCallId: "call-1",
-            output: { temperature: 72 },
-          },
-        ],
-      },
+    transcript: [
       {
         role: "assistant",
         parts: [{ type: "text", text: "It is 72F in Seattle." }],
+      },
+    ],
+    toolCalls: [
+      {
+        name: "getWeather",
+        arguments: { location: "Seattle" },
+        result: { temperature: 72 },
       },
     ],
   }),

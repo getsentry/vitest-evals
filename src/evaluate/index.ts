@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { assert, test } from "vitest";
 import {
-  type TaskResult,
+  type Transcript,
   formatEvalValue,
   normalizeEvaluateOutput,
   toJudgeUserMessage,
@@ -38,7 +38,7 @@ const CHOICE_SCORES: Record<string, number> = {
 };
 
 interface EvaluateOptions {
-  task: () => Promise<string | TaskResult>;
+  task: () => Promise<string | { transcript: Transcript }>;
   criteria: string;
   threshold?: number;
 }
@@ -58,7 +58,7 @@ export async function _evaluate(
     );
   }
 
-  let taskOutput: string | TaskResult;
+  let taskOutput: string | { transcript: Transcript };
   let evaluationOutput: ReturnType<typeof normalizeEvaluateOutput>;
   try {
     taskOutput = await opts.task();
@@ -88,7 +88,7 @@ export async function _evaluate(
       }),
       system: EVAL_SYSTEM,
       messages: [
-        toJudgeUserMessage(evaluationOutput.messages),
+        toJudgeUserMessage(evaluationOutput.transcript),
         {
           role: "user",
           content: EVAL_PROMPT(opts.criteria),
@@ -128,11 +128,7 @@ export async function _evaluate(
     assert(
       false,
       `Score: ${score} (${object.answer}) below threshold: ${threshold}\n\n## Output:\n${formatEvalValue(
-        typeof taskOutput === "string"
-          ? taskOutput
-          : "result" in taskOutput && taskOutput.result !== undefined
-            ? taskOutput.result
-            : taskOutput.messages,
+        typeof taskOutput === "string" ? taskOutput : taskOutput.transcript,
       )}\n\n## Rationale:\n${formatEvalValue(object.rationale)}`,
     );
   }
