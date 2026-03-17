@@ -7,44 +7,24 @@ import {
   test,
 } from "vitest";
 import "vitest";
+import {
+  type EvalDataInput,
+  type EvalMessage,
+  type TaskInput,
+  type TaskResult,
+  type ToolCall,
+  formatEvalValue,
+  getDefaultTestName,
+  getTaskInput,
+  normalizeScorerPayload,
+} from "./messages";
 import { wrapText } from "./wrapText";
 
 /**
- * Represents a tool/function call made during task execution.
- * Supports various LLM provider formats and use cases.
- */
-export type ToolCall = {
-  // Core fields (required for basic usage)
-  name: string;
-  arguments?: Record<string, any>;
-
-  // Additional metadata
-  [key: string]: any; // Allow provider-specific fields
-};
-
-export type TaskResult = {
-  result: string;
-  toolCalls?: ToolCall[];
-};
-
-/**
  * Task function that processes an input and returns either a string result
- * or a TaskResult object containing the result and any tool calls made.
- *
- * @param input - The input string to process
- * @returns Promise resolving to either a string or TaskResult object
- *
- * @example
- * // Simple tasks can just return a string
- * const simpleTask: TaskFn = async (input) => "The answer is 42";
- *
- * // Tasks that use tools should return TaskResult
- * const taskWithTools: TaskFn = async (input) => ({
- *   result: "The answer is 42",
- *   toolCalls: [{ name: "calculate", arguments: { expr: "6*7" }, result: 42 }]
- * });
+ * or a TaskResult object containing response messages and any tool calls made.
  */
-export type TaskFn = (input: string) => Promise<string | TaskResult>;
+export type TaskFn = (input: TaskInput) => Promise<string | TaskResult>;
 
 export type Score = {
   score: number | null;
@@ -57,6 +37,9 @@ export type Score = {
 export interface BaseScorerOptions {
   input: string;
   output: string;
+  messages: EvalMessage[];
+  inputMessages: EvalMessage[];
+  outputMessages: EvalMessage[];
   toolCalls?: ToolCall[];
 }
 
@@ -91,53 +74,37 @@ declare module "vitest" {
   }
 }
 
+function formatEvaluationOutputForDisplay(
+  taskOutput: string | TaskResult,
+): string {
+  if (typeof taskOutput === "string") {
+    return formatEvalValue(taskOutput);
+  }
+
+  if ("result" in taskOutput && taskOutput.result !== undefined) {
+    return formatEvalValue(taskOutput.result);
+  }
+
+  return formatEvalValue(taskOutput.messages);
+}
+
 expect.extend({
   /**
    * Evaluates a language model output against an expected answer using a scoring function.
    *
    * @deprecated Use describeEval() instead for better test organization and multiple scorers support
-   * @param expected - The expected (ground truth) answer, can be any type depending on the scorer
-   * @param taskFn - Async function that processes the input and returns the model output
-   *                 Can return either a string or TaskResult object with result and optional toolCalls
-   * @param scoreFn - Function that evaluates the model output against the expected answer
-   * @param threshold - Minimum acceptable score (0-1), defaults to 1.0
-   *
-   * @example
-   * ```javascript
-   * test("checks capital of France", async () => {
-   *   expect("What is the capital of France?").toEval(
-   *     "Paris",
-   *     async (input) => {
-   *       const response = await queryLLM(input);
-   *       // Recommended: return TaskResult
-   *       return {
-   *         result: response.text,
-   *         toolCalls: response.toolCalls || []
-   *       };
-   *     },
-   *     checkFactuality,
-   *     0.8
-   *   );
-   * });
-   * ```
    */
-  // TODO: this needs to be support true extensibility with Eval scorers
   toEval: async function toEval(
-    input: string,
+    input: TaskInput,
     expected: any,
     taskFn: TaskFn,
     scoreFn: ScoreFn<any>,
     threshold = 1.0,
   ) {
-    const { isNot } = this;
-
     const taskOutput = await taskFn(input);
-    const output =
-      typeof taskOutput === "string" ? taskOutput : taskOutput.result;
-    const toolCalls =
-      typeof taskOutput === "object" ? taskOutput.toolCalls : undefined;
+    const normalized = normalizeScorerPayload(input, taskOutput);
 
-    let result = scoreFn({ input, expected, output, toolCalls });
+    let result = scoreFn({ expected, ...normalized });
     if (result instanceof Promise) {
       result = await result;
     }
@@ -149,59 +116,6 @@ expect.extend({
   },
 });
 
-/**
- * Creates a test suite for evaluating language model outputs.
- *
- * @param name - The name of the test suite
- * @param options - Configuration options
- * @param options.data - Async function that returns an array of test cases with input and any additional fields
- * @param options.task - Function that processes the input and returns the model output
- *                       Can return either a string or TaskResult object with result and optional toolCalls
- * @param options.skipIf - Optional function that determines if tests should be skipped
- * @param options.scorers - Array of scoring functions that evaluate model outputs
- * @param options.threshold - Minimum acceptable average score (0-1), defaults to 1.0
- * @param options.timeout - Test timeout in milliseconds, defaults to 60000 (60s)
- *
- * @example
- * ```javascript
- * // Recommended: TaskResult format with tool tracking
- * describeEval("capital cities test", {
- *   data: async () => [{
- *     input: "What is the capital of France?",
- *     expected: "Paris"
- *   }],
- *   task: async (input) => {
- *     const response = await queryLLM(input);
- *     return {
- *       result: response.text,
- *       toolCalls: response.toolCalls || []
- *     };
- *   },
- *   scorers: [checkFactuality],
- *   threshold: 0.8
- * });
- *
- * // Example with tool usage evaluation
- * describeEval("tool usage test", {
- *   data: async () => [{
- *     input: "Search for weather in Seattle",
- *     expectedTools: [{ name: "weather_api", arguments: { location: "Seattle" } }]
- *   }],
- *   task: async (input) => {
- *     return {
- *       result: "The weather in Seattle is 65°F",
- *       toolCalls: [{
- *         name: "weather_api",
- *         arguments: { location: "Seattle" },
- *         result: { temp: 65, condition: "partly cloudy" }
- *       }]
- *     };
- *   },
- *   scorers: [ToolCallScorer()],
- *   threshold: 1.0
- * });
- * ```
- */
 export function describeEval(
   name: string,
   {
@@ -210,14 +124,12 @@ export function describeEval(
     skipIf,
     scorers,
     threshold = 1.0,
-    // increase default test timeout as 5s is usually not enough for
-    // a single factuality check
     timeout = 60000,
     beforeEach: beforeEachHook,
     afterEach: afterEachHook,
   }: {
     data: () => Promise<
-      Array<{ input: string; name?: string } & Record<string, any>>
+      Array<{ name?: string } & EvalDataInput & Record<string, any>>
     >;
     task: TaskFn;
     skipIf?: () => boolean;
@@ -237,49 +149,60 @@ export function describeEval(
     }
 
     const testFn = skipIf ? test.skipIf(skipIf()) : test;
-    // TODO: should data just be a generator?
-    for (const { input, name: testName, ...params } of await data()) {
+    for (const testCase of await data()) {
+      const {
+        input,
+        messages,
+        name: testName,
+        ...params
+      } = testCase as {
+        input?: string;
+        messages?: EvalMessage[];
+        name?: string;
+      } & Record<string, any>;
+
+      const taskInput = getTaskInput(input, messages);
+
       testFn(
-        testName ?? input,
+        testName ?? getDefaultTestName(taskInput),
         {
           timeout,
         },
         async ({ task: testTask }) => {
-          const taskOutput = await task(input);
-          const output =
-            typeof taskOutput === "string" ? taskOutput : taskOutput.result;
-          const toolCalls =
-            typeof taskOutput === "object" ? taskOutput.toolCalls : undefined;
+          const taskOutput = await task(taskInput);
+          const normalized = normalizeScorerPayload(taskInput, taskOutput);
 
           const scores = await Promise.all(
             scorers.map((scorer) => {
-              const result = scorer({ input, ...params, output, toolCalls });
+              const result = scorer({ ...params, ...normalized });
               if (result instanceof Promise) {
                 return result;
               }
-              return new Promise<Score>((resolve) => resolve(result));
+              return Promise.resolve(result);
             }),
           );
-          const scoresWithName = scores.map((s, i) => ({
-            ...s,
-            name: scorers[i].name,
+
+          const scoresWithName = scores.map((score, index) => ({
+            ...score,
+            name: scorers[index].name,
           }));
 
           const avgScore =
-            scores.reduce((acc, s) => acc + (s.score ?? 0), 0) / scores.length;
+            scores.reduce((acc, score) => acc + (score.score ?? 0), 0) /
+            scores.length;
 
           testTask.meta.eval = {
             scores: scoresWithName,
             avgScore,
-            ...(toolCalls && { toolCalls }),
+            ...(normalized.toolCalls && { toolCalls: normalized.toolCalls }),
           };
 
           if (threshold) {
             assert(
               avgScore >= threshold,
-              `Score: ${avgScore} below threshold: ${threshold}\n\n## Output:\n${wrapText(output)}\n\n${formatScores(
-                scoresWithName,
-              )}`,
+              `Score: ${avgScore} below threshold: ${threshold}\n\n## Output:\n${formatEvaluationOutputForDisplay(
+                taskOutput,
+              )}\n\n${formatScores(scoresWithName)}`,
             );
           }
         },
@@ -291,27 +214,20 @@ export function describeEval(
 export function formatScores(scores: (Score & { name: string })[]) {
   return scores
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
-    .map((s) => {
-      const scoreLine = `# ${s.name || "Unknown"} [${(s.score ?? 0).toFixed(1)}]`;
+    .map((score) => {
+      const scoreLine = `# ${score.name || "Unknown"} [${(score.score ?? 0).toFixed(1)}]`;
       if (
-        ((s.score ?? 0) < 1.0 && s.metadata?.rationale) ||
-        s.metadata?.output
+        ((score.score ?? 0) < 1.0 && score.metadata?.rationale) ||
+        score.metadata?.output !== undefined
       ) {
-        // Format output - handle both strings and objects
-        let formattedOutput = "";
-        if (s.metadata?.output !== undefined) {
-          const output = s.metadata.output;
-          if (typeof output === "string") {
-            formattedOutput = `\n\n## Response\n\n${wrapText(output)}`;
-          } else {
-            // For objects, stringify with proper formatting
-            formattedOutput = `\n\n## Response\n\n${wrapText(JSON.stringify(output, null, 2))}`;
-          }
-        }
+        const formattedOutput =
+          score.metadata?.output !== undefined
+            ? `\n\n## Response\n\n${formatEvalValue(score.metadata.output)}`
+            : "";
 
         return `${scoreLine}${
-          s.metadata?.rationale
-            ? `\n\n## Rationale\n\n${wrapText(s.metadata.rationale)}`
+          score.metadata?.rationale
+            ? `\n\n## Rationale\n\n${wrapText(score.metadata.rationale)}`
             : ""
         }${formattedOutput}`;
       }
@@ -321,8 +237,15 @@ export function formatScores(scores: (Score & { name: string })[]) {
 }
 
 export { wrapText } from "./wrapText";
+export type {
+  EvalDataInput,
+  EvalMessage,
+  EvalPart,
+  TaskInput,
+  TaskResult,
+  ToolCall,
+} from "./messages";
 
-// Export built-in scorers
 export {
   ToolCallScorer,
   type ToolCallScorerOptions,
