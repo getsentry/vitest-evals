@@ -1,4 +1,5 @@
 // import type { RunnerTask, RunnerTestFile } from "vitest";
+// TODO: Switch to "vitest/node" when we drop Vitest 3 support.
 import { DefaultReporter } from "vitest/reporters";
 import c from "tinyrainbow";
 

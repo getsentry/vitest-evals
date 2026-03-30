@@ -55,10 +55,10 @@
   "homepage": "https://github.com/getsentry/vitest-evals#readme",
   "description": "",
   "peerDependencies": {
-    "tinyrainbow": "*",
-    "vitest": "*",
-    "ai": ">=4.0.0",
-    "zod": ">=3.0.0"
+    "ai": ">=4 <7",
+    "tinyrainbow": ">=2 <4",
+    "vitest": ">=3 <5",
+    "zod": ">=3 <5"
   },
   "peerDependenciesMeta": {
     "ai": {
@@ -69,20 +69,21 @@
     }
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.0",
+    "@ai-sdk/openai": "^3.0.48",
     "@biomejs/biome": "^1.9.4",
-    "@vitest/coverage-v8": "^3.2.4",
-    "ai": "^6.0.0",
-    "autoevals": "^0.0.127",
+    "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "ai": "^6.0.141",
+    "autoevals": "^0.0.132",
     "dotenv-cli": "^8.0.0",
     "lint-staged": "^15.5.2",
-    "openai": "^4.104.0",
+    "openai": "^6.33.0",
     "simple-git-hooks": "^2.13.0",
-    "tinyrainbow": "^2.0.0",
+    "tinyrainbow": "^3.1.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "zod": "^4.0.0"
+    "vitest": "^4.1.2",
+    "zod": "^4.3.6"
   },
   "simple-git-hooks": {
     "pre-commit": "npm exec lint-staged --concurrent false"
