@@ -1,7 +1,12 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { assert, test } from "vitest";
-import { wrapText } from "../wrapText";
+import {
+  type Transcript,
+  formatEvalValue,
+  normalizeEvaluateOutput,
+  toJudgeUserMessage,
+} from "../messages";
 
 type LanguageModel = Parameters<typeof generateObject>[0]["model"];
 
@@ -13,15 +18,11 @@ export function configure(opts: { model: LanguageModel }) {
 
 const EVAL_SYSTEM = `You are assessing a submitted output based on a given criterion. Ignore differences in style, grammar, punctuation, or length. Focus only on whether the criterion is met.`;
 
-const EVAL_PROMPT = (output: string, criteria: string) => `<submission>
-${output}
-</submission>
-
-<criteria>
+const EVAL_PROMPT = (criteria: string) => `<criteria>
 ${criteria}
 </criteria>
 
-Does the submission meet the criteria? Select one option:
+Does the conversation transcript meet the criteria? Select one option:
 (A) The criteria is fully met with no issues
 (B) The criteria is mostly met with minor gaps
 (C) The criteria is partially met with notable gaps
@@ -37,7 +38,7 @@ const CHOICE_SCORES: Record<string, number> = {
 };
 
 interface EvaluateOptions {
-  task: () => Promise<string>;
+  task: () => Promise<string | { transcript: Transcript }>;
   criteria: string;
   threshold?: number;
 }
@@ -57,9 +58,11 @@ export async function _evaluate(
     );
   }
 
-  let output: string;
+  let taskOutput: string | { transcript: Transcript };
+  let evaluationOutput: ReturnType<typeof normalizeEvaluateOutput>;
   try {
-    output = await opts.task();
+    taskOutput = await opts.task();
+    evaluationOutput = normalizeEvaluateOutput(taskOutput);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     ctx.task.meta.eval = {
@@ -84,7 +87,13 @@ export async function _evaluate(
         rationale: z.string(),
       }),
       system: EVAL_SYSTEM,
-      prompt: EVAL_PROMPT(output, opts.criteria),
+      messages: [
+        toJudgeUserMessage(evaluationOutput.transcript),
+        {
+          role: "user",
+          content: EVAL_PROMPT(opts.criteria),
+        },
+      ],
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -118,7 +127,9 @@ export async function _evaluate(
   if (score < threshold) {
     assert(
       false,
-      `Score: ${score} (${object.answer}) below threshold: ${threshold}\n\n## Output:\n${wrapText(output)}\n\n## Rationale:\n${wrapText(object.rationale)}`,
+      `Score: ${score} (${object.answer}) below threshold: ${threshold}\n\n## Output:\n${formatEvalValue(
+        typeof taskOutput === "string" ? taskOutput : taskOutput.transcript,
+      )}\n\n## Rationale:\n${formatEvalValue(object.rationale)}`,
     );
   }
 }

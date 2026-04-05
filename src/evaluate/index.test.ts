@@ -152,8 +152,95 @@ describe("evaluate", () => {
     });
 
     const call = mockGenerateObject.mock.calls[0][0];
-    expect(call.prompt).toContain("the task output");
-    expect(call.prompt).toContain("must mention specific details");
+    expect(call.messages[0].content[0].text).toContain("[ASSISTANT]");
+    expect(call.messages[0].content[0].text).toContain("the task output");
+    expect(call.messages[1].content).toContain("must mention specific details");
+  });
+
+  test("passes multimodal transcripts to the judge", async () => {
+    mockGenerateObject.mockResolvedValueOnce({
+      object: { answer: "A", rationale: "Handled the transcript correctly" },
+    } as any);
+
+    const ctx = makeContext();
+    await _evaluate(ctx, {
+      task: async () => ({
+        transcript: [
+          {
+            role: "user",
+            parts: [
+              { type: "text", text: "What is shown here?" },
+              {
+                type: "image",
+                image: "data:image/png;base64,abc123",
+                mediaType: "image/png",
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "It is a cat." }],
+          },
+        ],
+      }),
+      criteria: "The answer should identify the subject of the image",
+      threshold: 1,
+    });
+
+    const call = mockGenerateObject.mock.calls[0][0];
+    const transcriptText = call.messages[0].content
+      .filter((part: any) => part.type === "text")
+      .map((part: any) => part.text)
+      .join("");
+    expect(transcriptText).toContain("[USER]\nWhat is shown here?");
+    expect(transcriptText).toContain("[image image/png]");
+    expect(transcriptText).toContain("[ASSISTANT]\nIt is a cat.");
+    expect(call.messages[0].content).toContainEqual({
+      type: "image",
+      image: "data:image/png;base64,abc123",
+      mediaType: "image/png",
+    });
+  });
+
+  test("does not pass tool metadata to the judge by default", async () => {
+    mockGenerateObject.mockResolvedValueOnce({
+      object: { answer: "A", rationale: "Focused on the visible transcript" },
+    } as any);
+
+    const ctx = makeContext();
+    await _evaluate(ctx, {
+      task: async () => ({
+        transcript: [
+          {
+            role: "user",
+            parts: [{ type: "text", text: "What is the weather?" }],
+          },
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "It is 72F in Seattle." }],
+          },
+        ],
+        toolCalls: [
+          {
+            name: "getWeather",
+            arguments: { location: "Seattle" },
+            result: { temperature: 72 },
+          },
+        ],
+      }),
+      criteria: "The answer should report the weather to the user",
+      threshold: 1,
+    });
+
+    const call = mockGenerateObject.mock.calls[0][0];
+    const transcriptText = call.messages[0].content
+      .filter((part: any) => part.type === "text")
+      .map((part: any) => part.text)
+      .join("");
+    expect(transcriptText).toContain("[USER]\nWhat is the weather?");
+    expect(transcriptText).toContain("[ASSISTANT]\nIt is 72F in Seattle.");
+    expect(transcriptText).not.toContain("tool-call");
+    expect(transcriptText).not.toContain("tool-result");
   });
 
   test("maps all answer choices to correct scores", async () => {

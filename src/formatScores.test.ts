@@ -72,4 +72,47 @@ describe("formatScores", () => {
       # Scorer B [0.8]"
     `);
   });
+
+  it("should format transcript outputs", () => {
+    const scores = [
+      {
+        name: "Scorer A",
+        score: 0.2,
+        metadata: {
+          rationale: "Image description was incorrect",
+          output: [
+            {
+              role: "assistant",
+              parts: [
+                { type: "text", text: "A dog on a sofa." },
+                {
+                  type: "image",
+                  image: "data:image/png;base64,abc",
+                  mediaType: "image/png",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = formatScores(scores);
+
+    expect(result).toMatchInlineSnapshot(`
+      "# Scorer A [0.2]
+
+      ## Rationale
+
+      Image description was incorrect
+
+      ## Response
+
+      ## assistant
+
+      A dog on a sofa.
+
+      [image image/png]"
+    `);
+  });
 });
