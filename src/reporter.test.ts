@@ -25,10 +25,10 @@ function createReporter() {
 
 function createTestCase({
   avgScore,
-  state = "pass",
+  state = "passed",
 }: {
   avgScore?: number;
-  state?: "pass" | "fail";
+  state?: "passed" | "failed";
 }) {
   return {
     task: {
@@ -62,7 +62,7 @@ function createTestCase({
     meta: () => (avgScore == null ? {} : { eval: { avgScore } }),
     result: () => ({
       state,
-      errors: state === "fail" ? [{ message: "threshold not met" }] : [],
+      errors: state === "failed" ? [{ message: "threshold not met" }] : [],
     }),
     diagnostic: () => ({
       duration: 42,
@@ -84,7 +84,7 @@ describe("DefaultEvalReporter", () => {
     );
 
     reporter.onTestModuleEnd({
-      state: () => "pass",
+      state: () => "passed",
       task: {},
     } as any);
 
@@ -101,6 +101,22 @@ describe("DefaultEvalReporter", () => {
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).not.toContain(
       "[0.",
+    );
+  });
+
+  test("logs failed eval test details with the score suffix", () => {
+    const { reporter, logger } = createReporter();
+
+    reporter.onTestCaseResult(
+      createTestCase({ avgScore: 0.2, state: "failed" }) as any,
+    );
+
+    expect(logger.log).toHaveBeenCalledTimes(2);
+    expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).toContain(
+      "fixtures/reporter.eval.test.ts:12:3 > streams eval progress [0.20] 42ms",
+    );
+    expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
+      "threshold not met",
     );
   });
 });

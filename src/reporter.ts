@@ -1,6 +1,4 @@
-// import type { RunnerTask, RunnerTestFile } from "vitest";
-// TODO: Switch to "vitest/node" when we drop Vitest 3 support.
-import { DefaultReporter, VerboseReporter } from "vitest/reporters";
+import { DefaultReporter, VerboseReporter } from "vitest/node";
 import c from "tinyrainbow";
 
 const TEST_NAME_SEPARATOR = c.dim(" > ");
