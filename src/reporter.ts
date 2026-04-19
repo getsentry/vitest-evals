@@ -11,6 +11,8 @@ export default class DefaultEvalReporter extends VerboseReporter {
       return;
     }
 
+    // Preserve DefaultReporter's bookkeeping without letting VerboseReporter
+    // print the stock per-test line; eval cases need custom score output.
     DefaultReporter.prototype.onTestCaseResult.call(this, test);
 
     const testResult = test.result();
