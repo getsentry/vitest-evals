@@ -206,22 +206,24 @@ export default class DefaultEvalReporter extends VerboseReporter {
   }
 
   private formatToolCallLines(call: ToolCallRecord, isLastItem: boolean) {
-    const invocation = this.formatToolCallInvocation(call);
-    const outcome = this.formatToolCallOutcome(call);
     const prefix = c.dim(`   ${this.getItemPrefix(isLastItem)} `);
     const detailPrefix = c.dim(this.getDetailPrefix(isLastItem));
-    const label = c.dim(this.formatFieldLabel(call.error ? "error" : "result"));
+    const lines = [
+      `${prefix}${c.dim(this.formatFieldLabel("tool"))} ${c.cyan(call.name)}`,
+    ];
 
-    return [`${prefix}${invocation}`, `${detailPrefix}${label} ${outcome}`];
-  }
+    const argumentsSummary = this.formatToolCallArguments(call.arguments);
+    if (argumentsSummary) {
+      lines.push(
+        `${detailPrefix}${c.dim(this.formatFieldLabel("args"))} ${argumentsSummary}`,
+      );
+    }
 
-  private formatToolCallInvocation(call: ToolCallRecord) {
-    const maxLength = this.toolDetailLevel >= 3 ? 96 : 48;
-    const argsSummary = this.summarizeToolArguments(call.arguments, maxLength);
-    const toolName = c.cyan(call.name);
-    return argsSummary
-      ? `${toolName}${c.dim("(")}${argsSummary}${c.dim(")")}`
-      : `${toolName}${c.dim("()")}`;
+    lines.push(
+      `${detailPrefix}${c.dim(this.formatFieldLabel(call.error ? "error" : "result"))} ${this.formatToolCallOutcome(call)}`,
+    );
+
+    return lines;
   }
 
   private formatToolCallOutcome(call: ToolCallRecord) {
@@ -304,6 +306,8 @@ export default class DefaultEvalReporter extends VerboseReporter {
 
   private formatFieldLabel(
     label:
+      | "tool"
+      | "args"
       | "result"
       | "error"
       | "final"
@@ -444,6 +448,21 @@ export default class DefaultEvalReporter extends VerboseReporter {
       separator: ", ",
       maxLength,
     });
+  }
+
+  private formatToolCallArguments(value: unknown) {
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value as Record<string, unknown>).length === 0)
+    ) {
+      return null;
+    }
+
+    const maxLength = this.toolDetailLevel >= 3 ? 160 : 96;
+    return this.summarizeToolArguments(value, maxLength);
   }
 
   private formatScore(score: number) {

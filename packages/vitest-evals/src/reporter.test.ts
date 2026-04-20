@@ -311,13 +311,13 @@ describe("DefaultEvalReporter", () => {
 
     expect(logger.log).toHaveBeenCalledTimes(6);
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
-      "├─ lookupInvoice()",
+      "├─ tool    lookupInvoice",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
       "result  invoiceId=inv_123 refundable=true [41B | 6ms]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
-      "├─ createRefund()",
+      "├─ tool    createRefund",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
       "result  status=submitted refundId=rf_inv_123 [46B | 4ms]",
@@ -462,14 +462,17 @@ describe("DefaultEvalReporter", () => {
       }) as any,
     );
 
-    expect(logger.log).toHaveBeenCalledTimes(4);
+    expect(logger.log).toHaveBeenCalledTimes(5);
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
-      "├─ lookupInvoice(invoiceId=inv_123)",
+      "├─ tool    lookupInvoice",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "result  refundable=true [41B | 6ms]",
+      "args    invoiceId=inv_123",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
+      "result  refundable=true [41B | 6ms]",
+    );
+    expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
       "└─ final   status=approved",
     );
   });
@@ -515,20 +518,23 @@ describe("DefaultEvalReporter", () => {
       }) as any,
     );
 
-    expect(logger.log).toHaveBeenCalledTimes(6);
+    expect(logger.log).toHaveBeenCalledTimes(7);
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
-      "├─ lookupInvoice(invoiceId=inv_123)",
+      "├─ tool    lookupInvoice",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "result  refundable=true [41B | 6ms]",
+      "args    invoiceId=inv_123",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
-      'raw in  {"invoiceId":"inv_123"}',
+      "result  refundable=true [41B | 6ms]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
-      'raw out {"invoiceId":"inv_123","refundable":true}',
+      'raw in  {"invoiceId":"inv_123"}',
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[5][0])).toContain(
+      'raw out {"invoiceId":"inv_123","refundable":true}',
+    );
+    expect(stripVTControlCharacters(logger.log.mock.calls[6][0])).toContain(
       "└─ final   status=approved",
     );
   });

@@ -214,6 +214,7 @@ test("records and replays opt-in tools in auto mode", async () => {
   const recordingPath = (
     firstCall.metadata?.replay as { recordingPath: string }
   ).recordingPath;
+  expect(recordingPath).toMatch(/^\.tmp-pi-replay-/);
   const recording = JSON.parse(
     readFileSync(join(process.cwd(), recordingPath), "utf8"),
   ) as {

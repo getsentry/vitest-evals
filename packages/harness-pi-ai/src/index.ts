@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { attachHarnessRunToError } from "vitest-evals";
 import type {
   Harness,
@@ -666,7 +666,7 @@ async function executeToolWithReplay<
 
   const cacheKeyInput = replay.key ? await replay.key(args, context) : args;
   const cacheKey = createCacheKey(toolName, cacheKeyInput, replay.version);
-  const absoluteRecordingPath = join(
+  const absoluteRecordingPath = resolve(
     process.cwd(),
     resolveReplayDirectory(),
     toolName,
