@@ -41,14 +41,16 @@ const env = {
     : {}),
 };
 
-const packageDirs = findWorkspacePackageDirs().filter((dir) =>
-  hasScript(dir, scriptName),
-);
+const packageDirs = findWorkspacePackageDirs()
+  .filter((dir) => hasScript(dir, scriptName))
+  .sort((a, b) => a.localeCompare(b));
 
 if (packageDirs.length === 0) {
   console.error(`No workspace package exposes a "${scriptName}" script.`);
   process.exit(1);
 }
+
+let exitCode = 0;
 
 for (const packageDir of packageDirs) {
   const command = [
@@ -77,9 +79,11 @@ for (const packageDir of packageDirs) {
   });
 
   if ((result.status ?? 1) !== 0) {
-    process.exit(result.status ?? 1);
+    exitCode = result.status ?? 1;
   }
 }
+
+process.exit(exitCode);
 
 function findWorkspacePackageDirs() {
   const dirs = [];

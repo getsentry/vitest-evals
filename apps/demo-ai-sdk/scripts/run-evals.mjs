@@ -42,8 +42,8 @@ const target =
   explicitTargetIndex >= 0
     ? forwardedArgs.splice(explicitTargetIndex, 1)[0]
     : failMode
-      ? "apps/demo-pi/evals/refund.fail.eval.ts"
-      : "apps/demo-pi/evals";
+      ? "apps/demo-ai-sdk/evals/refund.fail.eval.ts"
+      : "apps/demo-ai-sdk/evals";
 
 const command = [
   "exec",

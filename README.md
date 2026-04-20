@@ -7,7 +7,8 @@ Monorepo for the harness-first `vitest-evals` shape:
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
 - `packages/foobar`: example package with a small `pi-ai`-style refund agent
-- `apps/demo-pi`: end-to-end demo evals wired through the workspace packages
+- `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace packages
+- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace packages
 
 ## Workspace Layout
 
@@ -18,6 +19,7 @@ packages/
   harness-pi-ai/
   foobar/
 apps/
+  demo-ai-sdk/
   demo-pi/
 ```
 

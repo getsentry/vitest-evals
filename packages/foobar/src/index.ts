@@ -34,12 +34,22 @@ export type RefundCase = {
   expectedTools: string[];
 };
 
-const LOOKUP_INVOICE_DESCRIPTION =
+export type LookupInvoiceInput = {
+  invoiceId: string;
+};
+
+export type CreateRefundInput = {
+  invoiceId: string;
+  amount: number;
+};
+
+export const LOOKUP_INVOICE_DESCRIPTION =
   "Look up invoice details inside Foobar billing.";
-const CREATE_REFUND_DESCRIPTION = "Create a refund for a refundable invoice.";
+export const CREATE_REFUND_DESCRIPTION =
+  "Create a refund for a refundable invoice.";
 type FoobarRefundModel = "claude-sonnet-4-5";
 const DEFAULT_REFUND_MODEL: FoobarRefundModel = "claude-sonnet-4-5";
-const REFUND_SYSTEM_PROMPT = [
+export const REFUND_SYSTEM_PROMPT = [
   "You are Foobar's refund operations agent.",
   "You must decide whether a refund should be approved for the invoice in the user's request.",
   "Always call lookupInvoice before making a decision.",
@@ -50,47 +60,56 @@ const REFUND_SYSTEM_PROMPT = [
   'Denied shape: {"status":"denied","invoiceId":"...","reason":"..."}',
 ].join("\n");
 
+const INVOICES: Record<string, InvoiceRecord> = {
+  inv_123: {
+    invoiceId: "inv_123",
+    amount: 4200,
+    refundable: true,
+    customer: "Acme Co",
+  },
+  inv_404: {
+    invoiceId: "inv_404",
+    amount: 1700,
+    refundable: false,
+    customer: "Globex",
+  },
+};
+
+export async function lookupInvoice({
+  invoiceId,
+}: LookupInvoiceInput): Promise<InvoiceRecord> {
+  const invoice = INVOICES[invoiceId];
+  if (!invoice) {
+    throw new Error(`Invoice ${invoiceId} not found`);
+  }
+
+  return invoice;
+}
+
+export async function createRefund({
+  invoiceId,
+  amount,
+}: CreateRefundInput): Promise<{
+  refundId: string;
+  amount: number;
+  status: "submitted";
+}> {
+  return {
+    refundId: `rf_${invoiceId}`,
+    amount,
+    status: "submitted",
+  };
+}
+
 export const foobarTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
     replay: true,
-    execute: async ({ invoiceId }: { invoiceId: string }) => {
-      const invoices: Record<string, InvoiceRecord> = {
-        inv_123: {
-          invoiceId: "inv_123",
-          amount: 4200,
-          refundable: true,
-          customer: "Acme Co",
-        },
-        inv_404: {
-          invoiceId: "inv_404",
-          amount: 1700,
-          refundable: false,
-          customer: "Globex",
-        },
-      };
-
-      const invoice = invoices[invoiceId];
-      if (!invoice) {
-        throw new Error(`Invoice ${invoiceId} not found`);
-      }
-
-      return invoice;
-    },
+    execute: lookupInvoice,
   },
   createRefund: {
     description: CREATE_REFUND_DESCRIPTION,
-    execute: async ({
-      invoiceId,
-      amount,
-    }: {
-      invoiceId: string;
-      amount: number;
-    }) => ({
-      refundId: `rf_${invoiceId}`,
-      amount,
-      status: "submitted",
-    }),
+    execute: createRefund,
   },
 } satisfies PiAiToolset<string, RefundCase>;
 
@@ -256,7 +275,7 @@ function getAssistantText(message: AssistantMessage) {
     .trim();
 }
 
-function parseRefundDecision(text: string): RefundDecision {
+export function parseRefundDecision(text: string): RefundDecision {
   const cleaned = stripMarkdownFence(text);
   const jsonText = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
   const parsed = JSON.parse(jsonText) as Record<string, unknown>;

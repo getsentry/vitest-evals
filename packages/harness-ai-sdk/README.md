@@ -44,4 +44,5 @@ The adapter infers:
 - `run.output` from common AI SDK result fields such as `output`, `object`, and
   `text`
 
-See the workspace RFC notes in `docs/harness-first-rfc.md`.
+See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in
+`docs/harness-first-rfc.md`.
