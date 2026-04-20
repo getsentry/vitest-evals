@@ -6,26 +6,13 @@ import {
   StructuredOutputJudge,
   ToolCallJudge,
   toolCalls,
-  type HarnessJudgeOptions,
 } from "vitest-evals";
 
-const toolCallJudge = ToolCallJudge();
 const outputJudge = StructuredOutputJudge();
-const expectedToolJudge = async (opts: HarnessJudgeOptions<RefundCase>) =>
-  toolCallJudge({
-    ...opts,
-    expectedTools: (opts.expectedTools as string[]).map((name) => ({
-      name,
-    })),
-  });
-
-Object.defineProperty(expectedToolJudge, "name", {
-  value: "ToolCallJudge",
-});
 
 describeEval("demo pi refund agent", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<RefundCase[]> => [
+  data: [
     {
       name: "approves refundable invoice",
       input: "Refund invoice inv_123",
@@ -43,16 +30,12 @@ describeEval("demo pi refund agent", {
     createAgent: () => createRefundAgent(),
     tools: foobarTools,
   }),
-  judges: [expectedToolJudge],
-  test: async ({ run, session, caseData }) => {
+  judges: [ToolCallJudge()],
+  test: async ({ run, session, caseData, judge }) => {
     expect(run.output).toMatchObject({
       status: caseData.expectedStatus,
     });
-    await expect(run.output).toSatisfyJudge(outputJudge, {
-      rawInput: caseData.input,
-      caseData,
-      run,
-      session,
+    await judge(outputJudge, {
       expected: {
         status: caseData.expectedStatus,
       },

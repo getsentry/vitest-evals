@@ -10,7 +10,7 @@ type ScoredRefundCase = RefundCase & {
 
 describeEval("demo ai-sdk refund scorer failing example", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<ScoredRefundCase[]> => [
+  data: [
     {
       name: "judge expects approval for a denied invoice",
       input: "Refund invoice inv_404",
@@ -27,7 +27,7 @@ describeEval("demo ai-sdk refund scorer failing example", {
 
 describeEval("demo ai-sdk refund assertion failing example", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<AssertionRefundCase[]> => [
+  data: [
     {
       name: "asserts the wrong refund id after approval",
       input: "Refund invoice inv_123",

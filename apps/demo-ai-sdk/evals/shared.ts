@@ -8,14 +8,9 @@ import {
   parseRefundDecision,
   type RefundCase,
 } from "@demo/foobar";
-import {
-  aiSdkHarness,
-  type AiSdkRuntimeToolset,
-  type AiSdkToolset,
-} from "@vitest-evals/harness-ai-sdk";
+import { aiSdkHarness, type AiSdkToolset } from "@vitest-evals/harness-ai-sdk";
 import { generateText, stepCountIs } from "ai";
 import { z } from "zod";
-import { ToolCallJudge, type HarnessJudgeOptions } from "vitest-evals";
 
 const refundTools = {
   lookupInvoice: {
@@ -38,44 +33,16 @@ const refundTools = {
   },
 } satisfies AiSdkToolset<string, RefundCase>;
 
-async function runRefundAgent(
-  input: string,
-  tools: AiSdkRuntimeToolset<typeof refundTools>,
-) {
-  return generateText({
-    model: anthropic("claude-sonnet-4-5"),
-    system: REFUND_SYSTEM_PROMPT,
-    prompt: input,
-    tools,
-    stopWhen: stepCountIs(5),
-    temperature: 0,
-  });
-}
-
 export const refundHarness = aiSdkHarness({
   tools: refundTools,
-  run: async ({ input, tools }) => {
-    if (!tools) {
-      throw new Error("refund tools were not configured");
-    }
-
-    return runRefundAgent(input, tools);
-  },
+  run: async ({ input, runtime }) =>
+    generateText({
+      model: anthropic("claude-sonnet-4-5"),
+      system: REFUND_SYSTEM_PROMPT,
+      prompt: input,
+      tools: runtime.tools,
+      stopWhen: stepCountIs(5),
+      temperature: 0,
+    }),
   output: ({ result }) => parseRefundDecision(result.text),
-});
-
-const toolCallJudge = ToolCallJudge();
-
-export const expectedToolJudge = async (
-  opts: HarnessJudgeOptions<RefundCase>,
-) =>
-  toolCallJudge({
-    ...opts,
-    expectedTools: (opts.expectedTools as string[]).map((name) => ({
-      name,
-    })),
-  });
-
-Object.defineProperty(expectedToolJudge, "name", {
-  value: "ToolCallJudge",
 });

@@ -15,14 +15,21 @@ import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
 
+const tools = {
+  lookupInvoice: {
+    replay: true,
+    inputSchema: lookupInvoiceSchema,
+    execute: lookupInvoice,
+  },
+};
+
 const harness = aiSdkHarness({
-  run: ({ input }) =>
+  tools,
+  run: ({ input, runtime }) =>
     generateText({
       model: openai("gpt-4o-mini"),
       prompt: input,
-      tools: {
-        lookupInvoice,
-      },
+      tools: runtime.tools,
       stopWhen: stepCountIs(5),
     }),
 });
@@ -33,7 +40,8 @@ If your existing AI SDK app exposes its own entrypoint, wire that in directly:
 ```ts
 const harness = aiSdkHarness({
   createAgent: () => createRefundAgent(),
-  run: ({ agent, input }) => agent.run(input),
+  tools,
+  run: ({ agent, input, runtime }) => agent.run(input, runtime),
 });
 ```
 
@@ -43,6 +51,7 @@ The adapter infers:
 - usage diagnostics from `totalUsage` / `usage`
 - `run.output` from common AI SDK result fields such as `output`, `object`, and
   `text`
+- replay/cassette metadata for opt-in tools when they set `replay: true`
 
 See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in
 `docs/harness-first-rfc.md`.

@@ -2,6 +2,8 @@ import { beforeEach, expect, test, vi } from "vitest";
 import {
   assistantMessages,
   describeEval,
+  namedJudge,
+  ToolCallJudge,
   toolCalls,
   toolMessages,
   userMessages,
@@ -79,7 +81,7 @@ beforeEach(() => {
 });
 
 describeEval("harness mode", {
-  data: async () => [
+  data: [
     {
       name: "refund request",
       input: "Refund invoice inv_123",
@@ -112,6 +114,45 @@ describeEval("harness mode", {
           input: "Refund invoice inv_123",
           expectedStatus: "approved",
         }),
+      }),
+    );
+  },
+});
+
+describeEval("harness mode with bound judge helper", {
+  data: [
+    {
+      name: "refund request with explicit judge helper",
+      input: "Refund invoice inv_123",
+      expectedStatus: "approved",
+    },
+  ],
+  harness,
+  test: async ({ judge }) => {
+    const explicitJudge = vi.fn(
+      async (opts: HarnessJudgeOptions<RefundEvalCase>) => ({
+        score:
+          opts.rawInput === "Refund invoice inv_123" &&
+          opts.caseData.expectedStatus === "approved" &&
+          opts.toolCalls?.[0]?.name === "lookupInvoice"
+            ? 1
+            : 0,
+      }),
+    );
+
+    await judge(explicitJudge);
+
+    expect(explicitJudge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: "Refund invoice inv_123",
+        rawInput: "Refund invoice inv_123",
+        output: '{"status":"approved"}',
+        assistantOutput: "approved",
+        caseData: {
+          input: "Refund invoice inv_123",
+          expectedStatus: "approved",
+          name: "refund request with explicit judge helper",
+        },
       }),
     );
   },
@@ -247,6 +288,37 @@ test("toSatisfyJudge builds a synthetic run for raw output values", async () => 
       }),
     }),
   );
+});
+
+test("namedJudge assigns a stable custom name", async () => {
+  const judge = namedJudge("RefundJudge", async () => ({
+    score: 1,
+  }));
+
+  expect(judge.name).toBe("RefundJudge");
+  await expect({
+    status: "approved",
+  }).toSatisfyJudge(judge);
+});
+
+test("ToolCallJudge accepts string expected tools", async () => {
+  const judge = ToolCallJudge();
+
+  const result = await judge({
+    input: "Refund invoice inv_123",
+    output: '{"status":"approved"}',
+    expectedTools: ["lookupInvoice", "createRefund"],
+    toolCalls: [
+      {
+        name: "lookupInvoice",
+      },
+      {
+        name: "createRefund",
+      },
+    ],
+  });
+
+  expect(result.score).toBe(1);
 });
 
 test("normalized session helpers expose common access paths", () => {

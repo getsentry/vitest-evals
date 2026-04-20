@@ -64,7 +64,7 @@ import {
 } from "vitest-evals";
 
 describeEval("demo pi refund agent", {
-  data: async () => [
+  data: [
     {
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
@@ -76,13 +76,9 @@ describeEval("demo pi refund agent", {
     tools: foobarTools,
   }),
   judges: [ToolCallJudge()],
-  test: async ({ run, session, caseData }) => {
+  test: async ({ run, session, caseData, judge }) => {
     expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-    await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
-      rawInput: caseData.input,
-      caseData,
-      run,
-      session,
+    await judge(StructuredOutputJudge(), {
       expected: { status: caseData.expectedStatus },
     });
     expect(toolCalls(session).map((call) => call.name)).toEqual(
@@ -101,16 +97,31 @@ functions run against the same normalized `run`/`session` pair that the
 optional `test` callback receives, so the harness still executes exactly once
 per case.
 
-For explicit judge assertions inside a `test` callback, use
-`await expect(value).toSatisfyJudge(judge, context)`. The matcher can reuse the
-existing `run` and `session`, or synthesize a minimal run for plain output
-values.
+For explicit judge assertions inside a `test` callback, use the pre-bound
+`judge(...)` helper. It reuses the current `run`, `session`, `rawInput`, and
+`caseData` automatically:
+
+```ts
+test: async ({ judge, caseData }) => {
+  await judge(StructuredOutputJudge(), {
+    expected: { status: caseData.expectedStatus },
+  });
+}
+```
+
+The lower-level matcher still exists as
+`await expect(value).toSatisfyJudge(judge, context)` when you need to judge a
+raw value or a custom synthetic run.
+
+If you need a custom judge name in reporter output, wrap it with
+`namedJudge("MyJudge", fn)`.
 
 Older scorer-first APIs now live under `vitest-evals/legacy`. The root package
 is intentionally harness-first and judge-first.
 
-Tool replay is available for opt-in `pi-ai` tools. Configure it globally in
-Vitest and then mark individual tools with `replay: true`:
+Tool replay is available for opt-in tools in the first-party harnesses.
+Configure it globally in Vitest and then mark individual tools with
+`replay: true`:
 
 ```ts
 import tsconfigPaths from "vite-tsconfig-paths";

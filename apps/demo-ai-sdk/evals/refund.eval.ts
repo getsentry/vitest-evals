@@ -1,13 +1,18 @@
 import { expect } from "vitest";
 import type { RefundCase } from "@demo/foobar";
-import { describeEval, StructuredOutputJudge, toolCalls } from "vitest-evals";
-import { expectedToolJudge, refundHarness } from "./shared";
+import {
+  describeEval,
+  StructuredOutputJudge,
+  ToolCallJudge,
+  toolCalls,
+} from "vitest-evals";
+import { refundHarness } from "./shared";
 
 const outputJudge = StructuredOutputJudge();
 
 describeEval("demo ai-sdk refund agent", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<RefundCase[]> => [
+  data: [
     {
       name: "approves refundable invoice",
       input: "Refund invoice inv_123",
@@ -22,16 +27,12 @@ describeEval("demo ai-sdk refund agent", {
     },
   ],
   harness: refundHarness,
-  judges: [expectedToolJudge],
-  test: async ({ run, session, caseData }) => {
+  judges: [ToolCallJudge()],
+  test: async ({ run, session, caseData, judge }) => {
     expect(run.output).toMatchObject({
       status: caseData.expectedStatus,
     });
-    await expect(run.output).toSatisfyJudge(outputJudge, {
-      rawInput: caseData.input,
-      caseData,
-      run,
-      session,
+    await judge(outputJudge, {
       expected: {
         status: caseData.expectedStatus,
       },

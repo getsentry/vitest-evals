@@ -116,6 +116,15 @@ export type AiSdkRuntimeToolset<TTools extends AiSdkToolset<any, any>> = {
     : TTools[K];
 };
 
+export interface AiSdkRuntime<
+  TTools extends AiSdkToolset<TInput, TCase>,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> {
+  tools: AiSdkRuntimeToolset<TTools>;
+  signal?: AbortSignal;
+}
+
 export interface AiSdkHarnessRunArgs<
   TAgent,
   TInput,
@@ -125,7 +134,8 @@ export interface AiSdkHarnessRunArgs<
   agent: TAgent | undefined;
   input: TInput;
   context: HarnessContext<TCase>;
-  tools: AiSdkRuntimeToolset<TTools> | undefined;
+  runtime: AiSdkRuntime<TTools, TInput, TCase>;
+  tools: AiSdkRuntimeToolset<TTools>;
 }
 
 export interface AiSdkHarnessResultArgs<
@@ -189,12 +199,17 @@ export function aiSdkHarness<
         tools: options.tools,
         replayMetadataByToolCallId,
       });
+      const runtime = {
+        tools,
+        signal: context.signal,
+      } satisfies AiSdkRuntime<TTools, TInput, TCase>;
 
       try {
         const result = await runAgent(options, {
           agent,
           input,
           context,
+          runtime,
           tools,
         });
 
@@ -209,6 +224,7 @@ export function aiSdkHarness<
           agent,
           input,
           context,
+          runtime,
           tools,
           result,
         } satisfies AiSdkHarnessResultArgs<
@@ -307,9 +323,12 @@ async function runAgent<
   ) {
     return (
       args.agent as {
-        run: (input: TInput) => MaybePromise<TResult | HarnessRun>;
+        run: (
+          input: TInput,
+          runtime: AiSdkRuntime<TTools, TInput, TCase>,
+        ) => MaybePromise<TResult | HarnessRun>;
       }
-    ).run(args.input);
+    ).run(args.input, args.runtime);
   }
 
   if (
@@ -320,13 +339,16 @@ async function runAgent<
   ) {
     return (
       args.agent as {
-        generate: (input: TInput) => MaybePromise<TResult | HarnessRun>;
+        generate: (
+          input: TInput,
+          runtime: AiSdkRuntime<TTools, TInput, TCase>,
+        ) => MaybePromise<TResult | HarnessRun>;
       }
-    ).generate(args.input);
+    ).generate(args.input, args.runtime);
   }
 
   throw new Error(
-    "aiSdkHarness requires a run() function unless the provided agent exposes run(input) or generate(input).",
+    "aiSdkHarness requires a run() function unless the provided agent exposes run(input, runtime) or generate(input, runtime).",
   );
 }
 
@@ -358,12 +380,8 @@ function createToolset<
   tools: TTools | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
 }) {
-  if (!tools) {
-    return undefined;
-  }
-
   return Object.fromEntries(
-    Object.entries(tools).map(([toolName, tool]) => {
+    Object.entries(tools ?? {}).map(([toolName, tool]) => {
       if (tool.replay && !tool.execute) {
         throw new Error(
           `Tool replay requires execute() for ${toolName}. Provider-executed tools cannot be recorded automatically.`,

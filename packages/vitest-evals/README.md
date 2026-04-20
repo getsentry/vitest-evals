@@ -23,8 +23,8 @@ npm install -D @vitest-evals/harness-pi-ai
 - `run.session` is the canonical JSON-serializable trace used for reporting,
   tool assertions, replay metadata, and generic judges
 - suite-level `judges` run automatically on that same `run` and `session`
-- `await expect(value).toSatisfyJudge(judge, context)` runs an explicit judge
-  without rerunning the harness
+- the `test` callback gets a pre-bound `judge(...)` helper for explicit judge
+  assertions without rerunning the harness
 
 ## Harness Example
 
@@ -39,7 +39,7 @@ import {
 } from "vitest-evals";
 
 describeEval("refund agent", {
-  data: async () => [
+  data: [
     {
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
@@ -51,17 +51,13 @@ describeEval("refund agent", {
     tools: foobarTools,
   }),
   judges: [ToolCallJudge()],
-  test: async ({ run, session, caseData }) => {
+  test: async ({ run, session, caseData, judge }) => {
     expect(run.output).toMatchObject({ status: caseData.expectedStatus });
     expect(toolCalls(session).map((call) => call.name)).toEqual(
       caseData.expectedTools,
     );
 
-    await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
-      rawInput: caseData.input,
-      caseData,
-      run,
-      session,
+    await judge(StructuredOutputJudge(), {
       expected: { status: caseData.expectedStatus },
     });
   },
@@ -103,3 +99,29 @@ import {
 
 Use the legacy entrypoint for older suites. Use the root entrypoint for new
 harness-backed suites.
+
+Inside a `test` callback you can call `judge(...)` directly:
+
+```ts
+test: async ({ judge, caseData }) => {
+  await judge(StructuredOutputJudge(), {
+    expected: { status: caseData.expectedStatus },
+  });
+}
+```
+
+For lower-level cases, the matcher still exists as
+`await expect(value).toSatisfyJudge(judge, context)`.
+
+If you are writing a custom judge, wrap it with `namedJudge(...)` so reporter
+output uses a stable label:
+
+```ts
+import { namedJudge } from "vitest-evals";
+
+const RefundJudge = namedJudge("RefundJudge", async (opts) => {
+  return {
+    score: opts.output.includes('"status":"approved"') ? 1 : 0,
+  };
+});
+```

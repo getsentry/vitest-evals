@@ -147,7 +147,7 @@ const generateTextLikeResult = {
 } as const;
 
 describeEval("ai-sdk harness adapter", {
-  data: async () => [
+  data: [
     {
       input: "Refund invoice inv_123",
     },
@@ -208,14 +208,111 @@ describeEval("ai-sdk harness adapter", {
 });
 
 describeEval("ai-sdk harness adapter custom entrypoint", {
-  data: async () => [
+  data: [
     {
       input: "Generate structured output",
     },
   ],
   harness: aiSdkHarness({
-    createAgent: () => ({
-      generate: async () => ({
+    createAgent: () => {
+      const generate = vi.fn(
+        async (_input: string, runtime: { tools: Record<string, never> }) => ({
+          object: {
+            status: "approved",
+          },
+          steps: [
+            {
+              stepNumber: 0,
+              model: {
+                provider: "openai",
+                modelId: "gpt-4o-mini",
+              },
+              text: '{"status":"approved"}',
+              content: [],
+              reasoningText: undefined,
+              finishReason: "stop",
+              rawFinishReason: "stop",
+              toolCalls: [],
+              toolResults: [],
+              usage: {
+                inputTokens: 5,
+                inputTokenDetails: {
+                  noCacheTokens: 5,
+                  cacheReadTokens: 0,
+                  cacheWriteTokens: 0,
+                },
+                outputTokens: 2,
+                outputTokenDetails: {
+                  textTokens: 2,
+                  reasoningTokens: 0,
+                },
+                totalTokens: 7,
+              },
+              response: {
+                messages: [],
+              },
+            },
+          ],
+          totalUsage: {
+            inputTokens: 5,
+            inputTokenDetails: {
+              noCacheTokens: 5,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+            },
+            outputTokens: 2,
+            outputTokenDetails: {
+              textTokens: 2,
+              reasoningTokens: 0,
+            },
+            totalTokens: 7,
+          },
+        }),
+      );
+
+      return {
+        generate,
+      };
+    },
+  }),
+  test: async ({ run, session }) => {
+    expect(run.output).toEqual({
+      status: "approved",
+    });
+    expect(session.outputText).toBe('{"status":"approved"}');
+  },
+});
+
+test("default agent run receives wrapped runtime tools", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const run = vi.fn(
+    async (
+      _input: string,
+      runtime: {
+        tools: {
+          lookupInvoice: {
+            execute: NonNullable<
+              AiSdkToolset<string, DemoCase>["lookupInvoice"]["execute"]
+            >;
+          };
+        };
+      },
+    ) => {
+      const output = await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        text: '{"status":"approved"}',
         object: {
           status: "approved",
         },
@@ -231,8 +328,27 @@ describeEval("ai-sdk harness adapter custom entrypoint", {
             reasoningText: undefined,
             finishReason: "stop",
             rawFinishReason: "stop",
-            toolCalls: [],
-            toolResults: [],
+            toolCalls: [
+              {
+                type: "tool-call",
+                toolCallId: "call_lookup",
+                toolName: "lookupInvoice",
+                input: {
+                  invoiceId: "inv_123",
+                },
+              },
+            ],
+            toolResults: [
+              {
+                type: "tool-result",
+                toolCallId: "call_lookup",
+                toolName: "lookupInvoice",
+                input: {
+                  invoiceId: "inv_123",
+                },
+                output,
+              },
+            ],
             usage: {
               inputTokens: 5,
               inputTokenDetails: {
@@ -252,29 +368,53 @@ describeEval("ai-sdk harness adapter custom entrypoint", {
             },
           },
         ],
-        totalUsage: {
-          inputTokens: 5,
-          inputTokenDetails: {
-            noCacheTokens: 5,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-          },
-          outputTokens: 2,
-          outputTokenDetails: {
-            textTokens: 2,
-            reasoningTokens: 0,
-          },
-          totalTokens: 7,
-        },
-      }),
+      };
+    },
+  );
+
+  const harness = aiSdkHarness({
+    createAgent: () => ({
+      run,
     }),
-  }),
-  test: async ({ run, session }) => {
-    expect(run.output).toEqual({
-      status: "approved",
-    });
-    expect(session.outputText).toBe('{"status":"approved"}');
-  },
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string, DemoCase>,
+  });
+
+  const result = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
 });
 
 test("records and replays opt-in tools in auto mode", async () => {
@@ -297,16 +437,12 @@ test("records and replays opt-in tools in auto mode", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoCase>,
-    run: async ({ tools }) => {
-      const lookupInvoice = tools?.lookupInvoice;
-      if (!lookupInvoice?.execute) {
-        throw new Error("lookupInvoice execute() was not available");
-      }
-
+    run: async ({ runtime }) => {
+      const lookupInvoice = runtime.tools.lookupInvoice;
       const toolInput = {
         invoiceId: "inv_123",
       };
-      const toolOutput = await lookupInvoice.execute(toolInput, {
+      const toolOutput = await lookupInvoice.execute?.(toolInput, {
         toolCallId: "call_lookup",
         messages: [],
       } satisfies ToolExecutionOptions);
@@ -458,13 +594,8 @@ test("errors when strict mode is missing a recording", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoCase>,
-    run: async ({ tools }) => {
-      const lookupInvoice = tools?.lookupInvoice;
-      if (!lookupInvoice?.execute) {
-        throw new Error("lookupInvoice execute() was not available");
-      }
-
-      await lookupInvoice.execute(
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",
         },

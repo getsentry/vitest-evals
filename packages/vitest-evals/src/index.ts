@@ -26,12 +26,19 @@ import {
 import type { BaseJudgeOptions, JudgeFn, JudgeResult } from "./judges/types";
 import { wrapText } from "./wrapText";
 
+type MaybePromise<T> = T | Promise<T>;
+
 export interface HarnessEvalContext<TCase extends HarnessCase = HarnessCase> {
   input: TCase["input"];
   caseData: TCase;
   run: HarnessRun;
   session: HarnessRun["session"];
+  judge: RunJudge<TCase>;
 }
+
+export type HarnessCaseSource<TCase extends HarnessCase = HarnessCase> =
+  | TCase[]
+  | (() => MaybePromise<TCase[]>);
 
 export type HarnessJudgeOptions<TCase extends HarnessCase = HarnessCase> =
   BaseJudgeOptions & {
@@ -45,7 +52,7 @@ export type HarnessJudgeOptions<TCase extends HarnessCase = HarnessCase> =
 export interface HarnessDescribeEvalOptions<
   TCase extends HarnessCase = HarnessCase,
 > {
-  data: () => Promise<TCase[]>;
+  data: HarnessCaseSource<TCase>;
   harness: Harness<TCase["input"], TCase>;
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
   threshold?: number | null;
@@ -75,6 +82,15 @@ export type ToSatisfyJudge<R = unknown> = (
   judge: JudgeFn<any>,
   options?: JudgeAssertionOptions<any>,
 ) => Promise<R>;
+
+export type RunJudge<TCase extends HarnessCase = HarnessCase> = {
+  (judge: JudgeFn<any>, options?: JudgeAssertionOptions<TCase>): Promise<void>;
+  (
+    value: unknown,
+    judge: JudgeFn<any>,
+    options?: JudgeAssertionOptions<TCase>,
+  ): Promise<void>;
+};
 
 export interface EvalMatchers<R = unknown> {
   toSatisfyJudge: ToSatisfyJudge<R>;
@@ -147,15 +163,18 @@ expect.extend({
  * @example
  * ```javascript
  * describeEval("refund agent", {
- *   data: async () => [{ input: "Refund invoice inv_123" }],
+ *   data: [{ input: "Refund invoice inv_123" }],
  *   harness: piAiHarness({
  *     createAgent: () => createRefundAgent(),
  *     tools: refundTools,
  *   }),
  *   judges: [ToolCallJudge()],
- *   test: async ({ run, session }) => {
+ *   test: async ({ run, session, judge }) => {
  *     expect(run.output).toMatchObject({ status: "approved" });
  *     expect(toolCalls(session)).toHaveLength(2);
+ *     await judge(StructuredOutputJudge(), {
+ *       expected: { status: "approved" },
+ *     });
  *   },
  * });
  * ```
@@ -177,7 +196,7 @@ export function describeEval<TCase extends HarnessCase>(
     }
 
     const testFn = options.skipIf ? test.skipIf(options.skipIf()) : test;
-    for (const caseData of await options.data()) {
+    for (const caseData of await resolveCaseData(options.data)) {
       const { input, name: testName } = caseData;
       testFn(
         testName ?? formatHarnessTestName(input),
@@ -283,6 +302,32 @@ export function describeEval<TCase extends HarnessCase>(
             caseData,
             run,
             session: run.session,
+            judge: async (
+              valueOrJudge: unknown | JudgeFn<any>,
+              judgeOrOptions?: JudgeFn<any> | JudgeAssertionOptions<TCase>,
+              maybeOptions?: JudgeAssertionOptions<TCase>,
+            ) => {
+              const received =
+                typeof valueOrJudge === "function"
+                  ? (run.output ?? run)
+                  : valueOrJudge;
+              const judge =
+                typeof valueOrJudge === "function"
+                  ? (valueOrJudge as JudgeFn<any>)
+                  : (judgeOrOptions as JudgeFn<any>);
+              const judgeOptions =
+                typeof valueOrJudge === "function"
+                  ? (judgeOrOptions as JudgeAssertionOptions<TCase> | undefined)
+                  : maybeOptions;
+
+              await expect(received).toSatisfyJudge(judge, {
+                rawInput: input,
+                caseData,
+                run,
+                session: run.session,
+                ...(judgeOptions ?? {}),
+              });
+            },
           });
         },
       );
@@ -300,6 +345,12 @@ function formatHarnessTestName(input: unknown) {
   } catch {
     return String(input);
   }
+}
+
+async function resolveCaseData<TCase extends HarnessCase>(
+  data: HarnessCaseSource<TCase>,
+) {
+  return typeof data === "function" ? await data() : data;
 }
 
 function formatJudgeInput(input: unknown) {
@@ -512,6 +563,17 @@ export function formatScores(scores: (JudgeResult & { name: string })[]) {
       return scoreLine;
     })
     .join("\n\n");
+}
+
+export function namedJudge<TOptions extends BaseJudgeOptions>(
+  name: string,
+  judge: JudgeFn<TOptions>,
+): JudgeFn<TOptions> {
+  const named = ((opts: TOptions) => judge(opts)) as JudgeFn<TOptions>;
+  Object.defineProperty(named, "name", {
+    value: name,
+  });
+  return named;
 }
 
 export { wrapText } from "./wrapText";

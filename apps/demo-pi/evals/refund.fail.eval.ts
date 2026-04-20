@@ -15,7 +15,7 @@ const harness = piAiHarness({
 
 describeEval("demo pi refund scorer failing example", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<ScoredRefundCase[]> => [
+  data: [
     {
       name: "judge expects approval for a denied invoice",
       input: "Refund invoice inv_404",
@@ -32,7 +32,7 @@ describeEval("demo pi refund scorer failing example", {
 
 describeEval("demo pi refund assertion failing example", {
   skipIf: () => !process.env.ANTHROPIC_API_KEY,
-  data: async (): Promise<AssertionRefundCase[]> => [
+  data: [
     {
       name: "throws after the agent handles a missing invoice",
       input: "Refund invoice inv_missing",
