@@ -56,8 +56,8 @@ import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
-  StructuredOutputScorer,
-  ToolCallScorer,
+  StructuredOutputJudge,
+  ToolCallJudge,
   toolCalls,
 } from "vitest-evals";
 
@@ -73,10 +73,10 @@ describeEval("demo pi refund agent", {
     createAgent: () => createRefundAgent(),
     tools: foobarTools,
   }),
-  judges: [ToolCallScorer()],
+  judges: [ToolCallJudge()],
   test: async ({ run, session, caseData }) => {
     expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-    await expect(run.output).toSatisfyJudge(StructuredOutputScorer(), {
+    await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
       rawInput: caseData.input,
       caseData,
       run,
@@ -103,6 +103,8 @@ For explicit judge assertions inside a `test` callback, use
 `await expect(value).toSatisfyJudge(judge, context)`. The matcher can reuse the
 existing `run` and `session`, or synthesize a minimal run for plain output
 values.
+
+Older scorer-first APIs now live under `vitest-evals/legacy`.
 
 Tool replay is available for opt-in `pi-ai` tools. Configure it globally in
 Vitest and then mark individual tools with `replay: true`:

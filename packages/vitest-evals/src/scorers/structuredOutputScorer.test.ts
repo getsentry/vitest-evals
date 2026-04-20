@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from "vitest";
-import "../index"; // Import to register the toEval matcher
+import "../legacy"; // Import to register the toEval matcher
 import { StructuredOutputScorer } from "./structuredOutputScorer";
 
 describe("StructuredOutputScorer", () => {

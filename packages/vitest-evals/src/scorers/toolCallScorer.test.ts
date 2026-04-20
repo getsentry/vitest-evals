@@ -1,6 +1,6 @@
 import { expect, test, describe } from "vitest";
 import { ToolCallScorer } from "./toolCallScorer";
-import type { ToolCall } from "../index";
+import type { ToolCall } from "../legacy/shared";
 
 describe("ToolCallScorer", () => {
   describe("unordered tools (default)", () => {

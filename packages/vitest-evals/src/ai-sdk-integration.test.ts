@@ -1,4 +1,4 @@
-import { describeEval, ToolCallScorer, StructuredOutputScorer } from "./index";
+import { describeEval, StructuredOutputScorer, ToolCallScorer } from "./legacy";
 import { generateText, generateObject, tool, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";

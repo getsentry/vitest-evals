@@ -1,4 +1,4 @@
-import type { ScoreFn, BaseScorerOptions } from "../index";
+import type { BaseScorerOptions, ScoreFn } from "../legacy/shared";
 import {
   type BaseMatcherConfig,
   type MatchStrategy,

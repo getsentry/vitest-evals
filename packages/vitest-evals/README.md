@@ -10,7 +10,6 @@ npm install -D vitest-evals
 
 ## Core Concepts
 
-- `describeEval(...)` can still run legacy scorer-first suites
 - harness-backed suites treat the normalized run/session as the primary output
 - `toolCalls(session)` exposes normalized tool activity for assertions and
   reporter output
@@ -25,8 +24,8 @@ npm install -D vitest-evals
 ```ts
 import {
   describeEval,
-  StructuredOutputScorer,
-  ToolCallScorer,
+  StructuredOutputJudge,
+  ToolCallJudge,
   toolCalls,
 } from "vitest-evals";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
@@ -38,12 +37,12 @@ describeEval("refund agent", {
     tools: foobarTools,
   }),
   judges: [
-    ToolCallScorer(),
+    ToolCallJudge(),
   ],
   data: async () => [{ input: "Refund invoice inv_123" }],
   test: async ({ run, session }) => {
     expect(run.output).toMatchObject({ status: "approved" });
-    await expect(run.output).toSatisfyJudge(StructuredOutputScorer(), {
+    await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
       rawInput: "Refund invoice inv_123",
       run,
       session,
@@ -60,6 +59,9 @@ Harness-backed suites should show the configured runtime seam, not an opaque
 `myHarness` placeholder. In practice that means the example should include the
 agent factory and any required tool/runtime configuration as part of the
 harness setup.
+
+Legacy scorer-first suites and `evaluate(...)` now live under
+`vitest-evals/legacy`.
 
 `judges` run automatically for every case after the harness completes, and they
 reuse the same normalized `run` and `session` objects that the optional `test`

@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 import { createRefundAgent, foobarTools, type RefundCase } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, StructuredOutputScorer } from "vitest-evals";
+import { describeEval, StructuredOutputJudge } from "vitest-evals";
 
 type AssertionRefundCase = RefundCase;
 type ScoredRefundCase = RefundCase & {
@@ -27,7 +27,7 @@ describeEval("demo pi refund scorer failing example", {
     },
   ],
   harness,
-  judges: [StructuredOutputScorer()],
+  judges: [StructuredOutputJudge()],
 });
 
 describeEval("demo pi refund assertion failing example", {

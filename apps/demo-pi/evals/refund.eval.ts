@@ -3,14 +3,14 @@ import { createRefundAgent, foobarTools, type RefundCase } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
-  StructuredOutputScorer,
-  ToolCallScorer,
+  StructuredOutputJudge,
+  ToolCallJudge,
   toolCalls,
   type HarnessJudgeOptions,
 } from "vitest-evals";
 
-const toolCallJudge = ToolCallScorer();
-const outputJudge = StructuredOutputScorer();
+const toolCallJudge = ToolCallJudge();
+const outputJudge = StructuredOutputJudge();
 const expectedToolJudge = async (opts: HarnessJudgeOptions<RefundCase>) =>
   toolCallJudge({
     ...opts,
@@ -20,7 +20,7 @@ const expectedToolJudge = async (opts: HarnessJudgeOptions<RefundCase>) =>
   });
 
 Object.defineProperty(expectedToolJudge, "name", {
-  value: "ToolCallScorer",
+  value: "ToolCallJudge",
 });
 
 describeEval("demo pi refund agent", {

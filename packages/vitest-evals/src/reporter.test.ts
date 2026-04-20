@@ -190,7 +190,7 @@ describe("DefaultEvalReporter", () => {
             '{"status":"denied","invoiceId":"inv_404","reason":"Invoice is not refundable"}',
           scores: [
             {
-              name: "StructuredOutputScorer",
+              name: "StructuredOutputJudge",
               score: 0.2,
               metadata: {
                 rationale:
@@ -207,7 +207,7 @@ describe("DefaultEvalReporter", () => {
       "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [0.20] 42ms",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
-      "score   StructuredOutputScorer 0.20",
+      "score   StructuredOutputJudge 0.20",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
       'reason  Missing required fields: status - status: expected "approved", got "denied"',
@@ -570,11 +570,11 @@ describe("DefaultEvalReporter", () => {
           output: '{"status":"approved"}',
           scores: [
             {
-              name: "StructuredOutputScorer",
+              name: "StructuredOutputJudge",
               score: 1,
             },
             {
-              name: "ToolCallScorer",
+              name: "ToolCallJudge",
               score: 1,
             },
           ],
@@ -587,10 +587,10 @@ describe("DefaultEvalReporter", () => {
       "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [12 tok] 42ms",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
-      "score   StructuredOutputScorer 1.00",
+      "score   StructuredOutputJudge 1.00",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "score   ToolCallScorer 1.00",
+      "score   ToolCallJudge 1.00",
     );
   });
 });

@@ -1,4 +1,4 @@
-import { describeEval } from "./index";
+import { describeEval } from "./legacy";
 import { init, ClosedQA, Factuality, Levenshtein } from "autoevals";
 import OpenAI from "openai";
 

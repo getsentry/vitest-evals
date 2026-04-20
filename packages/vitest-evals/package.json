@@ -13,11 +13,17 @@
       "require": "./dist/index.js",
       "import": "./dist/index.mjs"
     },
-    "./evaluate": {
-      "source": "./src/evaluate/index.ts",
-      "types": "./dist/evaluate/index.d.ts",
-      "require": "./dist/evaluate/index.js",
-      "import": "./dist/evaluate/index.mjs"
+    "./judges": {
+      "source": "./src/judges/index.ts",
+      "types": "./dist/judges/index.d.ts",
+      "require": "./dist/judges/index.js",
+      "import": "./dist/judges/index.mjs"
+    },
+    "./legacy": {
+      "source": "./src/legacy.ts",
+      "types": "./dist/legacy.d.ts",
+      "require": "./dist/legacy.js",
+      "import": "./dist/legacy.mjs"
     },
     "./harness": {
       "source": "./src/harness.ts",
@@ -30,18 +36,6 @@
       "types": "./dist/reporter.d.ts",
       "require": "./dist/reporter.js",
       "import": "./dist/reporter.mjs"
-    },
-    "./scorers": {
-      "source": "./src/scorers/index.ts",
-      "types": "./dist/scorers/index.d.ts",
-      "require": "./dist/scorers/index.js",
-      "import": "./dist/scorers/index.mjs"
-    },
-    "./scorers/toolCallScorer": {
-      "source": "./src/scorers/toolCallScorer.ts",
-      "types": "./dist/scorers/toolCallScorer.d.ts",
-      "require": "./dist/scorers/toolCallScorer.js",
-      "import": "./dist/scorers/toolCallScorer.mjs"
     }
   },
   "scripts": {
