@@ -4,6 +4,7 @@ Monorepo for the next `vitest-evals` shape:
 
 - `packages/vitest-evals`: core eval runner, reporter, harness/session types, and
   scorer support
+- `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter
 - `packages/foobar`: example package with a small `pi-ai`-style refund agent
 - `apps/demo-pi`: end-to-end demo evals wired through the workspace packages
@@ -13,6 +14,7 @@ Monorepo for the next `vitest-evals` shape:
 ```text
 packages/
   vitest-evals/
+  harness-ai-sdk/
   harness-pi-ai/
   foobar/
 apps/
