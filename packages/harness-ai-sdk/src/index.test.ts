@@ -1,6 +1,24 @@
-import { expect } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import type { ToolExecutionOptions } from "ai";
+import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, toolCalls } from "vitest-evals";
-import { aiSdkHarness } from "./index";
+import { z } from "zod";
+import { aiSdkHarness, type AiSdkToolset } from "./index";
+
+type DemoCase = {
+  input: string;
+};
+
+let replayDir: string | undefined;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  if (replayDir) {
+    rmSync(replayDir, { recursive: true, force: true });
+    replayDir = undefined;
+  }
+});
 
 const generateTextLikeResult = {
   text: '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
@@ -257,4 +275,227 @@ describeEval("ai-sdk harness adapter custom entrypoint", {
     });
     expect(session.outputText).toBe('{"status":"approved"}');
   },
+});
+
+test("records and replays opt-in tools in auto mode", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const replayHarness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string, DemoCase>,
+    run: async ({ tools }) => {
+      const lookupInvoice = tools?.lookupInvoice;
+      if (!lookupInvoice?.execute) {
+        throw new Error("lookupInvoice execute() was not available");
+      }
+
+      const toolInput = {
+        invoiceId: "inv_123",
+      };
+      const toolOutput = await lookupInvoice.execute(toolInput, {
+        toolCallId: "call_lookup",
+        messages: [],
+      } satisfies ToolExecutionOptions);
+
+      return {
+        text: '{"status":"approved"}',
+        object: {
+          status: "approved",
+        },
+        steps: [
+          {
+            stepNumber: 0,
+            model: {
+              provider: "openai",
+              modelId: "gpt-4o-mini",
+            },
+            text: '{"status":"approved"}',
+            content: [],
+            reasoningText: undefined,
+            finishReason: "stop",
+            rawFinishReason: "stop",
+            toolCalls: [
+              {
+                type: "tool-call",
+                toolCallId: "call_lookup",
+                toolName: "lookupInvoice",
+                input: toolInput,
+              },
+            ],
+            toolResults: [
+              {
+                type: "tool-result",
+                toolCallId: "call_lookup",
+                toolName: "lookupInvoice",
+                input: toolInput,
+                output: toolOutput,
+              },
+            ],
+            usage: {
+              inputTokens: 5,
+              inputTokenDetails: {
+                noCacheTokens: 5,
+                cacheReadTokens: 0,
+                cacheWriteTokens: 0,
+              },
+              outputTokens: 2,
+              outputTokenDetails: {
+                textTokens: 2,
+                reasoningTokens: 0,
+              },
+              totalTokens: 7,
+            },
+            response: {
+              messages: [],
+            },
+          },
+        ],
+        totalUsage: {
+          inputTokens: 5,
+          inputTokenDetails: {
+            noCacheTokens: 5,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+          outputTokens: 2,
+          outputTokenDetails: {
+            textTokens: 2,
+            reasoningTokens: 0,
+          },
+          totalTokens: 7,
+        },
+      };
+    },
+  });
+
+  const firstRun = await replayHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  const firstCall = toolCalls(firstRun.session)[0];
+  expect(firstCall.metadata?.replay).toMatchObject({
+    status: "recorded",
+  });
+
+  const recordingPath = (
+    firstCall.metadata?.replay as { recordingPath: string }
+  ).recordingPath;
+  expect(recordingPath).toMatch(/^\.tmp-ai-sdk-replay-/);
+  const recording = JSON.parse(
+    readFileSync(join(process.cwd(), recordingPath), "utf8"),
+  ) as {
+    input: { invoiceId: string };
+    output: { invoiceId: string; refundable: boolean };
+  };
+  expect(recording.input).toEqual({
+    invoiceId: "inv_123",
+  });
+  expect(recording.output).toEqual({
+    invoiceId: "inv_123",
+    refundable: true,
+  });
+
+  execute.mockImplementation(async () => {
+    throw new Error("tool should not execute after the recording exists");
+  });
+
+  const secondRun = await replayHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
+    status: "replayed",
+  });
+});
+
+test("errors when strict mode is missing a recording", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "strict");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const replayHarness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string, DemoCase>,
+    run: async ({ tools }) => {
+      const lookupInvoice = tools?.lookupInvoice;
+      if (!lookupInvoice?.execute) {
+        throw new Error("lookupInvoice execute() was not available");
+      }
+
+      await lookupInvoice.execute(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        text: '{"status":"approved"}',
+      };
+    },
+  });
+
+  const error = await replayHarness
+    .run("Refund invoice inv_123", {
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+      task: {
+        meta: {},
+      },
+      artifacts: {},
+      setArtifact: vi.fn(),
+    })
+    .catch((caughtError) => caughtError);
+
+  expect(execute).not.toHaveBeenCalled();
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain(
+    "Missing replay recording for lookupInvoice",
+  );
 });

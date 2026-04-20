@@ -11,7 +11,27 @@ import type {
   ToolCallRecord,
   UsageSummary,
 } from "vitest-evals";
-import type { LanguageModelUsage, StepResult, ToolSet } from "ai";
+import {
+  executeWithReplay,
+  getReplayMetadataFromError,
+  normalizeReplayMetadata,
+} from "vitest-evals/replay";
+import type {
+  ReplayMetadata,
+  ReplayMode,
+  ToolRecording,
+  ToolReplayConfig,
+} from "vitest-evals/replay";
+import type {
+  InferToolInput,
+  InferToolOutput,
+  LanguageModelUsage,
+  StepResult,
+  Tool,
+  ToolExecuteFunction,
+  ToolExecutionOptions,
+  ToolSet,
+} from "ai";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -44,14 +64,68 @@ type AiSdkLikeResult = {
   errors?: Array<Record<string, JsonValue>>;
 };
 
+export interface AiSdkToolContext<
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> {
+  input: TInput;
+  caseData: TCase;
+  signal?: AbortSignal;
+  setArtifact: HarnessContext<TCase>["setArtifact"];
+  execution: ToolExecutionOptions;
+}
+
+export type AiSdkReplayMode = ReplayMode;
+
+export type AiSdkToolRecording<
+  TArgs extends JsonValue = JsonValue,
+  TResult extends JsonValue = JsonValue,
+> = ToolRecording<TArgs, TResult>;
+
+export type AiSdkToolReplayConfig<
+  TArgs extends JsonValue = JsonValue,
+  TResult extends JsonValue = JsonValue,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = ToolReplayConfig<TArgs, TResult, AiSdkToolContext<TInput, TCase>>;
+
+export type AiSdkToolDefinition<
+  TArgs extends JsonValue = JsonValue,
+  TResult extends JsonValue = JsonValue,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = Tool<TArgs, TResult> & {
+  replay?: boolean | AiSdkToolReplayConfig<TArgs, TResult, TInput, TCase>;
+};
+
+export type AiSdkToolset<
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = Record<string, AiSdkToolDefinition<any, any, TInput, TCase>>;
+
+export type AiSdkRuntimeToolset<TTools extends AiSdkToolset<any, any>> = {
+  [K in keyof TTools]: TTools[K] extends AiSdkToolDefinition<
+    infer TArgs extends JsonValue,
+    infer TResult extends JsonValue,
+    any,
+    any
+  >
+    ? Omit<TTools[K], "execute"> & {
+        execute?: ToolExecuteFunction<TArgs, TResult>;
+      }
+    : TTools[K];
+};
+
 export interface AiSdkHarnessRunArgs<
   TAgent,
   TInput,
   TCase extends HarnessCase<TInput>,
+  TTools extends AiSdkToolset<TInput, TCase>,
 > {
   agent: TAgent | undefined;
   input: TInput;
   context: HarnessContext<TCase>;
+  tools: AiSdkRuntimeToolset<TTools> | undefined;
 }
 
 export interface AiSdkHarnessResultArgs<
@@ -59,7 +133,8 @@ export interface AiSdkHarnessResultArgs<
   TInput,
   TCase extends HarnessCase<TInput>,
   TResult,
-> extends AiSdkHarnessRunArgs<TAgent, TInput, TCase> {
+  TTools extends AiSdkToolset<TInput, TCase>,
+> extends AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools> {
   result: TResult;
 }
 
@@ -68,26 +143,28 @@ export interface AiSdkHarnessOptions<
   TInput = string,
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
   TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TCase> = AiSdkToolset<TInput, TCase>,
 > {
   agent?: TAgent;
   createAgent?: () => MaybePromise<TAgent>;
+  tools?: TTools;
   run?: (
-    args: AiSdkHarnessRunArgs<TAgent, TInput, TCase>,
+    args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
   ) => MaybePromise<TResult | HarnessRun>;
   session?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>,
+    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<NormalizedSession>;
   output?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>,
+    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<JsonValue | undefined>;
   usage?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>,
+    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<UsageSummary>;
   timings?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>,
+    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<TimingSummary | undefined>;
   errors?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>,
+    args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
   name?: string;
 }
@@ -97,19 +174,28 @@ export function aiSdkHarness<
   TInput = string,
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
   TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TCase> = AiSdkToolset<TInput, TCase>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult>,
+  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
 ): Harness<TInput, TCase> {
   return {
     name: options.name ?? "ai-sdk",
     run: async (input, context) => {
       const agent = await resolveAgent(options);
+      const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
+      const tools = createToolset({
+        input,
+        context,
+        tools: options.tools,
+        replayMetadataByToolCallId,
+      });
 
       try {
         const result = await runAgent(options, {
           agent,
           input,
           context,
+          tools,
         });
 
         if (isHarnessRun(result)) {
@@ -123,8 +209,15 @@ export function aiSdkHarness<
           agent,
           input,
           context,
+          tools,
           result,
-        } satisfies AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult>;
+        } satisfies AiSdkHarnessResultArgs<
+          TAgent,
+          TInput,
+          TCase,
+          TResult,
+          TTools
+        >;
 
         const output = options.output
           ? await options.output(resultArgs)
@@ -134,7 +227,7 @@ export function aiSdkHarness<
           : resolveUsage(result);
         const session = options.session
           ? await options.session(resultArgs)
-          : resolveSession(input, result, output);
+          : resolveSession(input, result, output, replayMetadataByToolCallId);
 
         return {
           session,
@@ -153,7 +246,12 @@ export function aiSdkHarness<
         };
       } catch (error) {
         const run = {
-          session: resolveSession(input, undefined, undefined),
+          session: resolveSession(
+            input,
+            undefined,
+            undefined,
+            replayMetadataByToolCallId,
+          ),
           output: undefined,
           usage: {},
           artifacts:
@@ -174,7 +272,8 @@ async function resolveAgent<
   TInput,
   TCase extends HarnessCase<TInput>,
   TResult,
->(options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult>) {
+  TTools extends AiSdkToolset<TInput, TCase>,
+>(options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>) {
   if (options.agent !== undefined) {
     return options.agent;
   }
@@ -191,9 +290,10 @@ async function runAgent<
   TInput,
   TCase extends HarnessCase<TInput>,
   TResult,
+  TTools extends AiSdkToolset<TInput, TCase>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult>,
-  args: AiSdkHarnessRunArgs<TAgent, TInput, TCase>,
+  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+  args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
 ): Promise<TResult | HarnessRun> {
   if (options.run) {
     return options.run(args);
@@ -241,6 +341,104 @@ function isHarnessRun(value: unknown): value is HarnessRun {
     "errors" in value &&
     Array.isArray((value as HarnessRun).errors)
   );
+}
+
+function createToolset<
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TTools extends AiSdkToolset<TInput, TCase>,
+>({
+  input,
+  context,
+  tools,
+  replayMetadataByToolCallId,
+}: {
+  input: TInput;
+  context: HarnessContext<TCase>;
+  tools: TTools | undefined;
+  replayMetadataByToolCallId: Map<string, ReplayMetadata>;
+}) {
+  if (!tools) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(tools).map(([toolName, tool]) => {
+      if (tool.replay && !tool.execute) {
+        throw new Error(
+          `Tool replay requires execute() for ${toolName}. Provider-executed tools cannot be recorded automatically.`,
+        );
+      }
+
+      if (!tool.replay || !tool.execute) {
+        return [toolName, tool];
+      }
+
+      const execute = tool.execute;
+      const wrappedTool = {
+        ...tool,
+        execute: async (
+          toolInput: InferToolInput<typeof tool>,
+          execution: ToolExecutionOptions,
+        ) => {
+          const replayContext = {
+            input,
+            caseData: context.caseData,
+            signal: context.signal,
+            setArtifact: context.setArtifact,
+            execution,
+          } satisfies AiSdkToolContext<TInput, TCase>;
+
+          try {
+            const replayInput = toReplayJsonValue(
+              toolInput,
+              `${toolName} tool input`,
+            ) as InferToolInput<typeof tool> & JsonValue;
+            const result = await executeWithReplay({
+              toolName,
+              args: replayInput,
+              context: replayContext,
+              execute: async (replayedInput) => {
+                const output = execute(
+                  replayedInput as InferToolInput<typeof tool>,
+                  execution,
+                );
+
+                if (isAsyncIterable(output)) {
+                  throw new Error(
+                    `Tool replay only supports JSON-serializable outputs. ${toolName} returned an async iterable.`,
+                  );
+                }
+
+                return toReplayJsonValue(
+                  await output,
+                  `${toolName} tool output`,
+                ) as InferToolOutput<typeof tool> & JsonValue;
+              },
+              replay: tool.replay,
+            });
+
+            if (result.replay) {
+              replayMetadataByToolCallId.set(
+                execution.toolCallId,
+                result.replay,
+              );
+            }
+
+            return result.result as InferToolOutput<typeof tool>;
+          } catch (error) {
+            const replay = getReplayMetadataFromError(error);
+            if (replay) {
+              replayMetadataByToolCallId.set(execution.toolCallId, replay);
+            }
+            throw error;
+          }
+        },
+      } satisfies typeof tool;
+
+      return [toolName, wrappedTool];
+    }),
+  ) as AiSdkRuntimeToolset<TTools>;
 }
 
 function resolveOutput(result: unknown): JsonValue | undefined {
@@ -313,6 +511,7 @@ function resolveSession(
   input: unknown,
   result: unknown,
   output: JsonValue | undefined,
+  replayMetadataByToolCallId: Map<string, ReplayMetadata>,
 ): NormalizedSession {
   if (
     looksLikeSession((result as Record<string, unknown> | undefined)?.session)
@@ -335,7 +534,7 @@ function resolveSession(
   ];
 
   for (const step of steps) {
-    messages.push(...normalizeStep(step));
+    messages.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
   if (
@@ -415,7 +614,10 @@ function resolveOutputText(
   return typeof output === "string" ? output : undefined;
 }
 
-function normalizeStep(step: StepLike): NormalizedMessage[] {
+function normalizeStep(
+  step: StepLike,
+  replayMetadataByToolCallId: Map<string, ReplayMetadata>,
+): NormalizedMessage[] {
   const toolResultsById = new Map(
     (step.toolResults ?? []).map((toolResult) => [
       toolResult.toolCallId,
@@ -424,7 +626,7 @@ function normalizeStep(step: StepLike): NormalizedMessage[] {
   );
 
   const normalizedCalls = (step.toolCalls ?? []).map((toolCall) =>
-    normalizeToolCall(toolCall, toolResultsById),
+    normalizeToolCall(toolCall, toolResultsById, replayMetadataByToolCallId),
   );
   const assistantMetadata = normalizeMetadata({
     stepNumber: step.stepNumber,
@@ -465,12 +667,16 @@ function normalizeStep(step: StepLike): NormalizedMessage[] {
 function normalizeToolCall(
   toolCall: StepLike["toolCalls"][number],
   toolResultsById: Map<string, StepLike["toolResults"][number]>,
+  replayMetadataByToolCallId: Map<string, ReplayMetadata>,
 ): ToolCallRecord {
   const toolResult = toolResultsById.get(toolCall.toolCallId);
   const errorValue =
     toolCall.invalid || toolCall.error !== undefined
       ? normalizeError(toolCall.error)
       : undefined;
+  const replayMetadata = normalizeReplayMetadata(
+    replayMetadataByToolCallId.get(toolCall.toolCallId),
+  );
 
   return {
     id: toolCall.toolCallId,
@@ -491,6 +697,7 @@ function normalizeToolCall(
       preliminary: toolResult?.preliminary,
       providerMetadata:
         toolCall.providerMetadata ?? toolResult?.providerMetadata,
+      ...(replayMetadata ?? {}),
     }),
   };
 }
@@ -567,6 +774,17 @@ function normalizeContent(value: unknown): JsonValue {
   return toJsonValue(value) ?? String(value);
 }
 
+function toReplayJsonValue(value: unknown, label: string): JsonValue {
+  const normalized = toJsonValue(value);
+  if (normalized === undefined) {
+    throw new Error(
+      `Tool replay only supports JSON-serializable values. ${label} could not be normalized.`,
+    );
+  }
+
+  return normalized;
+}
+
 function toJsonValue(value: unknown): JsonValue | undefined {
   if (
     value === null ||
@@ -590,6 +808,14 @@ function toJsonValue(value: unknown): JsonValue | undefined {
   }
 
   return undefined;
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    Symbol.asyncIterator in value
+  );
 }
 
 function looksLikeSession(value: unknown): value is NormalizedSession {

@@ -416,9 +416,12 @@ describe("DefaultEvalReporter", () => {
       }) as any,
     );
 
-    expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "result  invoiceId=inv_123 [replayed | 23B | 6ms]",
-    );
+    const rendered = logger.log.mock.calls
+      .map(([line]) => stripVTControlCharacters(line))
+      .join("\n");
+
+    expect(rendered).toContain("tool    lookupInvoice [cached]");
+    expect(rendered).toContain("result  invoiceId=inv_123 [23B | 6ms]");
   });
 
   test("combines summarized tool arguments into the header at the middle verbose tier", () => {

@@ -175,4 +175,5 @@ Thumbs.db
 *.tmp
 *.temp
 temp/
+.vitest-evals/
 .codex

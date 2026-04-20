@@ -208,8 +208,11 @@ export default class DefaultEvalReporter extends VerboseReporter {
   private formatToolCallLines(call: ToolCallRecord, isLastItem: boolean) {
     const prefix = c.dim(`   ${this.getItemPrefix(isLastItem)} `);
     const detailPrefix = c.dim(this.getDetailPrefix(isLastItem));
+    const replayStatus = this.getReplayStatus(call);
     const lines = [
-      `${prefix}${c.dim(this.formatFieldLabel("tool"))} ${c.cyan(call.name)}`,
+      `${prefix}${c.dim(this.formatFieldLabel("tool"))} ${c.cyan(call.name)}${
+        replayStatus ? ` ${c.dim(`[${replayStatus}]`)}` : ""
+      }`,
     ];
 
     const argumentsSummary = this.formatToolCallArguments(call.arguments);
@@ -228,16 +231,12 @@ export default class DefaultEvalReporter extends VerboseReporter {
 
   private formatToolCallOutcome(call: ToolCallRecord) {
     const totalTokens = this.getToolCallTokens(call);
-    const replayStatus = this.getReplayStatus(call);
     const summary = call.error
       ? this.summarizeValue(call.error)
       : this.summarizeToolResult(call.result, call.arguments);
     const responseSize = this.getSerializedSize(call.error ?? call.result);
     const metrics: string[] = [];
 
-    if (replayStatus) {
-      metrics.push(replayStatus);
-    }
     if (this.toolDetailLevel >= 2 && totalTokens && totalTokens > 0) {
       metrics.push(`${totalTokens} tok`);
     } else if (this.toolDetailLevel >= 2 && responseSize !== null) {
@@ -582,8 +581,11 @@ export default class DefaultEvalReporter extends VerboseReporter {
       "status" in replay
     ) {
       const status = (replay as { status?: unknown }).status;
-      if (status === "recorded" || status === "replayed") {
-        return status;
+      if (status === "recorded") {
+        return "recorded";
+      }
+      if (status === "replayed") {
+        return "cached";
       }
     }
 

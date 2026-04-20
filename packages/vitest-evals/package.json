@@ -31,6 +31,12 @@
       "require": "./dist/harness.js",
       "import": "./dist/harness.mjs"
     },
+    "./replay": {
+      "source": "./src/replay.ts",
+      "types": "./dist/replay.d.ts",
+      "require": "./dist/replay.js",
+      "import": "./dist/replay.mjs"
+    },
     "./reporter": {
       "source": "./src/reporter.ts",
       "types": "./dist/reporter.d.ts",

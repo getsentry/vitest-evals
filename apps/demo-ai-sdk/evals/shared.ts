@@ -8,7 +8,11 @@ import {
   parseRefundDecision,
   type RefundCase,
 } from "@demo/foobar";
-import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
+import {
+  aiSdkHarness,
+  type AiSdkRuntimeToolset,
+  type AiSdkToolset,
+} from "@vitest-evals/harness-ai-sdk";
 import { generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { ToolCallJudge, type HarnessJudgeOptions } from "vitest-evals";
@@ -16,6 +20,7 @@ import { ToolCallJudge, type HarnessJudgeOptions } from "vitest-evals";
 const refundTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
+    replay: true,
     inputSchema: z.object({
       invoiceId: z
         .string()
@@ -31,21 +36,31 @@ const refundTools = {
     }),
     execute: createRefund,
   },
-};
+} satisfies AiSdkToolset<string, RefundCase>;
 
-async function runRefundAgent(input: string) {
+async function runRefundAgent(
+  input: string,
+  tools: AiSdkRuntimeToolset<typeof refundTools>,
+) {
   return generateText({
     model: anthropic("claude-sonnet-4-5"),
     system: REFUND_SYSTEM_PROMPT,
     prompt: input,
-    tools: refundTools,
+    tools,
     stopWhen: stepCountIs(5),
     temperature: 0,
   });
 }
 
 export const refundHarness = aiSdkHarness({
-  run: async ({ input }) => runRefundAgent(input),
+  tools: refundTools,
+  run: async ({ input, tools }) => {
+    if (!tools) {
+      throw new Error("refund tools were not configured");
+    }
+
+    return runRefundAgent(input, tools);
+  },
   output: ({ result }) => parseRefundDecision(result.text),
 });
 
