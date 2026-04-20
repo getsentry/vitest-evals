@@ -87,6 +87,33 @@ functions run against the same normalized `run`/`session` pair that the
 optional `test` callback receives, so the harness still executes exactly once
 per case.
 
+Tool replay is available for opt-in `pi-ai` tools. Configure it globally in
+Vitest and then mark individual tools with `replay: true`:
+
+```ts
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  plugins: [tsconfigPaths()],
+  test: {
+    include: [
+      "packages/**/*.test.ts",
+      "packages/**/*.eval.ts",
+      "apps/**/*.test.ts",
+      "apps/**/*.eval.ts",
+    ],
+    env: {
+      VITEST_EVALS_REPLAY_MODE: "auto",
+      VITEST_EVALS_REPLAY_DIR: ".vitest-evals/recordings",
+    },
+  },
+});
+```
+
+`auto` replays when a recording exists and writes a new one otherwise. `strict`
+errors on missing recordings. Recordings are stored under
+`.vitest-evals/recordings/<tool-name>/`.
+
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`
 script. The `apps/demo-pi` example is a live Pi Mono demo backed by
 `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`, so it expects

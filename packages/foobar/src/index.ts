@@ -53,6 +53,7 @@ const REFUND_SYSTEM_PROMPT = [
 export const foobarTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
+    replay: true,
     execute: async ({ invoiceId }: { invoiceId: string }) => {
       const invoices: Record<string, InvoiceRecord> = {
         inv_123: {

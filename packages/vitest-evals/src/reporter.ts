@@ -226,12 +226,16 @@ export default class DefaultEvalReporter extends VerboseReporter {
 
   private formatToolCallOutcome(call: ToolCallRecord) {
     const totalTokens = this.getToolCallTokens(call);
+    const replayStatus = this.getReplayStatus(call);
     const summary = call.error
       ? this.summarizeValue(call.error)
       : this.summarizeToolResult(call.result, call.arguments);
     const responseSize = this.getSerializedSize(call.error ?? call.result);
     const metrics: string[] = [];
 
+    if (replayStatus) {
+      metrics.push(replayStatus);
+    }
     if (this.toolDetailLevel >= 2 && totalTokens && totalTokens > 0) {
       metrics.push(`${totalTokens} tok`);
     } else if (this.toolDetailLevel >= 2 && responseSize !== null) {
@@ -548,6 +552,23 @@ export default class DefaultEvalReporter extends VerboseReporter {
 
     const metadataTotalTokens = call.metadata?.totalTokens;
     return typeof metadataTotalTokens === "number" ? metadataTotalTokens : null;
+  }
+
+  private getReplayStatus(call: ToolCallRecord) {
+    const replay = call.metadata?.replay;
+    if (
+      replay &&
+      typeof replay === "object" &&
+      !Array.isArray(replay) &&
+      "status" in replay
+    ) {
+      const status = (replay as { status?: unknown }).status;
+      if (status === "recorded" || status === "replayed") {
+        return status;
+      }
+    }
+
+    return null;
   }
 
   private getSerializedSize(value: unknown) {

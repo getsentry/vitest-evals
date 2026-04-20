@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { attachHarnessRunToError } from "vitest-evals";
 import type {
   Harness,
@@ -13,6 +16,9 @@ import type {
 } from "vitest-evals";
 
 type MaybePromise<T> = T | Promise<T>;
+const DEFAULT_REPLAY_DIR = ".vitest-evals/recordings";
+
+export type PiAiReplayMode = "off" | "auto" | "strict" | "record";
 
 export interface PiAiEventSink {
   message: (message: NormalizedMessage) => void;
@@ -36,6 +42,38 @@ export interface PiAiToolContext<
   setArtifact: HarnessContext<TCase>["setArtifact"];
 }
 
+export interface PiAiToolRecording<
+  TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
+  TResult extends JsonValue = JsonValue,
+> {
+  writtenAt: string;
+  toolName: string;
+  input: TArgs;
+  output?: TResult;
+  error?: {
+    message: string;
+    type?: string;
+    [key: string]: JsonValue | undefined;
+  };
+  metadata?: Record<string, JsonValue | undefined>;
+}
+
+export interface PiAiToolReplayConfig<
+  TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
+  TResult extends JsonValue = JsonValue,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> {
+  key?: (
+    args: TArgs,
+    context: PiAiToolContext<TInput, TCase>,
+  ) => MaybePromise<JsonValue>;
+  sanitize?: (
+    recording: PiAiToolRecording<TArgs, TResult>,
+  ) => MaybePromise<PiAiToolRecording<TArgs, TResult>>;
+  version?: string;
+}
+
 export interface PiAiToolDefinition<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -43,6 +81,7 @@ export interface PiAiToolDefinition<
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
 > {
   description?: string;
+  replay?: boolean | PiAiToolReplayConfig<TArgs, TResult, TInput, TCase>;
   execute: (
     args: TArgs,
     context: PiAiToolContext<TInput, TCase>,
@@ -71,6 +110,12 @@ type ToolResult<TTool> = TTool extends PiAiToolDefinition<
 >
   ? TResult
   : never;
+
+type ReplayMetadata = {
+  status: "recorded" | "replayed";
+  recordingPath: string;
+  cacheKey: string;
+};
 
 export type PiAiRuntime<
   TTools extends PiAiToolset<TInput, TCase>,
@@ -394,21 +439,29 @@ function createRuntime<
       toolName,
       async (args: Record<string, JsonValue>) => {
         const startedAt = new Date();
+        const toolContext = {
+          input,
+          caseData: context.caseData,
+          signal: context.signal,
+          setArtifact: context.setArtifact,
+        } satisfies PiAiToolContext<TInput, TCase>;
+
         try {
-          const result = await tool.execute(args, {
-            input,
-            caseData: context.caseData,
-            signal: context.signal,
-            setArtifact: context.setArtifact,
+          const execution = await executeToolWithReplay({
+            toolName,
+            tool,
+            args,
+            context: toolContext,
           });
           const finishedAt = new Date();
           const call = {
             name: toolName,
             arguments: args,
-            result,
+            result: execution.result,
             startedAt: startedAt.toISOString(),
             finishedAt: finishedAt.toISOString(),
             durationMs: finishedAt.getTime() - startedAt.getTime(),
+            metadata: normalizeToolMetadata(execution.replay),
           } satisfies ToolCallRecord;
           toolCalls.push(call);
           messages.push({
@@ -417,24 +470,30 @@ function createRuntime<
           });
           messages.push({
             role: "tool",
-            content: result,
+            content: execution.result,
             metadata: {
               name: toolName,
             },
           });
-          return result;
+          return execution.result;
         } catch (error) {
           const finishedAt = new Date();
+          const replay =
+            error && typeof error === "object" && "vitestEvalsReplay" in error
+              ? ((
+                  error as {
+                    vitestEvalsReplay?: ReplayMetadata;
+                  }
+                ).vitestEvalsReplay ?? undefined)
+              : undefined;
           const call = {
             name: toolName,
             arguments: args,
-            error: {
-              message: error instanceof Error ? error.message : String(error),
-              type: error instanceof Error ? error.name : "Error",
-            },
+            error: serializeToolError(error),
             startedAt: startedAt.toISOString(),
             finishedAt: finishedAt.toISOString(),
             durationMs: finishedAt.getTime() - startedAt.getTime(),
+            metadata: normalizeToolMetadata(replay),
           } satisfies ToolCallRecord;
           toolCalls.push(call);
           messages.push({
@@ -578,4 +637,259 @@ function looksLikeSession(value: unknown): value is NormalizedSession {
     "messages" in value &&
     Array.isArray((value as { messages?: unknown[] }).messages)
   );
+}
+
+async function executeToolWithReplay<
+  TArgs extends Record<string, JsonValue>,
+  TResult extends JsonValue,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+>({
+  toolName,
+  tool,
+  args,
+  context,
+}: {
+  toolName: string;
+  tool: PiAiToolDefinition<TArgs, TResult, TInput, TCase>;
+  args: TArgs;
+  context: PiAiToolContext<TInput, TCase>;
+}) {
+  const replay = normalizeReplayConfig(tool.replay);
+  const replayMode = resolveReplayMode();
+
+  if (!replay || replayMode === "off") {
+    return {
+      result: await tool.execute(args, context),
+    };
+  }
+
+  const cacheKeyInput = replay.key ? await replay.key(args, context) : args;
+  const cacheKey = createCacheKey(toolName, cacheKeyInput, replay.version);
+  const absoluteRecordingPath = join(
+    process.cwd(),
+    resolveReplayDirectory(),
+    toolName,
+    `${cacheKey}.json`,
+  );
+  const recordingPath = relative(process.cwd(), absoluteRecordingPath);
+
+  if (replayMode === "auto" || replayMode === "strict") {
+    const recording = await readRecording<TResult>(absoluteRecordingPath);
+    if (recording) {
+      const replayMetadata = {
+        status: "replayed",
+        recordingPath,
+        cacheKey,
+      } satisfies ReplayMetadata;
+
+      if (recording.error) {
+        throw attachReplayMetadata(
+          deserializeRecordedError(recording.error),
+          replayMetadata,
+        );
+      }
+
+      return {
+        result: recording.output as TResult,
+        replay: replayMetadata,
+      };
+    }
+
+    if (replayMode === "strict") {
+      throw new Error(
+        `Missing replay recording for ${toolName}: ${recordingPath}`,
+      );
+    }
+  }
+
+  try {
+    const result = await tool.execute(args, context);
+    const replayMetadata = {
+      status: "recorded",
+      recordingPath,
+      cacheKey,
+    } satisfies ReplayMetadata;
+
+    await writeRecording(absoluteRecordingPath, replay, {
+      writtenAt: new Date().toISOString(),
+      toolName,
+      input: args,
+      output: result,
+      metadata: {
+        cacheKey,
+        version: replay.version,
+        mode: replayMode,
+      },
+    });
+
+    return {
+      result,
+      replay: replayMetadata,
+    };
+  } catch (error) {
+    const replayMetadata = {
+      status: "recorded",
+      recordingPath,
+      cacheKey,
+    } satisfies ReplayMetadata;
+    const serializedError = serializeToolError(error);
+
+    await writeRecording(absoluteRecordingPath, replay, {
+      writtenAt: new Date().toISOString(),
+      toolName,
+      input: args,
+      error: serializedError,
+      metadata: {
+        cacheKey,
+        version: replay.version,
+        mode: replayMode,
+      },
+    });
+
+    throw attachReplayMetadata(error, replayMetadata);
+  }
+}
+
+function normalizeReplayConfig<
+  TArgs extends Record<string, JsonValue>,
+  TResult extends JsonValue,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+>(
+  replay:
+    | boolean
+    | PiAiToolReplayConfig<TArgs, TResult, TInput, TCase>
+    | undefined,
+) {
+  if (!replay) {
+    return null;
+  }
+
+  return replay === true ? {} : replay;
+}
+
+function resolveReplayMode(): PiAiReplayMode {
+  const value = process.env.VITEST_EVALS_REPLAY_MODE;
+  if (
+    value === "auto" ||
+    value === "strict" ||
+    value === "record" ||
+    value === "off"
+  ) {
+    return value;
+  }
+
+  return "off";
+}
+
+function resolveReplayDirectory() {
+  return process.env.VITEST_EVALS_REPLAY_DIR ?? DEFAULT_REPLAY_DIR;
+}
+
+function createCacheKey(
+  toolName: string,
+  input: JsonValue,
+  version: string | undefined,
+) {
+  return createHash("sha256")
+    .update(
+      stableStringify({
+        toolName,
+        input,
+        version: version ?? null,
+      }),
+    )
+    .digest("hex");
+}
+
+function stableStringify(value: JsonValue): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  const keys = Object.keys(value).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+    .join(",")}}`;
+}
+
+async function readRecording<TResult extends JsonValue>(
+  recordingPath: string,
+): Promise<PiAiToolRecording<Record<string, JsonValue>, TResult> | null> {
+  try {
+    const content = await readFile(recordingPath, "utf8");
+    return JSON.parse(content) as PiAiToolRecording<
+      Record<string, JsonValue>,
+      TResult
+    >;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRecording<
+  TArgs extends Record<string, JsonValue>,
+  TResult extends JsonValue,
+>(
+  recordingPath: string,
+  replay: PiAiToolReplayConfig<TArgs, TResult, any, any>,
+  recording: PiAiToolRecording<TArgs, TResult>,
+) {
+  const sanitized = replay.sanitize
+    ? await replay.sanitize(recording)
+    : recording;
+  await mkdir(dirname(recordingPath), { recursive: true });
+  await writeFile(recordingPath, JSON.stringify(sanitized, null, 2));
+}
+
+function serializeToolError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      type: error.name,
+    };
+  }
+
+  return {
+    message: String(error),
+    type: "Error",
+  };
+}
+
+function deserializeRecordedError(error: {
+  message: string;
+  type?: string;
+}) {
+  const replayedError = new Error(error.message);
+  replayedError.name = error.type ?? "Error";
+  return replayedError;
+}
+
+function attachReplayMetadata(error: unknown, replay: ReplayMetadata) {
+  const baseError =
+    error instanceof Error
+      ? error
+      : new Error(String(error ?? "Unknown error"));
+  return Object.assign(baseError, {
+    vitestEvalsReplay: replay,
+  });
+}
+
+function normalizeToolMetadata(replay: ReplayMetadata | undefined) {
+  if (!replay) {
+    return undefined;
+  }
+
+  return {
+    replay: {
+      status: replay.status,
+      recordingPath: replay.recordingPath,
+      cacheKey: replay.cacheKey,
+    },
+  } satisfies Record<string, JsonValue>;
 }

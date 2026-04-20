@@ -1,4 +1,6 @@
-import { expect, test, vi } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
@@ -20,6 +22,16 @@ const tools = {
 } satisfies PiAiToolset<string, DemoCase>;
 
 type DemoRuntime = PiAiRuntime<typeof tools, string, DemoCase>;
+
+let replayDir: string | undefined;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  if (replayDir) {
+    rmSync(replayDir, { recursive: true, force: true });
+    replayDir = undefined;
+  }
+});
 
 const runAgent = vi.fn(
   async ({
@@ -149,4 +161,141 @@ test("attaches a partial run when the harness errors", async () => {
       },
     },
   ]);
+});
+
+test("records and replays opt-in tools in auto mode", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const replayHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        execute,
+      },
+    } satisfies PiAiToolset<string, DemoCase>,
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        decision: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const firstRun = await replayHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  const firstCall = toolCalls(firstRun.session)[0];
+  expect(firstCall.metadata?.replay).toMatchObject({
+    status: "recorded",
+  });
+
+  const recordingPath = (
+    firstCall.metadata?.replay as { recordingPath: string }
+  ).recordingPath;
+  const recording = JSON.parse(
+    readFileSync(join(process.cwd(), recordingPath), "utf8"),
+  ) as {
+    input: { invoiceId: string };
+    output: { invoiceId: string; refundable: boolean };
+  };
+  expect(recording.input).toEqual({
+    invoiceId: "inv_123",
+  });
+  expect(recording.output).toEqual({
+    invoiceId: "inv_123",
+    refundable: true,
+  });
+
+  execute.mockImplementation(async () => {
+    throw new Error("tool should not execute after the recording exists");
+  });
+
+  const secondRun = await replayHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
+    status: "replayed",
+  });
+});
+
+test("errors when strict mode is missing a recording", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "strict");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const replayHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        execute,
+      },
+    } satisfies PiAiToolset<string, DemoCase>,
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        decision: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const error = await replayHarness
+    .run("Refund invoice inv_123", {
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+      task: {
+        meta: {},
+      },
+      artifacts: {},
+      setArtifact: vi.fn(),
+    })
+    .catch((caughtError) => caughtError);
+
+  expect(execute).not.toHaveBeenCalled();
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain(
+    "Missing replay recording for lookupInvoice",
+  );
 });

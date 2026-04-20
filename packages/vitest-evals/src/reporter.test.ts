@@ -374,6 +374,53 @@ describe("DefaultEvalReporter", () => {
     );
   });
 
+  test("includes replay metadata in tool result summaries", () => {
+    const { reporter, logger } = createDetailedReporter(2);
+
+    reporter.onTestCaseResult(
+      createTestCase({
+        harness: {
+          name: "pi-ai",
+          run: {
+            output: {
+              status: "approved",
+            },
+            session: {
+              messages: [
+                {
+                  role: "assistant",
+                  content: "approved",
+                  toolCalls: [
+                    {
+                      name: "lookupInvoice",
+                      durationMs: 6,
+                      result: {
+                        invoiceId: "inv_123",
+                      },
+                      metadata: {
+                        replay: {
+                          status: "replayed",
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            usage: {
+              totalTokens: 12,
+            },
+            errors: [],
+          },
+        },
+      }) as any,
+    );
+
+    expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
+      "result  invoiceId=inv_123 [replayed | 23B | 6ms]",
+    );
+  });
+
   test("combines summarized tool arguments into the header at the middle verbose tier", () => {
     const { reporter, logger } = createDetailedReporter(3);
 
