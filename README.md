@@ -54,7 +54,12 @@ The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
 ```ts
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, ToolCallScorer, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  StructuredOutputScorer,
+  ToolCallScorer,
+  toolCalls,
+} from "vitest-evals";
 
 describeEval("demo pi refund agent", {
   data: async () => [
@@ -71,6 +76,13 @@ describeEval("demo pi refund agent", {
   judges: [ToolCallScorer()],
   test: async ({ run, session, caseData }) => {
     expect(run.output).toMatchObject({ status: caseData.expectedStatus });
+    await expect(run.output).toSatisfyJudge(StructuredOutputScorer(), {
+      rawInput: caseData.input,
+      caseData,
+      run,
+      session,
+      expected: { status: caseData.expectedStatus },
+    });
     expect(toolCalls(session).map((call) => call.name)).toEqual(
       caseData.expectedTools,
     );
@@ -86,6 +98,11 @@ Harness-backed suites can also declare automatic `judges`. Those judge
 functions run against the same normalized `run`/`session` pair that the
 optional `test` callback receives, so the harness still executes exactly once
 per case.
+
+For explicit judge assertions inside a `test` callback, use
+`await expect(value).toSatisfyJudge(judge, context)`. The matcher can reuse the
+existing `run` and `session`, or synthesize a minimal run for plain output
+values.
 
 Tool replay is available for opt-in `pi-ai` tools. Configure it globally in
 Vitest and then mark individual tools with `replay: true`:

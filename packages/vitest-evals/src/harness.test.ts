@@ -1,7 +1,10 @@
-import { beforeEach, expect, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import {
+  assistantMessages,
   describeEval,
   toolCalls,
+  toolMessages,
+  userMessages,
   type Harness,
   type HarnessJudgeOptions,
   type HarnessContext,
@@ -149,4 +152,149 @@ describeEval("harness mode with automatic judges", {
       }),
     );
   },
+});
+
+test("toSatisfyJudge reuses normalized harness run data", async () => {
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+      expectedStatus: "approved",
+      name: "explicit judge",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  const explicitJudge = vi.fn(
+    async (opts: HarnessJudgeOptions<RefundEvalCase>) => ({
+      score:
+        (opts.run.output as { status?: string }).status === "approved" &&
+        opts.toolCalls?.[0]?.name === "lookupInvoice"
+          ? 1
+          : 0,
+    }),
+  );
+
+  await expect(run).toSatisfyJudge(explicitJudge);
+
+  expect(explicitJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+      rawInput: "Refund invoice inv_123",
+      output: '{"status":"approved"}',
+      assistantOutput: "approved",
+      run: expect.objectContaining({
+        output: {
+          status: "approved",
+        },
+      }),
+      session: run.session,
+      toolCalls: [
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+        },
+      ],
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+    }),
+  );
+});
+
+test("toSatisfyJudge builds a synthetic run for raw output values", async () => {
+  const outputJudge = vi.fn(async (opts: HarnessJudgeOptions) => ({
+    score: opts.output.includes('"status":"approved"') ? 1 : 0,
+  }));
+
+  await expect({
+    status: "approved",
+    refundId: "rf_inv_123",
+  }).toSatisfyJudge(outputJudge, {
+    rawInput: "Refund invoice inv_123",
+  });
+
+  expect(outputJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+      rawInput: "Refund invoice inv_123",
+      output: '{"status":"approved","refundId":"rf_inv_123"}',
+      run: expect.objectContaining({
+        output: {
+          status: "approved",
+          refundId: "rf_inv_123",
+        },
+      }),
+      session: expect.objectContaining({
+        messages: [
+          {
+            role: "user",
+            content: "Refund invoice inv_123",
+          },
+          {
+            role: "assistant",
+            content: {
+              status: "approved",
+              refundId: "rf_inv_123",
+            },
+          },
+        ],
+      }),
+    }),
+  );
+});
+
+test("normalized session helpers expose common access paths", () => {
+  const session: HarnessRun["session"] = {
+    messages: [
+      {
+        role: "system",
+        content: "You are a refund agent.",
+      },
+      {
+        role: "user",
+        content: "Refund invoice inv_123",
+      },
+      {
+        role: "assistant",
+        content: "Checking the invoice.",
+      },
+      {
+        role: "assistant",
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: {
+          invoiceId: "inv_123",
+        },
+      },
+    ],
+    outputText: "approved",
+  };
+
+  expect(userMessages(session)).toEqual([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+  ]);
+  expect(assistantMessages(session)).toHaveLength(2);
+  expect(toolMessages(session)).toEqual([
+    {
+      role: "tool",
+      content: {
+        invoiceId: "inv_123",
+      },
+    },
+  ]);
 });

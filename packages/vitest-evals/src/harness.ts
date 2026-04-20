@@ -94,6 +94,29 @@ export function toolCalls(session: NormalizedSession): ToolCallRecord[] {
   return session.messages.flatMap((message) => message.toolCalls ?? []);
 }
 
+export function messagesByRole(
+  session: NormalizedSession,
+  role: NormalizedMessage["role"],
+): NormalizedMessage[] {
+  return session.messages.filter((message) => message.role === role);
+}
+
+export function systemMessages(session: NormalizedSession) {
+  return messagesByRole(session, "system");
+}
+
+export function userMessages(session: NormalizedSession) {
+  return messagesByRole(session, "user");
+}
+
+export function assistantMessages(session: NormalizedSession) {
+  return messagesByRole(session, "assistant");
+}
+
+export function toolMessages(session: NormalizedSession) {
+  return messagesByRole(session, "tool");
+}
+
 export function attachHarnessRunToError(
   error: unknown,
   run: HarnessRun,

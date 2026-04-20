@@ -14,11 +14,21 @@ npm install -D vitest-evals
 - harness-backed suites treat the normalized run/session as the primary output
 - `toolCalls(session)` exposes normalized tool activity for assertions and
   reporter output
+- `userMessages(session)`, `assistantMessages(session)`, and
+  `toolMessages(session)` expose common message access paths without forcing
+  raw message-array plumbing
+- `await expect(value).toSatisfyJudge(judge, context)` runs an explicit judge
+  against the same normalized harness data used by automatic suite-level judges
 
 ## Harness Example
 
 ```ts
-import { describeEval, ToolCallScorer, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  StructuredOutputScorer,
+  ToolCallScorer,
+  toolCalls,
+} from "vitest-evals";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 
@@ -33,6 +43,14 @@ describeEval("refund agent", {
   data: async () => [{ input: "Refund invoice inv_123" }],
   test: async ({ run, session }) => {
     expect(run.output).toMatchObject({ status: "approved" });
+    await expect(run.output).toSatisfyJudge(StructuredOutputScorer(), {
+      rawInput: "Refund invoice inv_123",
+      run,
+      session,
+      expected: {
+        status: "approved",
+      },
+    });
     expect(toolCalls(session).map((call) => call.name)).toContain("lookupInvoice");
   },
 });

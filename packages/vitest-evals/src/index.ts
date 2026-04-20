@@ -12,11 +12,15 @@ import type {
   HarnessCase,
   HarnessContext,
   HarnessRun,
+  JsonValue,
+  NormalizedSession,
 } from "./harness";
 import {
   attachHarnessRunToError,
+  assistantMessages,
   getHarnessRunFromError,
   toolCalls,
+  userMessages,
 } from "./harness";
 import { wrapText } from "./wrapText";
 
@@ -128,8 +132,29 @@ export type ToEval<R = unknown> = (
   threshold?: number,
 ) => Promise<R>;
 
+export type JudgeAssertionOptions<TCase extends HarnessCase = HarnessCase> =
+  Partial<
+    Omit<
+      HarnessJudgeOptions<TCase>,
+      "input" | "output" | "caseData" | "run" | "session"
+    >
+  > & {
+    input?: string;
+    rawInput?: TCase["input"];
+    caseData?: TCase;
+    run?: HarnessRun;
+    session?: HarnessRun["session"];
+    threshold?: number;
+  };
+
+export type ToSatisfyJudge<R = unknown> = (
+  judge: ScoreFn<any>,
+  options?: JudgeAssertionOptions<any>,
+) => Promise<R>;
+
 export interface EvalMatchers<R = unknown> {
   toEval: ToEval<R>;
+  toSatisfyJudge: ToSatisfyJudge<R>;
 }
 
 declare module "vitest" {
@@ -189,8 +214,6 @@ expect.extend({
     scoreFn: ScoreFn<any>,
     threshold = 1.0,
   ) {
-    const { isNot } = this;
-
     const taskOutput = await taskFn(input);
     const output =
       typeof taskOutput === "string" ? taskOutput : taskOutput.result;
@@ -205,6 +228,39 @@ expect.extend({
     return {
       pass: (result.score ?? 0) >= threshold,
       message: () => formatScores([{ ...result, name: scoreFn.name }]),
+    };
+  },
+
+  toSatisfyJudge: async function toSatisfyJudge(
+    received: unknown,
+    judge: ScoreFn<any>,
+    options: JudgeAssertionOptions<any> = {},
+  ) {
+    const { threshold = 1.0, ...context } = options;
+    const judgeOptions = buildJudgeAssertionOptions(received, context);
+
+    let result = judge(judgeOptions);
+    if (result instanceof Promise) {
+      result = await result;
+    }
+
+    const score = result.score ?? 0;
+    const pass = score >= threshold;
+    const scores = [
+      {
+        ...result,
+        name: judge.name || "AnonymousJudge",
+      },
+    ];
+
+    return {
+      pass,
+      message: () =>
+        [
+          `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
+          `Output: ${wrapText(judgeOptions.output)}`,
+          formatScores(scores),
+        ].join("\n\n"),
     };
   },
 });
@@ -506,6 +562,160 @@ function formatJudgeOutput(run: HarnessRun) {
   return run.session.outputText ?? "";
 }
 
+function buildJudgeAssertionOptions<TCase extends HarnessCase = HarnessCase>(
+  received: unknown,
+  options: Omit<JudgeAssertionOptions<TCase>, "threshold">,
+): HarnessJudgeOptions<TCase> {
+  const run = resolveJudgeRun(received, options);
+  const rawInput =
+    options.rawInput ??
+    (userMessages(run.session)[0]?.content as TCase["input"] | undefined) ??
+    undefined;
+  const input =
+    options.input ?? (rawInput !== undefined ? formatJudgeInput(rawInput) : "");
+
+  return {
+    ...(options as Record<string, any>),
+    input,
+    rawInput,
+    output: formatJudgeOutput(run),
+    assistantOutput:
+      options.assistantOutput ??
+      run.session.outputText ??
+      resolveAssistantOutput(run.session),
+    caseData:
+      options.caseData ??
+      ((rawInput !== undefined ? { input: rawInput } : { input }) as TCase),
+    run,
+    session: options.session ?? run.session,
+    toolCalls: options.toolCalls ?? (toolCalls(run.session) as ToolCall[]),
+  };
+}
+
+function resolveJudgeRun<TCase extends HarnessCase = HarnessCase>(
+  received: unknown,
+  options: Omit<JudgeAssertionOptions<TCase>, "threshold">,
+): HarnessRun {
+  if (options.run) {
+    return options.session
+      ? {
+          ...options.run,
+          session: options.session,
+        }
+      : options.run;
+  }
+
+  if (looksLikeHarnessRun(received)) {
+    return options.session
+      ? {
+          ...received,
+          session: options.session,
+        }
+      : received;
+  }
+
+  const session =
+    options.session ??
+    (looksLikeNormalizedSession(received)
+      ? received
+      : createSyntheticJudgeSession(received, options));
+
+  return {
+    session,
+    output: inferJudgeOutputValue(received, session),
+    usage: {},
+    errors: [],
+  };
+}
+
+function createSyntheticJudgeSession<TCase extends HarnessCase = HarnessCase>(
+  received: unknown,
+  options: Omit<JudgeAssertionOptions<TCase>, "threshold">,
+): NormalizedSession {
+  const messages: NormalizedSession["messages"] = [];
+  const rawInput = options.rawInput;
+  if (rawInput !== undefined) {
+    messages.push({
+      role: "user",
+      content: normalizeJudgeJsonValue(rawInput),
+    });
+  }
+
+  const assistantContent = normalizeJudgeJsonValue(received);
+  if (assistantContent !== undefined) {
+    messages.push({
+      role: "assistant",
+      content: assistantContent,
+    });
+  }
+
+  return {
+    messages,
+    outputText:
+      options.assistantOutput ??
+      (typeof received === "string" ? received : undefined),
+  };
+}
+
+function inferJudgeOutputValue(
+  received: unknown,
+  session: NormalizedSession,
+): JsonValue | undefined {
+  if (looksLikeHarnessRun(received)) {
+    return received.output;
+  }
+
+  if (looksLikeNormalizedSession(received)) {
+    return session.outputText ?? normalizeJudgeJsonValue(received.messages);
+  }
+
+  return normalizeJudgeJsonValue(received);
+}
+
+function resolveAssistantOutput(session: NormalizedSession) {
+  const assistantContent = [...assistantMessages(session)]
+    .reverse()
+    .find((message) => typeof message.content === "string");
+  return typeof assistantContent?.content === "string"
+    ? assistantContent.content
+    : undefined;
+}
+
+function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as JsonValue;
+  } catch {
+    return String(value);
+  }
+}
+
+function looksLikeHarnessRun(value: unknown): value is HarnessRun {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    value !== null &&
+    "session" in value &&
+    "usage" in value &&
+    "errors" in value
+  );
+}
+
+function looksLikeNormalizedSession(
+  value: unknown,
+): value is NormalizedSession {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    value !== null &&
+    "messages" in value &&
+    Array.isArray((value as { messages?: unknown[] }).messages)
+  );
+}
+
 export function formatScores(scores: (Score & { name: string })[]) {
   return scores
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
@@ -538,9 +748,14 @@ export function formatScores(scores: (Score & { name: string })[]) {
 
 export { wrapText } from "./wrapText";
 export {
+  assistantMessages,
   attachHarnessRunToError,
   getHarnessRunFromError,
+  messagesByRole,
+  systemMessages,
   toolCalls,
+  toolMessages,
+  userMessages,
   type Harness,
   type HarnessCase,
   type HarnessContext,
