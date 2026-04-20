@@ -1,0 +1,25 @@
+{
+  "name": "@demo/foobar",
+  "private": true,
+  "version": "0.1.0",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "0.67.68",
+    "@mariozechner/pi-ai": "0.67.68",
+    "@vitest-evals/harness-pi-ai": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup --config ./tsup.config.ts"
+  }
+}

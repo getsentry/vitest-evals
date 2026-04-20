@@ -12,11 +12,11 @@ describe("formatScores", () => {
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "# Scorer C [0.5]
+      "Scorer C [0.5]
 
-      # Scorer A [0.8]
+      Scorer A [0.8]
 
-      # Scorer B [1.0]"
+      Scorer B [1.0]"
     `);
   });
 
@@ -38,23 +38,14 @@ describe("formatScores", () => {
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "# Scorer C [0.5]
+      "Scorer C [0.5]
+      reason  Incorrect answer
+      output  Paris
 
-      ## Rationale
+      Scorer A [0.8]
+      reason  Missing some details
 
-      Incorrect answer
-
-      ## Response
-
-      Paris
-
-      # Scorer A [0.8]
-
-      ## Rationale
-
-      Missing some details
-
-      # Scorer B [1.0]"
+      Scorer B [1.0]"
     `);
   });
 
@@ -67,9 +58,9 @@ describe("formatScores", () => {
     const result = formatScores(scores);
 
     expect(result).toMatchInlineSnapshot(`
-      "# Scorer A [0.0]
+      "Scorer A [0.0]
 
-      # Scorer B [0.8]"
+      Scorer B [0.8]"
     `);
   });
 });

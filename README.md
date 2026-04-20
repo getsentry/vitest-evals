@@ -1,281 +1,92 @@
 # vitest-evals
 
-End-to-end evaluation framework for AI agents, built on Vitest.
+Monorepo for the next `vitest-evals` shape:
 
-## Installation
+- `packages/vitest-evals`: core eval runner, reporter, harness/session types, and
+  scorer support
+- `packages/harness-pi-ai`: `pi-ai`-focused harness adapter
+- `packages/foobar`: example package with a small `pi-ai`-style refund agent
+- `apps/demo-pi`: end-to-end demo evals wired through the workspace packages
 
-```shell
-npm install -D vitest-evals
-```
+## Workspace Layout
 
-## Quick Start
-
-```javascript
-import { describeEval } from "vitest-evals";
-
-describeEval("deploy agent", {
-  data: async () => [
-    { input: "Deploy the latest release to production", expected: "deployed" },
-    { input: "Roll back the last deploy", expected: "rolled back" },
-  ],
-  task: async (input) => {
-    const response = await myAgent.run(input);
-    return response;
-  },
-  scorers: [
-    async ({ output, expected }) => ({
-      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
-    }),
-  ],
-  threshold: 0.8,
-});
-```
-
-## Tasks
-
-Tasks process inputs and return outputs. Two formats are supported:
-
-```javascript
-// Simple: just return a string
-const task = async (input) => "response";
-
-// With tool tracking: return a TaskResult
-const task = async (input) => ({
-  result: "response",
-  toolCalls: [
-    { name: "search", arguments: { query: "..." }, result: {...} }
-  ]
-});
-```
-
-## Test Data
-
-Each test case requires an `input` field. Use `name` to give tests a descriptive label:
-
-```javascript
-data: async () => [
-  { name: "simple deploy", input: "Deploy to staging" },
-  { name: "deploy with rollback", input: "Deploy to prod, roll back if errors" },
-],
-```
-
-Additional fields (like `expected`, `expectedTools`) are passed through to scorers.
-
-## Lifecycle Hooks
-
-Use `beforeEach` and `afterEach` for setup and teardown:
-
-```javascript
-describeEval("agent with database", {
-  beforeEach: async () => {
-    await db.seed();
-  },
-  afterEach: async () => {
-    await db.clean();
-  },
-  data: async () => [{ input: "Find recent errors" }],
-  task: myAgentTask,
-  scorers: [async ({ output }) => ({ score: output.includes("error") ? 1.0 : 0.0 })],
-});
-```
-
-## Scorers
-
-Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own.
-
-### ToolCallScorer
-
-Evaluates if the expected tools were called with correct arguments.
-
-```javascript
-import { ToolCallScorer } from "vitest-evals";
-
-describeEval("tool usage", {
-  data: async () => [
-    {
-      input: "Find Italian restaurants",
-      expectedTools: [
-        { name: "search", arguments: { type: "restaurant" } },
-        { name: "filter", arguments: { cuisine: "italian" } },
-      ],
-    },
-  ],
-  task: myTask,
-  scorers: [ToolCallScorer()],
-});
-
-// Strict order and parameters
-scorers: [ToolCallScorer({ ordered: true, params: "strict" })];
-
-// Flexible evaluation
-scorers: [ToolCallScorer({ requireAll: false, allowExtras: false })];
-```
-
-**Default behavior:**
-
-- Strict parameter matching (exact equality required)
-- Any order allowed
-- Extra tools allowed
-- All expected tools required
-
-### StructuredOutputScorer
-
-Evaluates if the output matches expected structured data (JSON).
-
-```javascript
-import { StructuredOutputScorer } from "vitest-evals";
-
-describeEval("query generation", {
-  data: async () => [
-    {
-      input: "Show me errors from today",
-      expected: {
-        dataset: "errors",
-        query: "",
-        sort: "-timestamp",
-        timeRange: { statsPeriod: "24h" },
-      },
-    },
-  ],
-  task: myTask,
-  scorers: [StructuredOutputScorer()],
-});
-
-// Fuzzy matching
-scorers: [StructuredOutputScorer({ match: "fuzzy" })];
-
-// Custom validation
-scorers: [
-  StructuredOutputScorer({
-    match: (expected, actual, key) => {
-      if (key === "age") return actual >= 18 && actual <= 100;
-      return expected === actual;
-    },
-  }),
-];
-```
-
-### Custom Scorers
-
-```javascript
-// Inline scorer
-const LengthScorer = async ({ output }) => ({
-  score: output.length > 50 ? 1.0 : 0.0,
-});
-
-// TypeScript scorer with custom options
-import { type ScoreFn, type BaseScorerOptions } from "vitest-evals";
-
-interface CustomOptions extends BaseScorerOptions {
-  minLength: number;
-}
-
-const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
-  score: opts.output.length >= opts.minLength ? 1.0 : 0.0,
-});
-```
-
-## AI SDK Integration
-
-See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a complete example with the Vercel AI SDK.
-
-Transform provider responses to our format:
-
-```javascript
-const { text, steps } = await generateText({
-  model: openai("gpt-4o"),
-  prompt: input,
-  tools: { myTool: myToolDefinition },
-});
-
-return {
-  result: text,
-  toolCalls: steps
-    .flatMap((step) => step.toolCalls)
-    .map((call) => ({
-      name: call.toolName,
-      arguments: call.args,
-    })),
-};
-```
-
-## Advanced Usage
-
-### Using autoevals
-
-For evaluation using the autoevals library:
-
-```javascript
-import { Factuality, ClosedQA } from "autoevals";
-
-scorers: [
-  Factuality,
-  ClosedQA.partial({
-    criteria: "Does the answer mention Paris?",
-  }),
-];
-```
-
-### Skip Tests Conditionally
-
-```javascript
-describeEval("gpt-4 tests", {
-  skipIf: () => !process.env.OPENAI_API_KEY,
-  // ...
-});
-```
-
-### Existing Test Suites
-
-For integration with existing Vitest test suites, you can use the `.toEval()` matcher:
-
-> **Deprecated**: The `.toEval()` helper is deprecated. Use `describeEval()` instead for better test organization and multiple scorers support.
-
-```javascript
-import "vitest-evals";
-
-test("capital check", () => {
-  const simpleFactuality = async ({ output, expected }) => ({
-    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
-  });
-
-  expect("What is the capital of France?").toEval(
-    "Paris",
-    answerQuestion,
-    simpleFactuality,
-    0.8
-  );
-});
-```
-
-## Configuration
-
-### Separate Eval Configuration
-
-Create `vitest.evals.config.ts`:
-
-```javascript
-import { defineConfig } from "vitest/config";
-import defaultConfig from "./vitest.config";
-
-export default defineConfig({
-  ...defaultConfig,
-  test: {
-    ...defaultConfig.test,
-    include: ["src/**/*.eval.{js,ts}"],
-  },
-});
-```
-
-Run evals separately:
-
-```shell
-vitest --config=vitest.evals.config.ts
+```text
+packages/
+  vitest-evals/
+  harness-pi-ai/
+  foobar/
+apps/
+  demo-pi/
 ```
 
 ## Development
 
-```shell
+```sh
 pnpm install
+pnpm typecheck
 pnpm test
+pnpm evals
+pnpm evals -- -v
+pnpm evals -- -vv
+pnpm evals -- -vvv
+pnpm evals -- -vvvv
+pnpm evals:verbose
+pnpm build
 ```
+
+Verbosity tiers for eval output:
+
+- `-v` or `-vv`: tool summary lines
+- `-vvv`: tool headers include summarized arguments
+- `-vvvv`: adds raw tool payload lines (`raw in`, `raw out`, `raw err`)
+
+The root Vitest config is intentionally small. Package name resolution comes
+from the workspace `tsconfig` paths via `vite-tsconfig-paths`, and package
+boundaries are expressed in package manifests rather than hard-coded alias
+tables.
+
+## Example
+
+The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
+
+```ts
+import { createRefundAgent, foobarTools } from "@demo/foobar";
+import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { describeEval, ToolCallScorer, toolCalls } from "vitest-evals";
+
+describeEval("demo pi refund agent", {
+  data: async () => [
+    {
+      input: "Refund invoice inv_123",
+      expectedStatus: "approved",
+      expectedTools: ["lookupInvoice", "createRefund"],
+    },
+  ],
+  harness: piAiHarness({
+    createAgent: () => createRefundAgent(),
+    tools: foobarTools,
+  }),
+  judges: [ToolCallScorer()],
+  test: async ({ run, session, caseData }) => {
+    expect(run.output).toMatchObject({ status: caseData.expectedStatus });
+    expect(toolCalls(session).map((call) => call.name)).toEqual(
+      caseData.expectedTools,
+    );
+  },
+});
+```
+
+See [apps/demo-pi/README.md](apps/demo-pi/README.md)
+for the demo app entrypoint and [packages/foobar/src/index.ts](packages/foobar/src/index.ts)
+for the example agent/runtime seam.
+
+Harness-backed suites can also declare automatic `judges`. Those judge
+functions run against the same normalized `run`/`session` pair that the
+optional `test` callback receives, so the harness still executes exactly once
+per case.
+
+`pnpm evals` fans out to each workspace package or app that exposes an `evals`
+script. The `apps/demo-pi` example is a live Pi Mono demo backed by
+`@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`, so it expects
+`ANTHROPIC_API_KEY` in `.env` or `.env.local`. The demo app also includes
+intentional failing examples, so `pnpm evals` exits non-zero today.

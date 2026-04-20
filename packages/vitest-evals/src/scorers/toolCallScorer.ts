@@ -121,7 +121,7 @@ export function ToolCallScorer(
   // Determine the argument matcher
   const argMatcher = createMatcher(params, fuzzyOptions);
 
-  return async (opts) => {
+  const scorer: ScoreFn<ToolCallScorerOptions> = async (opts) => {
     const expectedTools = opts.expectedTools || [];
     const actualCalls = opts.toolCalls || [];
 
@@ -159,6 +159,12 @@ export function ToolCallScorer(
       allowExtras,
     });
   };
+
+  Object.defineProperty(scorer, "name", {
+    value: "ToolCallScorer",
+  });
+
+  return scorer;
 }
 
 /**

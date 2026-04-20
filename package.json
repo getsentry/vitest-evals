@@ -1,49 +1,19 @@
 {
-  "name": "vitest-evals",
-  "version": "0.8.0",
-  "sideEffects": false,
-  "types": "./dist/index.d.ts",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "files": [
-    "dist"
-  ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
-    },
-    "./reporter": {
-      "types": "./dist/reporter.d.ts",
-      "require": "./dist/reporter.js",
-      "import": "./dist/reporter.mjs"
-    },
-    "./scorers": {
-      "types": "./dist/scorers/index.d.ts",
-      "require": "./dist/scorers/index.js",
-      "import": "./dist/scorers/index.mjs"
-    },
-    "./scorers/toolCallScorer": {
-      "types": "./dist/scorers/toolCallScorer.d.ts",
-      "require": "./dist/scorers/toolCallScorer.js",
-      "import": "./dist/scorers/toolCallScorer.mjs"
-    },
-    "./evaluate": {
-      "types": "./dist/evaluate/index.d.ts",
-      "require": "./dist/evaluate/index.js",
-      "import": "./dist/evaluate/index.mjs"
-    }
-  },
+  "name": "vitest-evals-workspace",
+  "private": true,
   "scripts": {
-    "build": "tsup",
-    "format": "biome format --write",
-    "lint": "biome lint",
-    "lint:fix": "biome lint --fix",
-    "prepare": "npm run build && simple-git-hooks",
-    "test": "dotenv -e .env -e .env.local -- vitest run --reporter=./src/reporter.ts",
-    "test:watch": "dotenv -e .env -e .env.local -- vitest --reporter=./src/reporter.ts",
-    "test:ci": "dotenv -e .env -e .env.local -- vitest run --coverage --reporter=./src/reporter.ts --reporter=junit --outputFile=tests.junit.xml"
+    "build": "pnpm -r --if-present run build",
+    "evals": "node ./scripts/run-workspace-evals.mjs",
+    "evals:verbose": "node ./scripts/run-workspace-evals.mjs -v",
+    "evals:fail": "node ./scripts/run-workspace-evals.mjs --fail",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "prepare": "simple-git-hooks",
+    "typecheck": "tsc --noEmit",
+    "test": "dotenv -e .env -e .env.local -- vitest run packages --config=./vitest.config.ts --reporter=./packages/vitest-evals/src/reporter.ts",
+    "test:watch": "dotenv -e .env -e .env.local -- vitest packages --config=./vitest.config.ts --reporter=./packages/vitest-evals/src/reporter.ts",
+    "test:ci": "dotenv -e .env -e .env.local -- vitest run packages --config=./vitest.config.ts --coverage --reporter=./packages/vitest-evals/src/reporter.ts --reporter=junit --outputFile=tests.junit.xml"
   },
   "repository": {
     "type": "git",
@@ -56,20 +26,6 @@
   },
   "homepage": "https://github.com/getsentry/vitest-evals#readme",
   "description": "",
-  "peerDependencies": {
-    "ai": ">=4 <7",
-    "tinyrainbow": ">=2 <4",
-    "vitest": ">=4 <5",
-    "zod": ">=3 <5"
-  },
-  "peerDependenciesMeta": {
-    "ai": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@ai-sdk/openai": "^3.0.48",
     "@biomejs/biome": "^1.9.4",
@@ -84,6 +40,7 @@
     "tinyrainbow": "^3.1.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.2",
     "zod": "^4.3.6"
   },

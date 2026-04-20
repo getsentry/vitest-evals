@@ -133,7 +133,7 @@ export function StructuredOutputScorer(
       ? match // Use custom function directly with its original signature
       : createMatcher(match, fuzzyOptions);
 
-  return async (opts) => {
+  const scorer: ScoreFn<StructuredOutputScorerOptions> = async (opts) => {
     const expected = opts.expected || {};
     const output = opts.output;
 
@@ -262,4 +262,10 @@ export function StructuredOutputScorer(
       },
     };
   };
+
+  Object.defineProperty(scorer, "name", {
+    value: "StructuredOutputScorer",
+  });
+
+  return scorer;
 }

@@ -1,0 +1,64 @@
+{
+  "name": "vitest-evals",
+  "version": "0.8.0",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    },
+    "./evaluate": {
+      "source": "./src/evaluate/index.ts",
+      "types": "./dist/evaluate/index.d.ts",
+      "require": "./dist/evaluate/index.js",
+      "import": "./dist/evaluate/index.mjs"
+    },
+    "./harness": {
+      "source": "./src/harness.ts",
+      "types": "./dist/harness.d.ts",
+      "require": "./dist/harness.js",
+      "import": "./dist/harness.mjs"
+    },
+    "./reporter": {
+      "source": "./src/reporter.ts",
+      "types": "./dist/reporter.d.ts",
+      "require": "./dist/reporter.js",
+      "import": "./dist/reporter.mjs"
+    },
+    "./scorers": {
+      "source": "./src/scorers/index.ts",
+      "types": "./dist/scorers/index.d.ts",
+      "require": "./dist/scorers/index.js",
+      "import": "./dist/scorers/index.mjs"
+    },
+    "./scorers/toolCallScorer": {
+      "source": "./src/scorers/toolCallScorer.ts",
+      "types": "./dist/scorers/toolCallScorer.d.ts",
+      "require": "./dist/scorers/toolCallScorer.js",
+      "import": "./dist/scorers/toolCallScorer.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ./tsup.config.ts"
+  },
+  "peerDependencies": {
+    "ai": ">=4 <7",
+    "tinyrainbow": ">=2 <4",
+    "vitest": ">=4 <5",
+    "zod": ">=3 <5"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  }
+}
