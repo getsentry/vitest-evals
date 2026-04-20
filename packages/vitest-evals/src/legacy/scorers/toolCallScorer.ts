@@ -55,7 +55,7 @@ export interface ToolCallScorerConfig extends BaseMatcherConfig {
 }
 
 /**
- * A configurable scorer for evaluating tool usage in LLM responses.
+ * A configurable legacy scorer for evaluating tool usage in LLM responses.
  *
  * The test data defines WHAT tools/arguments are expected,
  * while this scorer defines HOW to evaluate them.
@@ -67,7 +67,9 @@ export interface ToolCallScorerConfig extends BaseMatcherConfig {
  * @param config.params - How to match parameters: "strict", "fuzzy", or custom function
  *
  * @example
- * // Default: strict params, any order
+ * // Legacy scorer-first suite: strict params, any order
+ * import { describeEval, ToolCallScorer } from "vitest-evals/legacy";
+ *
  * describeEval("search test", {
  *   data: async () => [{
  *     input: "Find restaurants",
@@ -81,7 +83,9 @@ export interface ToolCallScorerConfig extends BaseMatcherConfig {
  * });
  *
  * @example
- * // Strict order and parameters
+ * // Legacy scorer-first suite: strict order and parameters
+ * import { describeEval, ToolCallScorer } from "vitest-evals/legacy";
+ *
  * describeEval("payment flow", {
  *   data: async () => [{
  *     input: "Process payment",

@@ -52,7 +52,8 @@ function formatMismatchDetails(
 }
 
 /**
- * A configurable scorer for evaluating structured outputs (e.g., JSON) from LLM responses.
+ * A configurable legacy scorer for evaluating structured outputs (e.g., JSON)
+ * from LLM responses.
  *
  * Similar to ToolCallScorer but for validating structured data outputs like API queries,
  * configuration objects, or any JSON-serializable data structure.
@@ -64,7 +65,12 @@ function formatMismatchDetails(
  * @param config.debug - Enable debug logging
  *
  * @example
- * // Default: strict matching
+ * // Legacy scorer-first suite: strict matching
+ * import {
+ *   describeEval,
+ *   StructuredOutputScorer,
+ * } from "vitest-evals/legacy";
+ *
  * describeEval("query generation", {
  *   data: async () => [{
  *     input: "Show me errors from today",
@@ -80,7 +86,12 @@ function formatMismatchDetails(
  * });
  *
  * @example
- * // Fuzzy matching with regex patterns
+ * // Legacy scorer-first suite: fuzzy matching with regex patterns
+ * import {
+ *   describeEval,
+ *   StructuredOutputScorer,
+ * } from "vitest-evals/legacy";
+ *
  * describeEval("flexible query matching", {
  *   data: async () => [{
  *     input: "Find slow API calls",
@@ -95,7 +106,12 @@ function formatMismatchDetails(
  * });
  *
  * @example
- * // Custom field matching
+ * // Legacy scorer-first suite: custom field matching
+ * import {
+ *   describeEval,
+ *   StructuredOutputScorer,
+ * } from "vitest-evals/legacy";
+ *
  * describeEval("custom validation", {
  *   data: async () => [{
  *     input: "Create user config",

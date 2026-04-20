@@ -3,353 +3,158 @@
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
-- pnpm package manager
-- TypeScript knowledge
-- Familiarity with Vitest
 
-### Initial Setup
+- Node.js 18+
+- `pnpm`
+- TypeScript
+- familiarity with Vitest
+
+### Setup
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd vitest-evals
-
-# Install dependencies
 pnpm install
-
-# Run tests to verify setup
+pnpm typecheck
 pnpm test
-
-# Build the project
-pnpm run build
+pnpm build
 ```
 
-## Development Workflow
+## Current Product Shape
 
-### 1. Before Making Changes
+The repository is now harness-first:
 
-Always start by:
-1. Reading the existing codebase
-2. Understanding current patterns
-3. Checking documentation
-4. Running existing tests
+- new suites should use `describeEval(...)` from `vitest-evals`
+- harness adapters live in first-party packages such as
+  `@vitest-evals/harness-pi-ai`
+- root helper logic should be judge-first
+- scorer-first support still exists, but it is isolated under
+  `vitest-evals/legacy`
 
-### 2. Making Changes
+When changing behavior, decide first which surface you are touching:
 
-Follow this process:
-1. Create/update tests first (TDD)
-2. Implement the minimal code to pass tests
-3. Refactor for clarity and performance
-4. Update documentation
-5. Run quality checks
+- root harness/judge API
+- reporter output
+- a first-party harness package
+- legacy scorer compatibility
 
-### 3. Quality Checks
+That split should stay explicit in both code and documentation.
 
-Before committing, always run:
+## Workflow
 
-```bash
-pnpm run lint        # Code style (biome)
-pnpm test           # All tests pass
-pnpm run build      # Build succeeds (includes TypeScript validation)
-```
+1. Read the relevant package and tests first.
+2. Decide whether the change belongs in root, a harness package, or `legacy`.
+3. Add or update tests before broad refactors.
+4. Keep examples and docs aligned with the change.
+5. Run the smallest useful verification set locally before committing.
 
-## Creating a New Scorer
+## Key Package Boundaries
 
-### Step 1: Plan the Scorer
+### `packages/vitest-evals`
 
-Determine:
-- What it will evaluate
-- Input parameters needed
-- Score calculation logic
-- Sync or async operation
+Owns:
 
-### Step 2: Define Types
+- normalized harness/session types
+- root `describeEval(...)`
+- judge helpers and matcher APIs
+- reporter integration
+- legacy compatibility exports
 
-Add to `src/index.ts` if needed:
+### `packages/harness-ai-sdk`
 
-```typescript
-interface YourScorerOptions extends BaseScorerOptions {
-  expected: string
-  threshold?: number
-  options?: {
-    caseSensitive?: boolean
-    trimWhitespace?: boolean
-  }
-}
-```
+Owns:
 
-### Step 3: Write Tests First
+- adapting AI SDK results into `HarnessRun`
+- AI SDK specific usage/session normalization
 
-Create `src/scorers/yourScorer.test.ts`:
+### `packages/harness-pi-ai`
 
-```typescript
-import { describe, test, expect } from 'vitest'
-import { YourScorer } from './yourScorer'
+Owns:
 
-describe('YourScorer', () => {
-  test('basic functionality', async () => {
-    expect('test input').toEval(
-      'expected output',
-      async (input) => 'expected output',
-      YourScorer,
-      1.0
-    )
-  })
-  
-  test('direct scorer test', async () => {
-    const result = await YourScorer({
-      input: 'test input',
-      output: 'expected output',
-      expected: 'expected output'
-    })
-    expect(result.score).toBe(1)
-  })
-})
-```
+- adapting Pi Mono style agents into `HarnessRun`
+- wrapped tool runtime injection
+- tool replay/VCR behavior
 
-### Step 4: Implement the Scorer
+### `packages/foobar` and `apps/demo-pi`
 
-Create `src/scorers/yourScorer.ts`:
+Own the example runtime seam and live demo eval coverage. Keep them realistic.
+They are part of the product story, not just smoke tests.
 
-```typescript
-import type { ScoreFn, BaseScorerOptions } from '../index'
-import type { YourScorerOptions } from '../index'
+## Adding a New Judge
 
-export const YourScorer: ScoreFn<YourScorerOptions> = async (opts) => {
-  // Validation
-  if (!opts.expected) {
-    throw new Error('Expected value is required')
-  }
+Root-level evaluation logic should usually be implemented as a `JudgeFn`:
 
-  // Score calculation
-  const score = calculateScore(opts.output, opts.expected, opts.options)
+```ts
+import type { JudgeFn } from "vitest-evals";
 
-  // Return normalized score (0-1)
-  return {
-    score,
-    metadata: {
-      rationale: `Comparing "${opts.output}" with "${opts.expected}"`
-    }
-  }
-}
-
-function calculateScore(
-  output: string, 
-  expected: string, 
-  options?: YourScorerOptions['options']
-): number {
-  // Implementation
-  return output === expected ? 1.0 : 0.0
-}
-```
-
-### Step 5: Export the Scorer
-
-Add to `src/scorers/index.ts`:
-
-```typescript
-export { YourScorer } from './yourScorer'
-```
-
-And to `src/index.ts`:
-
-```typescript
-export { YourScorer } from './scorers'
-```
-
-### Step 6: Document Usage
-
-Update README.md with examples:
-
-```typescript
-import { describeEval, YourScorer } from 'vitest-evals'
-
-describeEval('custom scoring test', {
-  data: async () => [{
-    input: 'test input',
-    expected: 'Expected output',
-    options: { caseSensitive: false }
-  }],
-  task: async (input) => await yourAIFunction(input),
-  scorers: [YourScorer],
-  threshold: 0.8
-})
-```
-
-## Code Style Guidelines
-
-### TypeScript Best Practices
-
-1. **Explicit Types**
-
-```typescript
-// Good
-const score: number = 0.5
-const params: ScorerParams = { expected: 'value' }
-
-// Bad
-const score = 0.5  // Missing type
-const params = { expected: 'value' }  // Implicit any
-```
-
-2. **Const Assertions**
-
-```typescript
-// Good
-export const SCORE_THRESHOLDS = {
-  PERFECT: 1.0,
-  GOOD: 0.8,
-  FAIR: 0.6,
-  POOR: 0.4
-} as const
-
-// Bad
-export const SCORE_THRESHOLDS = {
-  PERFECT: 1.0,
-  // ...
-}
-```
-
-3. **Error Handling**
-
-```typescript
-// Good
-if (!params.expected) {
-  throw new Error('YourScorer: expected parameter is required')
-}
-
-// Bad
-if (!params.expected) {
-  return 0  // Silent failure
-}
-```
-
-### Naming Conventions
-
-- **Files**: kebab-case (`tool-call.ts`)
-- **Scorers**: PascalCase (`ToolCallScorer`)
-- **Functions**: camelCase (`calculateScore`)
-- **Constants**: UPPER_SNAKE_CASE (`MAX_SCORE`)
-- **Types**: PascalCase (`ScorerParams`)
-
-### Documentation Standards
-
-1. **JSDoc for Public APIs**
-
-```typescript
-/**
- * Evaluates the similarity between output and expected text
- * @param output - The text to evaluate
- * @param params - Scorer parameters including expected text
- * @returns Score between 0 and 1
- */
-export const TextScorer: Scorer<TextScorerParams> = (output, params) => {
-  // ...
-}
-```
-
-2. **Inline Comments**
-
-```typescript
-// Normalize scores to 0-1 range
-const normalizedScore = Math.max(0, Math.min(1, rawScore))
-
-// Handle special case for empty strings
-if (!output && !params.expected) {
-  return { score: 1, metadata: { reason: 'both empty' } }
-}
-```
-
-## Debugging Tips
-
-### 1. Use Test Debugging
-
-```typescript
-test.only('debug specific test', () => {
-  // Isolate problematic test
-})
-
-test('verbose output', () => {
-  const result = evaluate(output, YourScorer, params)
-  console.log(JSON.stringify(result, null, 2))
-})
-```
-
-### 2. Add Metadata
-
-```typescript
-return {
-  score,
+export const DomainJudge: JudgeFn<{ expected: string }> = async ({
+  run,
+  expected,
+}) => ({
+  score: String(run.output) === expected ? 1 : 0,
   metadata: {
-    input: output.substring(0, 50),
-    expected: params.expected.substring(0, 50),
-    calculations: debugInfo
-  }
-}
+    rationale: `Expected ${expected}`,
+  },
+});
 ```
 
-### 3. Use Vitest UI
+Prefer judges when:
+
+- the logic should work with normalized harness data
+- the result should compose with automatic suite-level judges
+- the logic should work with `toSatisfyJudge(...)`
+
+## Adding a New Harness Adapter
+
+Keep harness adapters thin. Core should own the generic model. A harness
+package should focus on:
+
+- executing the target runtime through its normal seam
+- capturing messages, tool calls, usage, timings, and errors
+- returning a normalized `HarnessRun`
+- exposing narrow escape hatches like `run`, `output`, or `session`
+
+Do not push core reporter or assertion behavior into a harness package unless
+the runtime truly requires it.
+
+## Maintaining Legacy Compatibility
+
+If a change only exists to support scorer-first suites, keep it under
+`packages/vitest-evals/src/legacy/...` and document it as legacy behavior.
+
+Legacy APIs include:
+
+- `describeEval(...)` from `vitest-evals/legacy`
+- `toEval(...)`
+- `evaluate(...)`
+- scorer implementations such as `ToolCallScorer`
+
+Do not reintroduce scorer-first guidance into the root package docs or examples.
+
+## Verification
+
+Common commands:
 
 ```bash
-pnpm test -- --ui
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm evals
 ```
 
-## Performance Optimization
+For targeted work, prefer narrow verification:
 
-### 1. Lazy Loading
+- reporter changes: run reporter tests
+- harness changes: run the relevant harness package tests
+- demo/runtime changes: run `pnpm evals` or a filtered app/package eval command
+- legacy changes: run the moved tests under `packages/vitest-evals/src/legacy`
 
-```typescript
-// Only import heavy dependencies when needed
-const calculateScore = async (output: string) => {
-  const { heavyFunction } = await import('./heavy-lib')
-  return heavyFunction(output)
-}
-```
+## Documentation Expectations
 
-### 2. Memoization
+When the product shape changes, update:
 
-```typescript
-import { memoize } from '../utils'
+- the repo root `README.md`
+- `packages/vitest-evals/README.md`
+- the relevant docs in `docs/`
+- example apps or packages when the authoring model changes
 
-const expensiveCalculation = memoize((input: string) => {
-  // Expensive operation
-})
-```
-
-### 3. Batch Operations
-
-```typescript
-export const BatchScorer: Scorer<BatchParams> = async (output, params) => {
-  const results = await Promise.all(
-    params.expectations.map(exp => evaluate(output, exp))
-  )
-  return aggregateScores(results)
-}
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **TypeScript Errors**
-   - Run `pnpm run typecheck` for details
-   - Check tsconfig.json settings
-   - Ensure all imports have types
-
-2. **Test Failures**
-   - Run tests in watch mode: `pnpm test -- --watch`
-   - Check test isolation
-   - Verify mock setup
-
-3. **Build Errors**
-   - Clear build cache: `rm -rf dist`
-   - Check for circular dependencies
-   - Verify export statements
-
-### Getting Help
-
-1. Check existing documentation
-2. Review similar scorers for patterns
-3. Run tests with verbose output
-4. Use debugger with breakpoints
+The repo should read as harness-first even if the legacy compatibility layer
+continues to exist.

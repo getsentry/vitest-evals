@@ -1,8 +1,8 @@
 # Harness-First RFC Notes
 
-This document clarifies the author-facing contract proposed in issue `#39`.
-It describes proposed vNext behavior. It does not reflect the current
-`main` branch API yet.
+This document captures the design constraints behind issue `#39`.
+The current branch now implements most of this harness-first shape, so treat
+this file as design rationale and background, not the canonical API reference.
 
 ## Core Clarification
 

@@ -1,11 +1,11 @@
 # vitest-evals
 
-Monorepo for the next `vitest-evals` shape:
+Monorepo for the harness-first `vitest-evals` shape:
 
-- `packages/vitest-evals`: core eval runner, reporter, harness/session types, and
-  scorer support
+- `packages/vitest-evals`: core suite API, judges, normalized harness/session
+  types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
-- `packages/harness-pi-ai`: `pi-ai`-focused harness adapter
+- `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
 - `packages/foobar`: example package with a small `pi-ai`-style refund agent
 - `apps/demo-pi`: end-to-end demo evals wired through the workspace packages
 
@@ -90,9 +90,9 @@ describeEval("demo pi refund agent", {
 });
 ```
 
-See [apps/demo-pi/README.md](apps/demo-pi/README.md)
-for the demo app entrypoint and [packages/foobar/src/index.ts](packages/foobar/src/index.ts)
-for the example agent/runtime seam.
+See [apps/demo-pi/README.md](apps/demo-pi/README.md) for the demo app entrypoint
+and [packages/foobar/src/index.ts](packages/foobar/src/index.ts) for the
+example agent/runtime seam.
 
 Harness-backed suites can also declare automatic `judges`. Those judge
 functions run against the same normalized `run`/`session` pair that the
@@ -104,12 +104,14 @@ For explicit judge assertions inside a `test` callback, use
 existing `run` and `session`, or synthesize a minimal run for plain output
 values.
 
-Older scorer-first APIs now live under `vitest-evals/legacy`.
+Older scorer-first APIs now live under `vitest-evals/legacy`. The root package
+is intentionally harness-first and judge-first.
 
 Tool replay is available for opt-in `pi-ai` tools. Configure it globally in
 Vitest and then mark individual tools with `replay: true`:
 
 ```ts
+import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
