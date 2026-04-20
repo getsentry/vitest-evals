@@ -3,7 +3,7 @@ import {
   ToolCallScorer,
   type ToolCallScorerConfig,
   type ToolCallScorerOptions,
-} from "../scorers/toolCallScorer";
+} from "../legacy/scorers/toolCallScorer";
 
 export interface ToolCallJudgeOptions extends ToolCallScorerOptions {}
 

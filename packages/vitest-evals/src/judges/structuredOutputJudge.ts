@@ -3,7 +3,7 @@ import {
   StructuredOutputScorer,
   type StructuredOutputScorerConfig,
   type StructuredOutputScorerOptions,
-} from "../scorers/structuredOutputScorer";
+} from "../legacy/scorers/structuredOutputScorer";
 
 export interface StructuredOutputJudgeOptions
   extends StructuredOutputScorerOptions {}

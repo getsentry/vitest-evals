@@ -15,7 +15,7 @@ import {
   type HarnessDescribeEvalOptions,
   type JudgeResult,
 } from "./index";
-export { configure, evaluate } from "./evaluate";
+export { configure, evaluate } from "./legacy/evaluate";
 import type {
   BaseScorerOptions,
   Score,
@@ -37,7 +37,7 @@ export {
   ToolCallScorer,
   type ToolCallScorerConfig,
   type ToolCallScorerOptions,
-} from "./scorers";
+} from "./legacy/scorers";
 
 export interface LegacyDescribeEvalOptions {
   data: () => Promise<
