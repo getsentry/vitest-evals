@@ -51,11 +51,13 @@ jobs:
 
     - name: Calculate version
       id: version
+      env:
+        BUMP: ${{ inputs.bump }}
       run: |
         CURRENT=$(node -p "require('./package.json').version")
-        NEW=$(npx semver -i ${{ inputs.bump }} $CURRENT)
-        echo "current=$CURRENT" >> $GITHUB_OUTPUT
-        echo "new=$NEW" >> $GITHUB_OUTPUT
+        NEW=$(npx semver -i "$BUMP" "$CURRENT")
+        echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+        echo "new=$NEW" >> "$GITHUB_OUTPUT"
 
     - name: Prepare release
       uses: getsentry/action-prepare-release@v1
