@@ -71,7 +71,7 @@ setup.
 
 ## Existing Agents
 
-For an existing Pi Mono agent, the intended contract is:
+For an existing `pi-ai` agent, the intended contract is:
 
 - pass the per-test agent factory with `createAgent`
 - pass the tool/runtime definitions the harness should wrap

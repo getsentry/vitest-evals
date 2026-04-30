@@ -119,7 +119,7 @@ result objects, while still allowing custom `run`, `session`, `output`, and
 
 ### `@vitest-evals/harness-pi-ai`
 
-Adapts Pi Mono style agents into the same normalized shape. It also owns the
+Adapts `pi-ai` style agents into the same normalized shape. It also owns the
 standard tool replay/VCR behavior for opt-in tools, including:
 
 - `auto`

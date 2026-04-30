@@ -7,7 +7,7 @@ Monorepo for the harness-first `vitest-evals` shape:
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
 - `packages/foobar`: example package with a small `pi-ai`-style refund agent
-- `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace packages
+- `apps/demo-pi`: end-to-end `pi-ai` demo evals wired through the workspace packages
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace packages
 
 ## Workspace Layout
@@ -149,7 +149,7 @@ errors on missing recordings. Recordings are stored under
 `.vitest-evals/recordings/<tool-name>/`.
 
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`
-script. The `apps/demo-pi` example is a live Pi Mono demo backed by
+script. Use `pnpm evals:fail` to run the intentional failure examples. The
+`apps/demo-pi` example is a live `pi-ai` demo backed by
 `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`, so it expects
-`ANTHROPIC_API_KEY` in `.env` or `.env.local`. The demo app also includes
-intentional failing examples, so `pnpm evals` exits non-zero today.
+`ANTHROPIC_API_KEY` in `.env` or `.env.local`.

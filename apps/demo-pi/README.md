@@ -27,8 +27,8 @@ pnpm --filter @demo/demo-pi run evals:verbose
 pnpm --filter @demo/demo-pi run evals:fail
 ```
 
-`pnpm evals` runs every `*.eval.ts` file in the app, including the failing
-examples, so it exits non-zero today. Use `pnpm --filter @demo/demo-pi run
-evals:fail` to run just the intentional failures.
+`pnpm --filter @demo/demo-pi run evals` runs only the passing eval. Use
+`pnpm --filter @demo/demo-pi run evals:fail` to run just the intentional
+failures.
 
 Both scripts expect `ANTHROPIC_API_KEY` to be present in `.env` or `.env.local`.

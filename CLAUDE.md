@@ -62,7 +62,7 @@ Owns the AI SDK adapter into `HarnessRun`.
 
 ### `packages/harness-pi-ai`
 
-Owns the Pi Mono adapter, wrapped tool runtime, and tool replay behavior.
+Owns the `pi-ai` adapter, wrapped tool runtime, and tool replay behavior.
 
 ### `packages/foobar` and `apps/demo-pi`
 
@@ -99,7 +99,7 @@ Prefer targeted verification when possible.
 - Root API changes: test `packages/vitest-evals/src/*.test.ts`
 - Reporter changes: test `packages/vitest-evals/src/reporter.test.ts`
 - AI SDK harness changes: test `packages/harness-ai-sdk/src/index.test.ts`
-- Pi Mono harness changes: test `packages/harness-pi-ai/src/index.test.ts`
+- `pi-ai` harness changes: test `packages/harness-pi-ai/src/index.test.ts`
 - Legacy changes: test `packages/vitest-evals/src/legacy/...`
 - Demo behavior changes: run `pnpm evals` or a filtered demo command
 

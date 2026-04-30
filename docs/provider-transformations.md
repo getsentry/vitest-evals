@@ -102,7 +102,7 @@ into the root session and run model.
 
 ### `@vitest-evals/harness-pi-ai`
 
-Normalizes Pi Mono style message and tool activity and wraps tools so replay
+Normalizes `pi-ai` style message and tool activity and wraps tools so replay
 policy can be applied consistently.
 
 ## User-Facing Guidance

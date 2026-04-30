@@ -27,8 +27,7 @@ pnpm --filter @demo/demo-ai-sdk run evals:verbose
 pnpm --filter @demo/demo-ai-sdk run evals:fail
 ```
 
-`pnpm evals` runs every `*.eval.ts` file in the app, including the failing
-examples, so it exits non-zero today. Use
+`pnpm --filter @demo/demo-ai-sdk run evals` runs only the passing eval. Use
 `pnpm --filter @demo/demo-ai-sdk run evals:fail` to run just the intentional
 failures.
 

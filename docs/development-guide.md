@@ -69,7 +69,7 @@ Owns:
 
 Owns:
 
-- adapting Pi Mono style agents into `HarnessRun`
+- adapting `pi-ai` style agents into `HarnessRun`
 - wrapped tool runtime injection
 - tool replay/VCR behavior
 

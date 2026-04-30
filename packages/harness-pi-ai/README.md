@@ -19,7 +19,7 @@ const harness = piAiHarness({
 });
 ```
 
-If your existing Pi Mono agent already exposes its own entrypoint, wire that
+If your existing `pi-ai` agent already exposes its own entrypoint, wire that
 up directly and let the harness provide the runtime seam:
 
 ```ts
