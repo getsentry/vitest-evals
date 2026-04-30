@@ -85,13 +85,13 @@ Root-level evaluation logic should usually be implemented as a `JudgeFn`:
 ```ts
 import type { JudgeFn } from "vitest-evals";
 
-export const DomainJudge: JudgeFn<{ expected: string }> = async ({
-  run,
-  expected,
+export const DomainJudge: JudgeFn<{ expectedTool: string }> = async ({
+  toolCalls,
+  expectedTool,
 }) => ({
-  score: String(run.output) === expected ? 1 : 0,
+  score: toolCalls.some((call) => call.name === expectedTool) ? 1 : 0,
   metadata: {
-    rationale: `Expected ${expected}`,
+    rationale: `Expected tool ${expectedTool}`,
   },
 });
 ```

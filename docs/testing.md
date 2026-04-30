@@ -78,12 +78,16 @@ describeEval(
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
+      const calls = toolCalls(result.session);
 
-      expect(result.session.outputText).toContain('"status":"approved"');
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+      expect(calls.map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",
       ]);
+      expect(calls[1]?.arguments).toMatchObject({
+        invoiceId: "inv_123",
+        amount: 4200,
+      });
     });
   },
 );

@@ -12,22 +12,24 @@ scorer-first suite.
 import type { JudgeFn } from "vitest-evals";
 
 type RefundJudgeOptions = {
-  expectedStatus: string;
+  expectedTools: string[];
 };
 
-export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
-  run,
-  expectedStatus,
+export const RefundToolJudge: JudgeFn<RefundJudgeOptions> = async ({
+  expectedTools,
+  toolCalls,
 }) => {
-  const actualStatus =
-    run.output && typeof run.output === "object" && "status" in run.output
-      ? String(run.output.status)
-      : undefined;
+  const actualTools = toolCalls.map((call) => call.name);
+  const passed = expectedTools.every(
+    (name, index) => actualTools[index] === name,
+  );
 
   return {
-    score: actualStatus === expectedStatus ? 1 : 0,
+    score: passed ? 1 : 0,
     metadata: {
-      rationale: `Expected status=${expectedStatus}, got ${actualStatus ?? "missing"}`,
+      rationale: `Expected ${expectedTools.join(" -> ")}, got ${
+        actualTools.join(" -> ") || "none"
+      }`,
     },
   };
 };
@@ -36,9 +38,7 @@ export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
 Use it from an eval test:
 
 ```ts
-const harness = piAiHarness(createRefundAgent, {
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-});
+const harness = piAiHarness(createRefundAgent);
 
 describeEval(
   "refund agent",
@@ -49,11 +49,11 @@ describeEval(
     it("approves refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123", {
         metadata: {
-          expectedStatus: "approved",
+          expectedTools: ["lookupInvoice", "createRefund"],
         },
       });
 
-      await result.judge(RefundStatusJudge);
+      await result.judge(RefundToolJudge);
     });
   },
 );
@@ -69,7 +69,7 @@ import { judge } from "vitest-evals";
 
 const RefundQualityJudge = judge("RefundQualityJudge", async ({
   harness,
-  output,
+  assistantOutput,
   toolCalls,
 }) => {
   if (!harness) {
@@ -78,7 +78,7 @@ const RefundQualityJudge = judge("RefundQualityJudge", async ({
 
   const verdict = JSON.parse(
     await harness.prompt(
-      JSON.stringify({ output, toolCalls }, null, 2),
+      JSON.stringify({ assistantOutput, toolCalls }, null, 2),
       {
         system: "Grade whether the refund decision follows policy.",
       },
@@ -100,8 +100,8 @@ Or run it explicitly inside a test:
 it("approves refundable invoice", async ({ run }) => {
   const result = await run("Refund invoice inv_123");
 
-  await result.judge(RefundStatusJudge, {
-    expectedStatus: "approved",
+  await result.judge(RefundToolJudge, {
+    expectedTools: ["lookupInvoice", "createRefund"],
   });
 });
 ```

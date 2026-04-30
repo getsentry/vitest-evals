@@ -8,19 +8,20 @@ For new suites, prefer judges over root-level scorers.
 ```ts
 import type { JudgeFn } from "vitest-evals";
 
-export const RefundApprovalJudge: JudgeFn<{ expectedStatus: string }> = async ({
-  run,
-  expectedStatus,
-}) => {
-  const actualStatus =
-    run.output && typeof run.output === "object" && "status" in run.output
-      ? String(run.output.status)
-      : undefined;
+export const RefundApprovalJudge: JudgeFn<{
+  expectedTools: string[];
+}> = async ({ expectedTools, toolCalls }) => {
+  const actualTools = toolCalls.map((call) => call.name);
+  const passed = expectedTools.every(
+    (name, index) => actualTools[index] === name,
+  );
 
   return {
-    score: actualStatus === expectedStatus ? 1 : 0,
+    score: passed ? 1 : 0,
     metadata: {
-      rationale: `Expected ${expectedStatus}, got ${actualStatus ?? "missing"}`,
+      rationale: `Expected ${expectedTools.join(" -> ")}, got ${
+        actualTools.join(" -> ") || "none"
+      }`,
     },
   };
 };
@@ -54,7 +55,7 @@ it("approves refundable invoice", async ({ run }) => {
   const result = await run("Refund invoice inv_123");
 
   await result.judge(RefundApprovalJudge, {
-    expectedStatus: "approved",
+    expectedTools: ["lookupInvoice", "createRefund"],
   });
 });
 ```
@@ -62,14 +63,12 @@ it("approves refundable invoice", async ({ run }) => {
 ## Built-In Judge Helpers
 
 ```ts
-import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
+import { ToolCallJudge } from "vitest-evals";
 
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness(createRefundAgent, {
-      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-    }),
+    harness: piAiHarness(createRefundAgent),
     judges: [ToolCallJudge()],
   },
   (it) => {
@@ -81,14 +80,6 @@ describeEval(
             { name: "createRefund" },
           ],
         },
-      });
-
-      await expect(result.output).toSatisfyJudge(StructuredOutputJudge(), {
-        rawInput: result.input,
-        caseData: result.caseData,
-        run: result.run,
-        session: result.session,
-        expected: { status: "approved" },
       });
     });
   },

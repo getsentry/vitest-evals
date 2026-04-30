@@ -243,9 +243,12 @@ expect.extend({
  *   (it) => {
  *     it("approves refundable invoice", async ({ run }) => {
  *       const result = await run("Refund invoice inv_123");
+ *       const calls = toolCalls(result.session);
  *
- *       expect(result.session.outputText).toContain('"status":"approved"');
- *       expect(toolCalls(result.session)).toHaveLength(2);
+ *       expect(calls.map((call) => call.name)).toEqual([
+ *         "lookupInvoice",
+ *         "createRefund",
+ *       ]);
  *     });
  *   },
  * );

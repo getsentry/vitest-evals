@@ -43,12 +43,17 @@ describeEval(
   (it) => {
     it("approves refundable invoice", async ({ agent, run }) => {
       const result = await run("Refund invoice inv_123");
+      const calls = toolCalls(result.session);
 
       expect(agent).toBeDefined();
-      expect(result.session.outputText).toContain('"status":"approved"');
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        ["lookupInvoice", "createRefund"],
-      );
+      expect(calls.map((call) => call.name)).toEqual([
+        "lookupInvoice",
+        "createRefund",
+      ]);
+      expect(calls[1]?.arguments).toMatchObject({
+        invoiceId: "inv_123",
+        amount: 4200,
+      });
       expect(result.usage.totalTokens).toBeGreaterThan(0);
     });
   },
@@ -103,9 +108,12 @@ const harness = piAiHarness({
       outputText: getFinalText(agent.state.messages),
     };
   },
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
+
+Only add an `output` projection when your application already has a stable
+domain object you want surfaced as `run.output`; the common agent path does
+not need a parser just to make the harness work.
 
 ## Legacy Compatibility
 

@@ -141,12 +141,13 @@ describeEval(
   (it) => {
     it("approves refundable invoice", async ({ agent, run }) => {
       const result = await run("Refund invoice inv_123");
+      const calls = toolCalls(result.session);
 
       expect(agent).toBeDefined();
-      expect(result.session.outputText).toContain('"status":"approved"');
-      expect(toolCalls(result.session)).toContainEqual(
-        expect.objectContaining({ name: "lookupInvoice" }),
-      );
+      expect(calls.map((call) => call.name)).toEqual([
+        "lookupInvoice",
+        "createRefund",
+      ]);
     });
   },
 );
@@ -186,7 +187,6 @@ harness: piAiHarness({
       outputText: getFinalText(agent.state.messages),
     };
   },
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
 

@@ -153,13 +153,17 @@ normalized run/session data:
 ```ts
 import type { JudgeFn } from "vitest-evals";
 
-export const RefundStatusJudge: JudgeFn<{ expectedStatus: string }> = async ({
-  run,
-  expectedStatus,
+export const RefundToolJudge: JudgeFn<{ expectedTools: string[] }> = async ({
+  expectedTools,
+  toolCalls,
 }) => ({
-  score: run.output?.status === expectedStatus ? 1 : 0,
+  score: expectedTools.every(
+    (name, index) => toolCalls[index]?.name === name,
+  )
+    ? 1
+    : 0,
   metadata: {
-    rationale: `Expected ${expectedStatus}`,
+    rationale: `Expected ${expectedTools.join(" -> ")}`,
   },
 });
 ```
