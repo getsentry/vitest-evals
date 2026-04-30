@@ -37,7 +37,7 @@ Cover:
 
 - normalized run/session behavior
 - single-run semantics for automatic judges plus explicit assertions
-- matcher behavior for `toSatisfyJudge(...)`
+- matcher behavior for `toBeJudged(...)` and `toSatisfyJudge(...)`
 - any task metadata the reporter depends on
 
 ### Reporter Changes

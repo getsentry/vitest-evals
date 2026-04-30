@@ -449,7 +449,7 @@ async function runPiAiHarness<
       runtime,
     });
 
-    if (isHarnessRun(result)) {
+    if (isHarnessRun(result) && !hasResultOverrides(options)) {
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
@@ -509,6 +509,21 @@ async function runPiAiHarness<
 
     throw attachHarnessRunToError(error, run);
   }
+}
+
+function hasResultOverrides(
+  options: Pick<
+    PiAiHarnessOptions<any, any, any, any, any>,
+    "errors" | "output" | "session" | "timings" | "usage"
+  >,
+) {
+  return Boolean(
+    options.output ??
+      options.session ??
+      options.usage ??
+      options.timings ??
+      options.errors,
+  );
 }
 
 async function resolveAgent<

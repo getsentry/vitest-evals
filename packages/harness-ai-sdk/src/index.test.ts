@@ -537,10 +537,33 @@ test("direct run and setup use the same execution lifecycle", async () => {
 });
 
 test("normalizes domain results that resemble harness runs", async () => {
+  const output = vi.fn(
+    ({ result }: { result: { object: { status: string } } }) => result.object,
+  );
+  const session = vi.fn(
+    ({
+      input,
+      result,
+    }: {
+      input: string;
+      result: { object: { status: string } };
+    }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: input,
+        },
+        {
+          role: "assistant" as const,
+          content: result.object,
+        },
+      ],
+    }),
+  );
   const harness = aiSdkHarness({
     task: async () => ({
       session: {
-        id: "domain-session",
+        messages: [],
       },
       usage: {
         totalTokens: 7,
@@ -550,6 +573,8 @@ test("normalizes domain results that resemble harness runs", async () => {
         status: "approved",
       },
     }),
+    output,
+    session,
   });
 
   const run = await harness.run("Refund invoice inv_123", {
@@ -566,6 +591,8 @@ test("normalizes domain results that resemble harness runs", async () => {
   expect(run.output).toEqual({
     status: "approved",
   });
+  expect(output).toHaveBeenCalledTimes(1);
+  expect(session).toHaveBeenCalledTimes(1);
   expect(run.session.messages).toEqual([
     {
       role: "user",
@@ -579,6 +606,95 @@ test("normalizes domain results that resemble harness runs", async () => {
     },
   ]);
   expect(run.usage.totalTokens).toBe(7);
+});
+
+test("aggregates per-step usage when total usage is missing", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      text: "approved",
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "tool-calls",
+          rawFinishReason: "tool_calls",
+          toolCalls: [],
+          toolResults: [],
+          usage: {
+            inputTokens: 3,
+            inputTokenDetails: {
+              cacheReadTokens: 1,
+            },
+            outputTokens: 2,
+            outputTokenDetails: {
+              reasoningTokens: 1,
+            },
+            totalTokens: 5,
+          },
+          response: {
+            messages: [],
+          },
+        },
+        {
+          stepNumber: 1,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "approved",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [],
+          toolResults: [],
+          usage: {
+            inputTokens: 4,
+            inputTokenDetails: {
+              cacheReadTokens: 2,
+            },
+            outputTokens: 6,
+            outputTokenDetails: {
+              reasoningTokens: 3,
+            },
+            totalTokens: 10,
+          },
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.usage).toMatchObject({
+    provider: "openai",
+    model: "gpt-4o-mini",
+    inputTokens: 7,
+    outputTokens: 8,
+    reasoningTokens: 4,
+    totalTokens: 15,
+    metadata: {
+      cacheReadTokens: 3,
+    },
+  });
 });
 
 test("normalizes arrays and empty objects without dropping positions", async () => {

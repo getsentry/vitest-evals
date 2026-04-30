@@ -205,7 +205,7 @@ describeEval(
       if (!expectedStatus) {
         throw new Error("Expected metadata.expectedStatus to be present.");
       }
-      await result.judge(judgeSpy, {
+      await expect(result).toBeJudged(judgeSpy, {
         expectedStatus,
       });
 
@@ -250,16 +250,16 @@ describeEval(
   },
 );
 
-describeEval("harness mode with bound judge helper", {
+describeEval("harness mode with explicit judge matcher", {
   data: [
     {
-      name: "refund request with explicit judge helper",
+      name: "refund request with explicit judge matcher",
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
     },
   ],
   harness,
-  test: async ({ judge }) => {
+  test: async (result) => {
     const explicitJudge = vi.fn(
       async (opts: HarnessJudgeOptions<RefundEvalCase>) => ({
         score:
@@ -271,7 +271,7 @@ describeEval("harness mode with bound judge helper", {
       }),
     );
 
-    await judge(explicitJudge);
+    await expect(result).toBeJudged(explicitJudge);
 
     expect(explicitJudge).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -286,7 +286,7 @@ describeEval("harness mode with bound judge helper", {
         caseData: {
           input: "Refund invoice inv_123",
           expectedStatus: "approved",
-          name: "refund request with explicit judge helper",
+          name: "refund request with explicit judge matcher",
         },
       }),
     );
@@ -337,14 +337,16 @@ describeEval(
   "harness mode with harness prompt",
   { harness: harnessWithPrompt },
   (it) => {
-    it("passes the harness prompt helper to result judges", async ({ run }) => {
+    it("passes the harness prompt helper to judge matchers", async ({
+      run,
+    }) => {
       const result = await run("Refund invoice inv_123", {
         metadata: {
           expectedStatus: "approved",
         },
       });
 
-      await result.judge(harnessPromptJudge);
+      await expect(result).toBeJudged(harnessPromptJudge);
 
       expect(harnessPromptJudgeSpy).toHaveBeenCalledTimes(1);
       expect(harnessPromptJudgeSpy).toHaveBeenCalledWith(

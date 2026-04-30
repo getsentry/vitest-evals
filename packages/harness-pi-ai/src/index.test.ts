@@ -380,10 +380,34 @@ test("direct run and setup use the same execution lifecycle", async () => {
 });
 
 test("normalizes domain results that resemble harness runs", async () => {
+  const output = vi.fn(
+    ({ result }: { result: { decision: { status: string } } }) =>
+      result.decision,
+  );
+  const session = vi.fn(
+    ({
+      input,
+      result,
+    }: {
+      input: string;
+      result: { decision: { status: string } };
+    }) => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: input,
+        },
+        {
+          role: "assistant" as const,
+          content: result.decision,
+        },
+      ],
+    }),
+  );
   const harness = piAiHarness({
     task: async () => ({
       session: {
-        id: "domain-session",
+        messages: [],
       },
       usage: {
         totalTokens: 7,
@@ -393,6 +417,8 @@ test("normalizes domain results that resemble harness runs", async () => {
         status: "approved",
       },
     }),
+    output,
+    session,
   });
 
   const run = await harness.run("Refund invoice inv_123", {
@@ -409,6 +435,8 @@ test("normalizes domain results that resemble harness runs", async () => {
   expect(run.output).toEqual({
     status: "approved",
   });
+  expect(output).toHaveBeenCalledTimes(1);
+  expect(session).toHaveBeenCalledTimes(1);
   expect(run.session.messages).toEqual([
     {
       role: "user",

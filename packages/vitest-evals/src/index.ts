@@ -23,6 +23,7 @@ import {
   attachHarnessRunToError,
   assistantMessages,
   getHarnessRunFromError,
+  isHarnessRun,
   toolCalls,
   userMessages,
 } from "./harness";
@@ -49,7 +50,7 @@ export interface HarnessEvalContext<
   output: HarnessRun["output"];
   session: HarnessRun["session"];
   usage: HarnessRun["usage"];
-  judge: RunJudge<TCase>;
+  harness: HarnessRuntime;
 }
 
 export type HarnessCaseSource<TCase extends HarnessCase = HarnessCase> =
@@ -157,16 +158,10 @@ export type ToSatisfyJudge<R = unknown> = (
   options?: JudgeAssertionOptions<any>,
 ) => Promise<R>;
 
-export type RunJudge<TCase extends HarnessCase = HarnessCase> = {
-  (judge: JudgeFn<any>, options?: JudgeAssertionOptions<TCase>): Promise<void>;
-  (
-    value: unknown,
-    judge: JudgeFn<any>,
-    options?: JudgeAssertionOptions<TCase>,
-  ): Promise<void>;
-};
+export type ToBeJudged<R = unknown> = ToSatisfyJudge<R>;
 
 export interface EvalMatchers<R = unknown> {
+  toBeJudged: ToBeJudged<R>;
   toSatisfyJudge: ToSatisfyJudge<R>;
 }
 
@@ -189,40 +184,46 @@ declare module "vitest" {
   }
 }
 
-expect.extend({
-  toSatisfyJudge: async function toSatisfyJudge(
-    received: unknown,
-    judge: JudgeFn<any>,
-    options: JudgeAssertionOptions<any> = {},
-  ) {
-    const { threshold = 1.0, ...context } = options;
-    const judgeOptions = buildJudgeAssertionOptions(received, context);
+const judgeMatchers = {
+  toBeJudged: toSatisfyJudgeMatcher,
+  toSatisfyJudge: toSatisfyJudgeMatcher,
+};
 
-    let result = judge(judgeOptions);
-    if (result instanceof Promise) {
-      result = await result;
-    }
+expect.extend(judgeMatchers);
 
-    const score = result.score ?? 0;
-    const pass = score >= threshold;
-    const scores = [
-      {
-        ...result,
-        name: judge.name || "AnonymousJudge",
-      },
-    ];
+async function toSatisfyJudgeMatcher(
+  this: unknown,
+  received: unknown,
+  judge: JudgeFn<any>,
+  options: JudgeAssertionOptions<any> = {},
+) {
+  const { threshold = 1.0, ...context } = options;
+  const judgeOptions = buildJudgeAssertionOptions(received, context);
 
-    return {
-      pass,
-      message: () =>
-        [
-          `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
-          `Output: ${wrapText(judgeOptions.output)}`,
-          formatScores(scores),
-        ].join("\n\n"),
-    };
-  },
-});
+  let result = judge(judgeOptions);
+  if (result instanceof Promise) {
+    result = await result;
+  }
+
+  const score = result.score ?? 0;
+  const pass = score >= threshold;
+  const scores = [
+    {
+      ...result,
+      name: judge.name || "AnonymousJudge",
+    },
+  ];
+
+  return {
+    pass,
+    message: () =>
+      [
+        `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
+        `Output: ${wrapText(judgeOptions.output)}`,
+        formatScores(scores),
+      ].join("\n\n"),
+  };
+}
 
 /**
  * Creates a harness-backed eval suite.
@@ -649,6 +650,8 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
   run: HarnessRun,
   harnessPrompt?: HarnessPrompt,
 ): HarnessEvalContext<TCase, TAgent> {
+  const harnessRuntime = createHarnessRuntime(harnessPrompt);
+
   return {
     agent,
     name: caseData.name,
@@ -659,7 +662,7 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
     output: run.output,
     session: run.session,
     usage: run.usage,
-    judge: createRunJudge(input, caseData, run, harnessPrompt),
+    harness: harnessRuntime,
   };
 }
 
@@ -668,42 +671,6 @@ function extractCaseMetadata<TCase extends HarnessCase>(
 ): Partial<HarnessCaseMetadata<TCase>> {
   const { input: _input, name: _name, ...metadata } = caseData;
   return metadata as HarnessCaseMetadata<TCase>;
-}
-
-function createRunJudge<TCase extends HarnessCase>(
-  input: TCase["input"],
-  caseData: TCase,
-  run: HarnessRun,
-  harnessPrompt?: HarnessPrompt,
-): RunJudge<TCase> {
-  const harnessRuntime = createHarnessRuntime(harnessPrompt);
-
-  return async (
-    valueOrJudge: unknown | JudgeFn<any>,
-    judgeOrOptions?: JudgeFn<any> | JudgeAssertionOptions<TCase>,
-    maybeOptions?: JudgeAssertionOptions<TCase>,
-  ) => {
-    const received =
-      typeof valueOrJudge === "function" ? (run.output ?? run) : valueOrJudge;
-    const judge =
-      typeof valueOrJudge === "function"
-        ? (valueOrJudge as JudgeFn<any>)
-        : (judgeOrOptions as JudgeFn<any>);
-    const judgeOptions =
-      typeof valueOrJudge === "function"
-        ? (judgeOrOptions as JudgeAssertionOptions<TCase> | undefined)
-        : maybeOptions;
-
-    await expect(received).toSatisfyJudge(judge, {
-      ...(caseData as Record<string, any>),
-      rawInput: input,
-      caseData,
-      harness: harnessRuntime,
-      run,
-      session: run.session,
-      ...(judgeOptions ?? {}),
-    });
-  };
 }
 
 function createHarnessRuntime(
@@ -773,30 +740,40 @@ function buildJudgeAssertionOptions<TCase extends HarnessCase = HarnessCase>(
   received: unknown,
   options: Omit<JudgeAssertionOptions<TCase>, "threshold">,
 ): HarnessJudgeOptions<TCase> {
+  const evalContext = looksLikeHarnessEvalContext(received)
+    ? received
+    : undefined;
   const run = resolveJudgeRun(received, options);
   const rawInput =
     options.rawInput ??
+    (evalContext?.input as TCase["input"] | undefined) ??
     (userMessages(run.session)[0]?.content as TCase["input"] | undefined) ??
     undefined;
   const input =
     options.input ?? (rawInput !== undefined ? formatJudgeInput(rawInput) : "");
+  const session = options.session ?? evalContext?.session ?? run.session;
 
   return {
+    ...((evalContext?.caseData as Record<string, any> | undefined) ?? {}),
     ...(options as Record<string, any>),
     input,
     rawInput,
     output: formatJudgeOutput(run),
     assistantOutput:
       options.assistantOutput ??
-      run.session.outputText ??
-      resolveAssistantOutput(run.session),
+      session.outputText ??
+      resolveAssistantOutput(session),
     caseData:
       options.caseData ??
+      (evalContext?.caseData as TCase | undefined) ??
       ((rawInput !== undefined ? { input: rawInput } : { input }) as TCase),
-    harness: options.harness ?? createHarnessRuntime(undefined),
+    harness:
+      options.harness ??
+      evalContext?.harness ??
+      createHarnessRuntime(undefined),
     run,
-    session: options.session ?? run.session,
-    toolCalls: options.toolCalls ?? toolCalls(run.session),
+    session,
+    toolCalls: options.toolCalls ?? toolCalls(session),
   };
 }
 
@@ -811,6 +788,15 @@ function resolveJudgeRun<TCase extends HarnessCase = HarnessCase>(
           session: options.session,
         }
       : options.run;
+  }
+
+  if (looksLikeHarnessEvalContext(received)) {
+    return options.session
+      ? {
+          ...received.run,
+          session: options.session,
+        }
+      : received.run;
   }
 
   if (looksLikeHarnessRun(received)) {
@@ -869,6 +855,10 @@ function inferJudgeOutputValue(
   received: unknown,
   session: NormalizedSession,
 ): JsonValue | undefined {
+  if (looksLikeHarnessEvalContext(received)) {
+    return received.run.output;
+  }
+
   if (looksLikeHarnessRun(received)) {
     return received.output;
   }
@@ -902,13 +892,19 @@ function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {
 }
 
 function looksLikeHarnessRun(value: unknown): value is HarnessRun {
+  return isHarnessRun(value);
+}
+
+function looksLikeHarnessEvalContext(
+  value: unknown,
+): value is HarnessEvalContext<any, any> {
   return (
     Boolean(value) &&
     typeof value === "object" &&
     value !== null &&
-    "session" in value &&
-    "usage" in value &&
-    "errors" in value
+    "caseData" in value &&
+    "harness" in value &&
+    isHarnessRun((value as { run?: unknown }).run)
   );
 }
 

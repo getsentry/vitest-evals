@@ -53,7 +53,7 @@ describeEval(
         },
       });
 
-      await result.judge(RefundToolJudge);
+      await expect(result).toBeJudged(RefundToolJudge);
     });
   },
 );
@@ -95,7 +95,7 @@ Or run it explicitly inside a test:
 it("approves refundable invoice", async ({ run }) => {
   const result = await run("Refund invoice inv_123");
 
-  await result.judge(RefundToolJudge, {
+  await expect(result).toBeJudged(RefundToolJudge, {
     expectedTools: ["lookupInvoice", "createRefund"],
   });
 });

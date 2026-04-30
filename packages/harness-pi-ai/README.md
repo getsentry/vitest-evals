@@ -56,9 +56,10 @@ export function createRefundAgent() {
 }
 ```
 
-Judges can run explicitly from `result.judge(...)` and receive the
-harness-provided `harness.prompt(...)` helper, so LLM-as-judge rubrics can call
-a simple prompt abstraction instead of wiring provider API calls in every test.
+Judges run through the Vitest matcher, for example
+`await expect(result).toBeJudged(RefundQualityJudge)`, and receive the
+harness-provided `harness.prompt(...)` helper. LLM-as-judge rubrics can call a
+simple prompt abstraction instead of wiring provider API calls in every test.
 
 If your existing `pi-ai` agent needs a custom entrypoint, wire that task-shaped
 function directly:

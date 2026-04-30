@@ -96,11 +96,12 @@ agent and an instrumented `run(input)` fixture. Calling `run(...)` executes the
 agent once and returns the app-facing `output`, normalized `session`, usage,
 timings, artifacts, errors, and reporter metadata.
 
-Judges are optional. Use them when you want a reusable score, a semantic or
-LLM-backed rubric, or score details in the report. They consume the recorded
-result from `run(...)`; they do not execute the agent again. A harness can
-provide `harness.prompt(...)` so LLM-as-judge provider setup lives with the
-instrumented runtime while judge definitions stay provider-neutral.
+Judges are optional. Use `await expect(result).toBeJudged(judge)` when you
+want a reusable score, a semantic or LLM-backed rubric, or score details in the
+report. They consume the recorded result from `run(...)`; they do not execute
+the agent again. A harness can provide `harness.prompt(...)` so LLM-as-judge
+provider setup lives with the instrumented runtime while judge definitions stay
+provider-neutral.
 
 When a future extension needs scenario data, keep it under `metadata` so
 top-level run options stay reserved for framework behavior:
@@ -113,9 +114,8 @@ await run("Refund invoice inv_404", {
 });
 ```
 
-The lower-level matcher still exists as
-`await expect(value).toSatisfyJudge(judge, context)` when you need to judge a
-raw value or a custom synthetic run.
+The lower-level matcher `await expect(value).toSatisfyJudge(judge, context)` is
+also available when you need to judge a raw value or a custom synthetic run.
 
 If you need a custom judge name in reporter output, wrap it with
 `judge("MyJudge", fn)`.

@@ -55,7 +55,8 @@ serialization logic.
 Defines the harness-first public API:
 
 - `describeEval(...)`
-- `expect(...).toSatisfyJudge(...)`
+- `expect(...).toBeJudged(...)`
+- `expect(...).toSatisfyJudge(...)` for lower-level value assertions
 - harness/judge types
 - exports for built-in judges and harness helpers
 

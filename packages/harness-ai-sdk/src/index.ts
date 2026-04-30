@@ -280,7 +280,7 @@ async function runAiSdkHarness<
       tools,
     });
 
-    if (isHarnessRun(result)) {
+    if (isHarnessRun(result) && !hasResultOverrides(options)) {
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
@@ -293,7 +293,7 @@ async function runAiSdkHarness<
       context,
       runtime,
       tools,
-      result,
+      result: result as TResult,
     } satisfies AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>;
 
     const output = options.output
@@ -348,6 +348,21 @@ async function runAiSdkHarness<
 
     throw attachHarnessRunToError(error, run);
   }
+}
+
+function hasResultOverrides(
+  options: Pick<
+    AiSdkHarnessOptions<any, any, any, any, any>,
+    "errors" | "output" | "session" | "timings" | "usage"
+  >,
+) {
+  return Boolean(
+    options.output ??
+      options.session ??
+      options.usage ??
+      options.timings ??
+      options.errors,
+  );
 }
 
 async function resolveAgent<
@@ -649,7 +664,7 @@ function resolveOutput(result: unknown): JsonValue | undefined {
 
 function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
   const steps = resolveSteps(result);
-  const usage = resolveLanguageModelUsage(result);
+  const usage = resolveLanguageModelUsage(result) ?? resolveStepUsage(steps);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
 
   if (!usage) {
@@ -687,6 +702,65 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
       raw: usage.raw,
     }),
   };
+}
+
+function resolveStepUsage(steps: StepLike[]): LanguageModelUsage | undefined {
+  const usages = steps
+    .map((step) => step.usage)
+    .filter((usage): usage is LanguageModelUsage => Boolean(usage));
+
+  if (usages.length === 0) {
+    return undefined;
+  }
+
+  return usages.reduce(addLanguageModelUsage);
+}
+
+function addLanguageModelUsage(
+  left: LanguageModelUsage,
+  right: LanguageModelUsage,
+): LanguageModelUsage {
+  return {
+    inputTokens: addTokenCounts(left.inputTokens, right.inputTokens),
+    inputTokenDetails: {
+      noCacheTokens: addTokenCounts(
+        left.inputTokenDetails?.noCacheTokens,
+        right.inputTokenDetails?.noCacheTokens,
+      ),
+      cacheReadTokens: addTokenCounts(
+        left.inputTokenDetails?.cacheReadTokens,
+        right.inputTokenDetails?.cacheReadTokens,
+      ),
+      cacheWriteTokens: addTokenCounts(
+        left.inputTokenDetails?.cacheWriteTokens,
+        right.inputTokenDetails?.cacheWriteTokens,
+      ),
+    },
+    outputTokens: addTokenCounts(left.outputTokens, right.outputTokens),
+    outputTokenDetails: {
+      textTokens: addTokenCounts(
+        left.outputTokenDetails?.textTokens,
+        right.outputTokenDetails?.textTokens,
+      ),
+      reasoningTokens: addTokenCounts(
+        left.outputTokenDetails?.reasoningTokens,
+        right.outputTokenDetails?.reasoningTokens,
+      ),
+    },
+    totalTokens: addTokenCounts(left.totalTokens, right.totalTokens),
+    reasoningTokens: addTokenCounts(
+      left.reasoningTokens,
+      right.reasoningTokens,
+    ),
+    cachedInputTokens: addTokenCounts(
+      left.cachedInputTokens,
+      right.cachedInputTokens,
+    ),
+  };
+}
+
+function addTokenCounts(left: number | undefined, right: number | undefined) {
+  return left == null && right == null ? undefined : (left ?? 0) + (right ?? 0);
 }
 
 function countStepToolCalls(steps: StepLike[]) {

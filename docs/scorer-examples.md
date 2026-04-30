@@ -54,7 +54,7 @@ export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
 it("approves refundable invoice", async ({ run }) => {
   const result = await run("Refund invoice inv_123");
 
-  await result.judge(RefundApprovalJudge, {
+  await expect(result).toBeJudged(RefundApprovalJudge, {
     expectedTools: ["lookupInvoice", "createRefund"],
   });
 });
