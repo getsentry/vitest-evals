@@ -1,39 +1,10 @@
 import { spawnSync } from "node:child_process";
+import { createEvalEnv, parseEvalCliArgs } from "../../../scripts/eval-cli.mjs";
 
-const args = process.argv.slice(2);
-const forwardedArgs = [];
-let failMode = false;
-let toolDetailLevel = 0;
-
-for (const arg of args) {
-  if (arg === "--") {
-    continue;
-  }
-
-  if (arg === "--fail") {
-    failMode = true;
-    continue;
-  }
-
-  if (arg === "--verbose" || /^-v+$/.test(arg)) {
-    toolDetailLevel += arg === "--verbose" ? 1 : arg.length - 1;
-    continue;
-  }
-
-  forwardedArgs.push(arg);
-}
-
-const env = {
-  ...process.env,
-  ...(toolDetailLevel > 0
-    ? {
-        VITEST_EVALS_TOOL_DETAILS: "1",
-        VITEST_EVALS_TOOL_DETAILS_LEVEL: String(
-          normalizeToolDetailLevel(toolDetailLevel),
-        ),
-      }
-    : {}),
-};
+const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
+  process.argv.slice(2),
+);
+const env = createEvalEnv(process.env, toolDetailLevel);
 
 const explicitTargetIndex = forwardedArgs.findIndex(
   (arg) => !arg.startsWith("-"),
@@ -72,16 +43,3 @@ const result = spawnSync("pnpm", command, {
 });
 
 process.exit(result.status ?? 1);
-
-function normalizeToolDetailLevel(level) {
-  if (level <= 0) {
-    return 0;
-  }
-  if (level <= 2) {
-    return 2;
-  }
-  if (level === 3) {
-    return 3;
-  }
-  return 4;
-}

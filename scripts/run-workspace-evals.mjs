@@ -1,45 +1,16 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createEvalEnv, parseEvalCliArgs } from "./eval-cli.mjs";
 
 const ROOT = process.cwd();
 const WORKSPACE_ROOTS = ["packages", "apps"];
-
-const args = process.argv.slice(2);
-const forwardedArgs = [];
-let failMode = false;
-let toolDetailLevel = 0;
-
-for (const arg of args) {
-  if (arg === "--") {
-    continue;
-  }
-
-  if (arg === "--fail") {
-    failMode = true;
-    continue;
-  }
-
-  if (arg === "--verbose" || /^-v+$/.test(arg)) {
-    toolDetailLevel += arg === "--verbose" ? 1 : arg.length - 1;
-    continue;
-  }
-
-  forwardedArgs.push(arg);
-}
+const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
+  process.argv.slice(2),
+);
 
 const scriptName = failMode ? "evals:fail" : "evals";
-const env = {
-  ...process.env,
-  ...(toolDetailLevel > 0
-    ? {
-        VITEST_EVALS_TOOL_DETAILS: "1",
-        VITEST_EVALS_TOOL_DETAILS_LEVEL: String(
-          normalizeToolDetailLevel(toolDetailLevel),
-        ),
-      }
-    : {}),
-};
+const env = createEvalEnv(process.env, toolDetailLevel);
 
 const packageDirs = findWorkspacePackageDirs()
   .filter((dir) => hasScript(dir, scriptName))
@@ -122,17 +93,4 @@ function hasScript(packageDir, scriptName) {
   } catch {
     return false;
   }
-}
-
-function normalizeToolDetailLevel(level) {
-  if (level <= 0) {
-    return 0;
-  }
-  if (level <= 2) {
-    return 2;
-  }
-  if (level === 3) {
-    return 3;
-  }
-  return 4;
 }
