@@ -417,6 +417,37 @@ test("default agent run receives wrapped runtime tools", async () => {
   ]);
 });
 
+test("direct run and setup use the same execution lifecycle", async () => {
+  const run = vi.fn(async () => ({
+    object: {
+      status: "approved",
+    },
+  }));
+  const createAgent = vi.fn(() => ({
+    run,
+  }));
+  const harness = aiSdkHarness({
+    agent: createAgent,
+  });
+  const context = {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+
+  await harness.run("Refund invoice inv_123", context);
+  const execution = await harness.setup?.();
+  await execution?.run("Refund invoice inv_123", context);
+
+  expect(createAgent).toHaveBeenCalledTimes(2);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
 test("normalizes domain results that resemble harness runs", async () => {
   const harness = aiSdkHarness({
     task: async () => ({
@@ -460,6 +491,100 @@ test("normalizes domain results that resemble harness runs", async () => {
     },
   ]);
   expect(run.usage.totalTokens).toBe(7);
+});
+
+test("normalizes arrays and empty objects without dropping positions", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      object: {
+        values: [1, undefined, { skipped: undefined }, 3],
+        empty: {},
+        nested: {
+          kept: "yes",
+          skipped: undefined,
+        },
+      },
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "tool-calls",
+          rawFinishReason: "tool_calls",
+          toolCalls: [
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                values: [1, undefined, 3],
+                empty: {},
+              },
+            },
+          ],
+          toolResults: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                values: [1, undefined, 3],
+                empty: {},
+              },
+              output: {
+                values: [undefined, "ok"],
+                empty: {},
+              },
+            },
+          ],
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+          },
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toEqual({
+    values: [1, null, {}, 3],
+    empty: {},
+    nested: {
+      kept: "yes",
+    },
+  });
+  expect(toolCalls(run.session)).toMatchObject([
+    {
+      arguments: {
+        values: [1, null, 3],
+        empty: {},
+      },
+      result: {
+        values: [null, "ok"],
+        empty: {},
+      },
+    },
+  ]);
 });
 
 test("records and replays opt-in tools in auto mode", async () => {

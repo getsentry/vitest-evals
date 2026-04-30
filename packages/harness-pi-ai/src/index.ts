@@ -199,17 +199,26 @@ export function piAiHarness<
 
   return {
     name: options.name ?? "pi-ai",
-    setup: async () => {
-      const agent = await resolveAgent(options);
-      return {
-        agent,
-        run: (input, context) => runPiAiHarness(options, agent, input, context),
-      };
-    },
+    setup: () => createPiAiHarnessExecution(options),
     run: async (input, context) => {
-      const agent = await resolveAgent(options);
-      return runPiAiHarness(options, agent, input, context);
+      const execution = await createPiAiHarnessExecution(options);
+      return execution.run(input, context);
     },
+  };
+}
+
+async function createPiAiHarnessExecution<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends PiAiToolset<TInput, TCase>,
+>(options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>) {
+  const agent = await resolveAgent(options);
+  return {
+    agent,
+    run: (input: TInput, context: HarnessContext<TCase>) =>
+      runPiAiHarness(options, agent, input, context),
   };
 }
 
@@ -402,33 +411,43 @@ function hasCallableMethod(value: unknown, methodName: string) {
   );
 }
 
-function isJsonValue(value: unknown): value is JsonValue {
+function toJsonValue(value: unknown): JsonValue | undefined {
   if (
     value === null ||
     typeof value === "string" ||
     typeof value === "number" ||
     typeof value === "boolean"
   ) {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.every((item) => isJsonValue(item));
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).every((item) => isJsonValue(item));
-  }
-
-  return false;
-}
-
-function normalizeContent(value: unknown): JsonValue {
-  if (isJsonValue(value)) {
     return value;
   }
 
-  return String(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      const normalized = toJsonValue(item);
+      return normalized === undefined ? null : normalized;
+    });
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return normalizeRecord(value as Record<string, unknown>);
+  }
+
+  return undefined;
+}
+
+function normalizeRecord(
+  value: Record<string, unknown>,
+): Record<string, JsonValue> {
+  const entries = Object.entries(value).flatMap(([key, entryValue]) => {
+    const normalized = toJsonValue(entryValue);
+    return normalized === undefined ? [] : [[key, normalized] as const];
+  });
+
+  return Object.fromEntries(entries);
+}
+
+function normalizeContent(value: unknown): JsonValue {
+  return toJsonValue(value) ?? String(value);
 }
 
 function createRuntime<
@@ -560,7 +579,7 @@ function createRuntime<
 
 function resolveOutput(result: unknown): JsonValue | undefined {
   if (!result || typeof result !== "object") {
-    return isJsonValue(result) ? result : undefined;
+    return toJsonValue(result);
   }
 
   const candidates = [
@@ -572,8 +591,9 @@ function resolveOutput(result: unknown): JsonValue | undefined {
 
   for (const key of candidates) {
     const value = (result as Record<string, unknown>)[key];
-    if (isJsonValue(value)) {
-      return value;
+    const normalized = toJsonValue(value);
+    if (normalized !== undefined) {
+      return normalized;
     }
   }
 

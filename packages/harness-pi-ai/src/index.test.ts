@@ -189,6 +189,37 @@ test("task can own agent creation while receiving wrapped runtime tools", async 
   ]);
 });
 
+test("direct run and setup use the same execution lifecycle", async () => {
+  const run = vi.fn(async () => ({
+    decision: {
+      status: "approved",
+    },
+  }));
+  const createAgent = vi.fn(() => ({
+    run,
+  }));
+  const harness = piAiHarness({
+    agent: createAgent,
+  });
+  const context = {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+
+  await harness.run("Refund invoice inv_123", context);
+  const execution = await harness.setup?.();
+  await execution?.run("Refund invoice inv_123", context);
+
+  expect(createAgent).toHaveBeenCalledTimes(2);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
 test("normalizes domain results that resemble harness runs", async () => {
   const harness = piAiHarness({
     task: async () => ({
@@ -232,6 +263,49 @@ test("normalizes domain results that resemble harness runs", async () => {
     },
   ]);
   expect(run.usage.totalTokens).toBe(7);
+});
+
+test("normalizes undefined object properties without dropping array positions", async () => {
+  const harness = piAiHarness({
+    task: async () => ({
+      decision: {
+        status: "approved",
+        reason: undefined,
+        nested: {
+          skipped: undefined,
+        },
+        values: [1, undefined, 3],
+        empty: {},
+      },
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toEqual({
+    status: "approved",
+    nested: {},
+    values: [1, null, 3],
+    empty: {},
+  });
+  expect(run.session.messages[run.session.messages.length - 1]).toEqual({
+    role: "assistant",
+    content: {
+      status: "approved",
+      nested: {},
+      values: [1, null, 3],
+      empty: {},
+    },
+  });
 });
 
 test("records and replays opt-in tools in auto mode", async () => {

@@ -214,18 +214,26 @@ export function aiSdkHarness<
 
   return {
     name: options.name ?? "ai-sdk",
-    setup: async () => {
-      const agent = await resolveAgent(options);
-      return {
-        agent,
-        run: (input, context) =>
-          runAiSdkHarness(options, agent, input, context),
-      };
-    },
+    setup: () => createAiSdkHarnessExecution(options),
     run: async (input, context) => {
-      const agent = await resolveAgent(options);
-      return runAiSdkHarness(options, agent, input, context);
+      const execution = await createAiSdkHarnessExecution(options);
+      return execution.run(input, context);
     },
+  };
+}
+
+async function createAiSdkHarnessExecution<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TCase>,
+>(options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>) {
+  const agent = await resolveAgent(options);
+  return {
+    agent,
+    run: (input: TInput, context: HarnessContext<TCase>) =>
+      runAiSdkHarness(options, agent, input, context),
   };
 }
 
@@ -791,24 +799,26 @@ function normalizeArguments(
     return undefined;
   }
 
-  return normalizeRecord(value as Record<string, unknown>);
+  const normalized = normalizeRecord(value as Record<string, unknown>);
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function normalizeRecord(
   value: Record<string, unknown>,
-): Record<string, JsonValue> | undefined {
+): Record<string, JsonValue> {
   const entries = Object.entries(value).flatMap(([key, entryValue]) => {
     const normalized = toJsonValue(entryValue);
     return normalized === undefined ? [] : [[key, normalized] as const];
   });
 
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  return Object.fromEntries(entries);
 }
 
 function normalizeMetadata(
   value: Record<string, unknown>,
 ): Record<string, JsonValue> | undefined {
-  return normalizeRecord(value);
+  const normalized = normalizeRecord(value);
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function normalizeError(error: unknown) {
@@ -864,11 +874,10 @@ function toJsonValue(value: unknown): JsonValue | undefined {
   }
 
   if (Array.isArray(value)) {
-    const normalizedItems = value.flatMap((item) => {
+    return value.map((item) => {
       const normalized = toJsonValue(item);
-      return normalized === undefined ? [] : [normalized];
+      return normalized === undefined ? null : normalized;
     });
-    return normalizedItems;
   }
 
   if (typeof value === "object" && value !== null) {
