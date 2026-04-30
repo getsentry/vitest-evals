@@ -77,7 +77,6 @@ describeEval(
       agent: createRefundAgent,
       tools: foobarTools,
     }),
-    judges: [ToolCallJudge()],
   },
   (it) => {
     it("approves refundable invoice", async ({ run }) => {

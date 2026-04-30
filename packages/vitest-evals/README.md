@@ -23,9 +23,9 @@ npm install -D @vitest-evals/harness-pi-ai
 - `run.output` is the application-facing result you assert on
 - `run.session` is the canonical JSON-serializable trace used for reporting,
   tool assertions, replay metadata, and generic judges
-- suite-level `judges` run automatically on the same recorded run
-- each eval test gets an instrumented `run(input)` fixture and a pre-bound
-  `judge(...)` helper on the result
+- each eval test gets an instrumented `run(input)` fixture
+- optional judges can score the same recorded run when reusable or semantic
+  evaluation is useful
 
 ## Harness Example
 
@@ -33,12 +33,7 @@ npm install -D @vitest-evals/harness-pi-ai
 import { expect } from "vitest";
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import {
-  describeEval,
-  StructuredOutputJudge,
-  ToolCallJudge,
-  toolCalls,
-} from "vitest-evals";
+import { describeEval, toolCalls } from "vitest-evals";
 
 describeEval(
   "refund agent",
@@ -47,26 +42,19 @@ describeEval(
       agent: createRefundAgent,
       tools: foobarTools,
     }),
-    judges: [ToolCallJudge()],
   },
   (it) => {
     it("approves refundable invoice", async ({ agent, run }) => {
-      const result = await run("Refund invoice inv_123", {
-        expectedStatus: "approved",
-        expectedTools: ["lookupInvoice", "createRefund"],
-      });
+      const result = await run("Refund invoice inv_123");
 
       expect(agent).toBeDefined();
       expect(result.output).toMatchObject({
-        status: result.caseData.expectedStatus,
+        status: "approved",
       });
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        result.caseData.expectedTools,
+        ["lookupInvoice", "createRefund"],
       );
-
-      await result.judge(StructuredOutputJudge(), {
-        expected: { status: result.caseData.expectedStatus },
-      });
+      expect(result.usage.totalTokens).toBeGreaterThan(0);
     });
   },
 );
@@ -90,8 +78,8 @@ For an existing `pi-ai` agent, the intended contract is:
 
 The harness owns normalization, diagnostics, tool capture, replay plumbing, and
 reporter-facing artifacts. Individual eval tests stay small: they call
-`run(input)`, assert on `result.output`, inspect `result.session`, and call
-judges when useful.
+`run(input)`, assert on `result.output`, inspect `result.session`, and use
+`result.usage` or other metadata when useful.
 
 ```ts
 const harness = piAiHarness({
@@ -111,8 +99,8 @@ const harness = piAiHarness({
 
 ## Legacy Compatibility
 
-The root package is judge-first. Legacy scorer-first suites and `evaluate(...)`
-now live under `vitest-evals/legacy`.
+The root package is harness-first. Legacy scorer-first suites and
+`evaluate(...)` now live under `vitest-evals/legacy`.
 
 ```ts
 import {
@@ -125,19 +113,10 @@ import {
 Use the legacy entrypoint for older suites. Use the root entrypoint for new
 harness-backed suites.
 
-Inside an eval test you can call `judge(...)` directly:
-
-```ts
-it("denies non-refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_404", {
-    expectedStatus: "denied",
-  });
-
-  await result.judge(StructuredOutputJudge(), {
-    expected: { status: result.caseData.expectedStatus },
-  });
-});
-```
+Judges are optional. Inside an eval test, call `judge(...)` when you want a
+reusable score, a semantic or LLM-backed rubric, or score details in the
+report. Judges consume the recorded result from `run(...)`; they do not execute
+the agent again.
 
 For lower-level cases, the matcher still exists as
 `await expect(value).toSatisfyJudge(judge, context)`.

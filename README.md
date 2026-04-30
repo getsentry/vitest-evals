@@ -57,12 +57,7 @@ The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
 import { expect } from "vitest";
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import {
-  describeEval,
-  StructuredOutputJudge,
-  ToolCallJudge,
-  toolCalls,
-} from "vitest-evals";
+import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = piAiHarness({
   agent: createRefundAgent,
@@ -73,25 +68,19 @@ describeEval(
   "demo pi refund agent",
   {
     harness,
-    judges: [ToolCallJudge()],
   },
   (it) => {
     it("approves refundable invoice", async ({ agent, run }) => {
-      const result = await run("Refund invoice inv_123", {
-        expectedStatus: "approved",
-        expectedTools: ["lookupInvoice", "createRefund"],
-      });
+      const result = await run("Refund invoice inv_123");
 
       expect(agent).toBeDefined();
       expect(result.output).toMatchObject({
-        status: result.caseData.expectedStatus,
-      });
-      await result.judge(StructuredOutputJudge(), {
-        expected: { status: result.caseData.expectedStatus },
+        status: "approved",
       });
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        result.caseData.expectedTools,
+        ["lookupInvoice", "createRefund"],
       );
+      expect(result.usage.totalTokens).toBeGreaterThan(0);
     });
   },
 );
@@ -104,24 +93,12 @@ example agent/runtime integration point.
 Harness-backed suites configure the instrumented runtime once, then register
 normal-looking eval tests inside the callback. Each test gets the resolved
 agent and an instrumented `run(input)` fixture. Calling `run(...)` executes the
-agent once and returns the normalized `run`/`session` plus a pre-bound
-`judge(...)` helper. Suite-level `judges` run against the same recorded run.
+agent once and returns the app-facing `output`, normalized `session`, usage,
+timings, artifacts, errors, and reporter metadata.
 
-For explicit judge assertions inside an eval test, use the pre-bound
-`judge(...)` helper. It reuses the current `run`, `session`, `rawInput`, and
-`caseData` automatically:
-
-```ts
-it("denies non-refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_404", {
-    expectedStatus: "denied",
-  });
-
-  await result.judge(StructuredOutputJudge(), {
-    expected: { status: result.caseData.expectedStatus },
-  });
-});
-```
+Judges are optional. Use them when you want a reusable score, a semantic or
+LLM-backed rubric, or suite-level scoring in the report. They consume the
+recorded result from `run(...)`; they do not execute the agent again.
 
 The lower-level matcher still exists as
 `await expect(value).toSatisfyJudge(judge, context)` when you need to judge a
@@ -131,7 +108,8 @@ If you need a custom judge name in reporter output, wrap it with
 `namedJudge("MyJudge", fn)`.
 
 Older scorer-first APIs now live under `vitest-evals/legacy`. The root package
-is intentionally harness-first and judge-first.
+is intentionally harness-first; judges are optional helpers on top of recorded
+runs.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure it globally in Vitest and then mark individual tools with
