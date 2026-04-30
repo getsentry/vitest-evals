@@ -1,9 +1,14 @@
 import {
   attachHarnessRunToError,
+  hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
+  normalizeContent,
+  normalizeMetadata,
+  normalizeRecord,
   resolveHarnessRunErrors,
   serializeError,
+  toJsonValue,
 } from "vitest-evals";
 import type {
   Harness,
@@ -451,15 +456,6 @@ async function resolveAgentSource<TAgent>(
   }
 
   return agent as TAgent;
-}
-
-function hasCallableMethod(value: unknown, methodName: string) {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    methodName in value &&
-    typeof (value as Record<string, unknown>)[methodName] === "function"
-  );
 }
 
 function createToolset<
@@ -929,24 +925,6 @@ function normalizeArguments(
   return normalizeRecord(value as Record<string, unknown>);
 }
 
-function normalizeRecord(
-  value: Record<string, unknown>,
-): Record<string, JsonValue> {
-  const entries = Object.entries(value).flatMap(([key, entryValue]) => {
-    const normalized = toJsonValue(entryValue);
-    return normalized === undefined ? [] : [[key, normalized] as const];
-  });
-
-  return Object.fromEntries(entries);
-}
-
-function normalizeMetadata(
-  value: Record<string, unknown>,
-): Record<string, JsonValue> | undefined {
-  const normalized = normalizeRecord(value);
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-}
-
 function normalizeError(error: unknown) {
   if (error instanceof Error) {
     return {
@@ -974,10 +952,6 @@ function normalizeError(error: unknown) {
   };
 }
 
-function normalizeContent(value: unknown): JsonValue {
-  return toJsonValue(value) ?? String(value);
-}
-
 function toReplayJsonValue(value: unknown, label: string): JsonValue {
   const normalized = toJsonValue(value);
   if (normalized === undefined) {
@@ -987,30 +961,6 @@ function toReplayJsonValue(value: unknown, label: string): JsonValue {
   }
 
   return normalized;
-}
-
-function toJsonValue(value: unknown): JsonValue | undefined {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => {
-      const normalized = toJsonValue(item);
-      return normalized === undefined ? null : normalized;
-    });
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return normalizeRecord(value as Record<string, unknown>);
-  }
-
-  return undefined;
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {

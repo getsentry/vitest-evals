@@ -12,10 +12,14 @@ import {
 } from "@mariozechner/pi-ai";
 import {
   attachHarnessRunToError,
+  hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
+  normalizeContent,
+  normalizeRecord,
   resolveHarnessRunErrors,
   serializeError,
+  toJsonValue,
 } from "vitest-evals";
 import type {
   Harness,
@@ -908,15 +912,6 @@ async function resolveAgentSource<TAgent>(
   return agent as TAgent;
 }
 
-function hasCallableMethod(value: unknown, methodName: string) {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    methodName in value &&
-    typeof (value as Record<string, unknown>)[methodName] === "function"
-  );
-}
-
 function isPiAiAgentInstance(value: unknown): value is PiAiAgentInstance {
   if (!value || typeof value !== "object") {
     return false;
@@ -1151,45 +1146,6 @@ function resolveAgentToolResultContent(result: {
 
 function stringifyJsonValue(value: JsonValue) {
   return typeof value === "string" ? value : JSON.stringify(value);
-}
-
-function toJsonValue(value: unknown): JsonValue | undefined {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => {
-      const normalized = toJsonValue(item);
-      return normalized === undefined ? null : normalized;
-    });
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return normalizeRecord(value as Record<string, unknown>);
-  }
-
-  return undefined;
-}
-
-function normalizeRecord(
-  value: Record<string, unknown>,
-): Record<string, JsonValue> {
-  const entries = Object.entries(value).flatMap(([key, entryValue]) => {
-    const normalized = toJsonValue(entryValue);
-    return normalized === undefined ? [] : [[key, normalized] as const];
-  });
-
-  return Object.fromEntries(entries);
-}
-
-function normalizeContent(value: unknown): JsonValue {
-  return toJsonValue(value) ?? String(value);
 }
 
 function createRuntime<

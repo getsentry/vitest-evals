@@ -2,8 +2,13 @@ import { beforeEach, expect, test, vi } from "vitest";
 import {
   assistantMessages,
   describeEval,
+  hasCallableMethod,
   judge,
+  normalizeContent,
+  normalizeMetadata,
+  normalizeRecord,
   ToolCallJudge,
+  toJsonValue,
   toolCalls,
   toolMessages,
   userMessages,
@@ -542,4 +547,22 @@ test("normalized session helpers expose common access paths", () => {
       },
     },
   ]);
+});
+
+test("shared JSON normalization helpers preserve report semantics", () => {
+  expect(toJsonValue([1, undefined, { keep: true, drop: undefined }])).toEqual([
+    1,
+    null,
+    {
+      keep: true,
+    },
+  ]);
+  expect(toJsonValue({})).toEqual({});
+  expect(normalizeRecord({ keep: "yes", drop: undefined })).toEqual({
+    keep: "yes",
+  });
+  expect(normalizeMetadata({ drop: undefined })).toBeUndefined();
+  expect(normalizeContent(undefined)).toBe("undefined");
+  expect(hasCallableMethod({ run: () => undefined }, "run")).toBe(true);
+  expect(hasCallableMethod({ run: "not callable" }, "run")).toBe(false);
 });
