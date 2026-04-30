@@ -277,7 +277,7 @@ function getAssistantText(message: AssistantMessage) {
 
 export function parseRefundDecision(text: string): RefundDecision {
   const cleaned = stripMarkdownFence(text);
-  const jsonText = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
+  const jsonText = extractJsonObjectText(cleaned);
   const parsed = JSON.parse(jsonText) as Record<string, unknown>;
 
   if (
@@ -309,7 +309,46 @@ export function parseRefundDecision(text: string): RefundDecision {
   throw new Error(`Refund agent returned an invalid decision payload: ${text}`);
 }
 
+function extractJsonObjectText(text: string) {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return text;
+  }
+
+  const end = text.lastIndexOf("}");
+  if (end <= start) {
+    return text;
+  }
+
+  return text.slice(start, end + 1);
+}
+
 function stripMarkdownFence(text: string) {
-  const match = text.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? text.trim();
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("```")) {
+    return trimmed;
+  }
+
+  const afterFence = trimmed.slice(3);
+  let contentStart = 3;
+  if (afterFence.toLowerCase().startsWith("json")) {
+    contentStart += "json".length;
+  } else if (!isWhitespace(afterFence[0])) {
+    return trimmed;
+  }
+
+  const closingFenceStart = trimmed.lastIndexOf("```");
+  if (closingFenceStart <= contentStart) {
+    return trimmed;
+  }
+
+  if (trimmed.slice(closingFenceStart + 3).trim().length > 0) {
+    return trimmed;
+  }
+
+  return trimmed.slice(contentStart, closingFenceStart).trim();
+}
+
+function isWhitespace(character: string | undefined) {
+  return character === undefined || character.trim() === "";
 }
