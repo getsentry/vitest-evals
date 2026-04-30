@@ -136,19 +136,27 @@ describeEval(
   (it) => {
     it("refund request", async ({ agent, run }) => {
       const result = await run("Refund invoice inv_123", {
-        expectedStatus: "approved",
+        metadata: {
+          expectedStatus: "approved",
+        },
       });
 
       expect(agent?.id).toBe("refund-agent");
+      expect(result.name).toBe("refund request");
       expect(result.input).toBe("Refund invoice inv_123");
+      expect(result.metadata.expectedStatus).toBe("approved");
       expect(result.caseData.expectedStatus).toBe("approved");
       expect(result.output).toEqual({
         status: "approved",
       });
       expect(toolCalls(result.session)).toHaveLength(1);
 
+      const expectedStatus = result.metadata.expectedStatus;
+      if (!expectedStatus) {
+        throw new Error("Expected metadata.expectedStatus to be present.");
+      }
       await result.judge(judgeSpy, {
-        expectedStatus: result.caseData.expectedStatus,
+        expectedStatus,
       });
 
       expect(judgeSpy).toHaveBeenCalledWith(
@@ -161,6 +169,33 @@ describeEval(
           }),
         }),
       );
+    });
+  },
+);
+
+describeEval(
+  "harness mode with reserved run options",
+  { harness: agentHarness },
+  (it) => {
+    it("uses metadata without consuming future option names", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123", {
+        name: "custom report name",
+        metadata: {
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(result.name).toBe("custom report name");
+      expect(result.metadata).toEqual({
+        expectedStatus: "approved",
+      });
+      expect(result.caseData).toMatchObject({
+        input: "Refund invoice inv_123",
+        name: "custom report name",
+        expectedStatus: "approved",
+      });
     });
   },
 );

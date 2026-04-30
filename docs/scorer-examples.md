@@ -51,12 +51,10 @@ export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
 
 ```ts
 it("approves refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_123", {
-    expectedStatus: "approved",
-  });
+  const result = await run("Refund invoice inv_123");
 
   await result.judge(RefundApprovalJudge, {
-    expectedStatus: result.caseData.expectedStatus,
+    expectedStatus: "approved",
   });
 });
 ```
@@ -78,11 +76,12 @@ describeEval(
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123", {
-        expected: { status: "approved" },
-        expectedTools: [
-          { name: "lookupInvoice" },
-          { name: "createRefund" },
-        ],
+        metadata: {
+          expectedTools: [
+            { name: "lookupInvoice" },
+            { name: "createRefund" },
+          ],
+        },
       });
 
       await expect(result.output).toSatisfyJudge(StructuredOutputJudge(), {
@@ -90,7 +89,7 @@ describeEval(
         caseData: result.caseData,
         run: result.run,
         session: result.session,
-        expected: result.caseData.expected,
+        expected: { status: "approved" },
       });
     });
   },

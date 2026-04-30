@@ -81,6 +81,18 @@ reporter-facing artifacts. Individual eval tests stay small: they call
 `run(input)`, assert on `result.output`, inspect `result.session`, and use
 `result.usage` or other metadata when useful.
 
+When you need to pass scenario data to automatic judges or future reporter
+extensions, put it under `metadata` so top-level run options stay reserved for
+framework behavior:
+
+```ts
+await run("Refund invoice inv_404", {
+  metadata: {
+    scenario: "non-refundable invoice",
+  },
+});
+```
+
 ```ts
 const harness = piAiHarness({
   agent: createRefundAgent,

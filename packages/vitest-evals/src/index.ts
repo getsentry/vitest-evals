@@ -39,7 +39,9 @@ export interface HarnessEvalContext<
   TAgent = unknown,
 > {
   agent: TAgent | undefined;
+  name: TCase["name"];
   input: TCase["input"];
+  metadata: Partial<HarnessCaseMetadata<TCase>>;
   caseData: TCase;
   run: HarnessRun;
   output: HarnessRun["output"];
@@ -89,10 +91,14 @@ export interface HarnessSuiteOptions<
   afterEach?: () => void | Promise<void>;
 }
 
-export type HarnessRunOptions<TCase extends HarnessCase = HarnessCase> = Omit<
-  Partial<TCase>,
+export type HarnessCaseMetadata<TCase extends HarnessCase = HarnessCase> = Omit<
+  TCase,
   "input" | "name"
-> & {
+>;
+
+export type HarnessRunOptions<TCase extends HarnessCase = HarnessCase> = {
+  name?: string;
+  metadata?: Partial<HarnessCaseMetadata<TCase>>;
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
   threshold?: number | null;
 };
@@ -242,9 +248,6 @@ expect.extend({
  *
  *       expect(result.output).toMatchObject({ status: "approved" });
  *       expect(toolCalls(result.session)).toHaveLength(2);
- *       await result.judge(StructuredOutputJudge(), {
- *         expected: { status: "approved" },
- *       });
  *     });
  *   },
  * );
@@ -433,15 +436,15 @@ function registerHarnessFixtureTest<
           hasRun = true;
 
           const {
+            name: runName,
+            metadata,
             judges: runJudges,
             threshold: runThreshold,
-            ...caseFields
-          } = (runOptions ?? {}) as HarnessRunOptions<TRunCase> &
-            Record<string, unknown>;
+          } = runOptions ?? {};
           const caseData = {
-            ...caseFields,
+            ...(metadata ?? {}),
             input,
-            name: testName,
+            name: runName ?? testName,
           } as TRunCase;
 
           return executeHarnessCase({
@@ -629,7 +632,9 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
 ): HarnessEvalContext<TCase, TAgent> {
   return {
     agent,
+    name: caseData.name,
     input,
+    metadata: extractCaseMetadata(caseData),
     caseData,
     run,
     output: run.output,
@@ -637,6 +642,13 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
     usage: run.usage,
     judge: createRunJudge(input, caseData, run),
   };
+}
+
+function extractCaseMetadata<TCase extends HarnessCase>(
+  caseData: TCase,
+): Partial<HarnessCaseMetadata<TCase>> {
+  const { input: _input, name: _name, ...metadata } = caseData;
+  return metadata as HarnessCaseMetadata<TCase>;
 }
 
 function createRunJudge<TCase extends HarnessCase>(

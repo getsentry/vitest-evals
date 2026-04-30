@@ -100,6 +100,17 @@ Judges are optional. Use them when you want a reusable score, a semantic or
 LLM-backed rubric, or suite-level scoring in the report. They consume the
 recorded result from `run(...)`; they do not execute the agent again.
 
+When a future extension needs scenario data, keep it under `metadata` so
+top-level run options stay reserved for framework behavior:
+
+```ts
+await run("Refund invoice inv_404", {
+  metadata: {
+    scenario: "non-refundable invoice",
+  },
+});
+```
+
 The lower-level matcher still exists as
 `await expect(value).toSatisfyJudge(judge, context)` when you need to judge a
 raw value or a custom synthetic run.

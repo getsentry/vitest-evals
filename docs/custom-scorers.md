@@ -48,7 +48,9 @@ describeEval(
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
       await run("Refund invoice inv_123", {
-        expectedStatus: "approved",
+        metadata: {
+          expectedStatus: "approved",
+        },
       });
     });
   },
@@ -59,12 +61,10 @@ Or run it explicitly inside a test:
 
 ```ts
 it("approves refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_123", {
-    expectedStatus: "approved",
-  });
+  const result = await run("Refund invoice inv_123");
 
   await result.judge(RefundStatusJudge, {
-    expectedStatus: result.caseData.expectedStatus,
+    expectedStatus: "approved",
   });
 });
 ```

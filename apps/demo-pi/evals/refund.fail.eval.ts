@@ -18,10 +18,10 @@ describeEval(
   (it) => {
     it("judge expects approval for a denied invoice", async ({ run }) => {
       await run("Refund invoice inv_404", {
-        expectedStatus: "denied",
-        expectedTools: ["lookupInvoice"],
-        expected: {
-          status: "approved",
+        metadata: {
+          expected: {
+            status: "approved",
+          },
         },
       });
     });
@@ -36,10 +36,7 @@ describeEval(
   },
   (it) => {
     it("throws after the agent handles a missing invoice", async ({ run }) => {
-      const result = await run("Refund invoice inv_missing", {
-        expectedStatus: "denied",
-        expectedTools: ["lookupInvoice"],
-      });
+      const result = await run("Refund invoice inv_missing");
 
       expect(result.output).toMatchObject({
         status: "denied",

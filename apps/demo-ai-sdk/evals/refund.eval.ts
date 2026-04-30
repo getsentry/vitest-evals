@@ -11,35 +11,30 @@ describeEval(
   },
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
-      await assertRefundCase(
-        await run("Refund invoice inv_123", {
-          expectedStatus: "approved",
-          expectedTools: ["lookupInvoice", "createRefund"],
-        }),
-      );
+      await assertRefundCase(await run("Refund invoice inv_123"), {
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
+      });
     });
 
     it("denies non-refundable invoice", async ({ run }) => {
-      await assertRefundCase(
-        await run("Refund invoice inv_404", {
-          expectedStatus: "denied",
-          expectedTools: ["lookupInvoice"],
-        }),
-      );
+      await assertRefundCase(await run("Refund invoice inv_404"), {
+        expectedStatus: "denied",
+        expectedTools: ["lookupInvoice"],
+      });
     });
   },
 );
 
-async function assertRefundCase({
-  run,
-  session,
-  caseData,
-}: HarnessEvalContext<RefundCase>) {
+async function assertRefundCase(
+  { run, session }: HarnessEvalContext<RefundCase>,
+  expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
+) {
   expect(run.output).toMatchObject({
-    status: caseData.expectedStatus,
+    status: expected.expectedStatus,
   });
   expect(toolCalls(session).map((call) => call.name)).toEqual(
-    caseData.expectedTools,
+    expected.expectedTools,
   );
   expect(run.usage.provider).toContain("anthropic");
   expect(run.usage.model).toContain("claude");
