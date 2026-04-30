@@ -73,17 +73,13 @@ works.
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness({
-      agent: createRefundAgent,
-      tools: foobarTools,
-      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-    }),
+    harness: piAiHarness(createRefundAgent),
   },
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
 
-      expect(result.output).toMatchObject({ status: "approved" });
+      expect(result.session.outputText).toContain('"status":"approved"');
       expect(toolCalls(result.session).map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",

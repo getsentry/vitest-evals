@@ -11,27 +11,15 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 ## Usage
 
 ```ts
-import { getModel } from "@mariozechner/pi-ai";
-import { piAiHarness, piAiPrompt } from "@vitest-evals/harness-pi-ai";
-import {
-  createRefundAgent,
-  foobarTools,
-  parseRefundDecision,
-} from "@demo/foobar";
+import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { createRefundAgent } from "@demo/foobar";
 
-const harness = piAiHarness({
-  agent: createRefundAgent,
-  tools: foobarTools,
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-  prompt: piAiPrompt({
-    model: getModel("anthropic", "claude-sonnet-4-5"),
-  }),
-});
+const harness = piAiHarness(createRefundAgent);
 ```
 
-`createRefundAgent` is a normal `pi-agent-core` factory, and `foobarTools` are
-normal `AgentTool[]`. The harness wraps the tools for normalized tool-call
-records and replay, then restores the agent's tool state after each run.
+`createRefundAgent` is a normal `pi-agent-core` factory. The harness wraps the
+agent's existing `state.tools` for normalized tool-call records and replay,
+then restores the agent's tool state after each run.
 
 ```ts
 import { Agent } from "@mariozechner/pi-agent-core";

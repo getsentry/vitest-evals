@@ -131,27 +131,19 @@ roughly like this:
 ```ts
 import { describeEval, toolCalls } from "vitest-evals";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import {
-  createRefundAgent,
-  foobarTools,
-  parseRefundDecision,
-} from "../src/refundAgent";
+import { createRefundAgent } from "../src/refundAgent";
 
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness({
-      agent: createRefundAgent,
-      tools: foobarTools,
-      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-    }),
+    harness: piAiHarness(createRefundAgent),
   },
   (it) => {
     it("approves refundable invoice", async ({ agent, run }) => {
       const result = await run("Refund invoice inv_123");
 
       expect(agent).toBeDefined();
-      expect(result.output).toMatchObject({ status: "approved" });
+      expect(result.session.outputText).toContain('"status":"approved"');
       expect(toolCalls(result.session)).toContainEqual(
         expect.objectContaining({ name: "lookupInvoice" }),
       );
@@ -165,7 +157,7 @@ The important behavior is:
 - the user passes their existing `pi-agent-core` agent through the harness setup
 - each eval test calls the instrumented `run(input)` fixture where execution
   should happen
-- the harness wraps native `AgentTool[]` for trace and replay
+- the harness wraps the agent's native `AgentTool[]` for trace and replay
 - the agent executes normally
 - the harness returns both the domain result and the normalized trace
 
@@ -176,14 +168,11 @@ The built-in harness should support two authoring levels.
 The default path should be close to zero glue for standard apps:
 
 ```ts
-harness: piAiHarness({
-  agent: createRefundAgent,
-  tools: foobarTools,
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-});
+harness: piAiHarness(createRefundAgent);
 ```
 
-That path should work for a normal `Agent` plus normal `AgentTool[]`.
+That path should work for a normal `Agent` that already owns normal
+`AgentTool[]` in `state.tools`.
 
 There should also be an explicit escape hatch for applications with a custom
 entrypoint or custom result shape:

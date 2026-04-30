@@ -657,24 +657,20 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
 
   if (!usage) {
-    return steps.length > 0
-      ? {
-          provider: lastStep?.model.provider,
-          model: lastStep?.model.modelId,
-          toolCalls: steps.reduce(
-            (count, step) => count + (step.toolCalls?.length ?? 0),
-            0,
-          ),
-        }
-      : runtimeToolCallCount > 0
-        ? { toolCalls: runtimeToolCallCount }
-        : {};
+    if (steps.length > 0) {
+      const toolCallCount = countStepToolCalls(steps);
+
+      return {
+        provider: lastStep?.model.provider,
+        model: lastStep?.model.modelId,
+        ...(toolCallCount > 0 ? { toolCalls: toolCallCount } : {}),
+      };
+    }
+
+    return runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
   }
 
-  const stepToolCallCount = steps.reduce(
-    (count, step) => count + (step.toolCalls?.length ?? 0),
-    0,
-  );
+  const stepToolCallCount = countStepToolCalls(steps);
   const toolCallCount =
     stepToolCallCount > 0 ? stepToolCallCount : runtimeToolCallCount;
 
@@ -695,6 +691,13 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
       raw: usage.raw,
     }),
   };
+}
+
+function countStepToolCalls(steps: StepLike[]) {
+  return steps.reduce(
+    (count, step) => count + (step.toolCalls?.length ?? 0),
+    0,
+  );
 }
 
 function resolveSession(
@@ -923,8 +926,7 @@ function normalizeArguments(
     return undefined;
   }
 
-  const normalized = normalizeRecord(value as Record<string, unknown>);
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  return normalizeRecord(value as Record<string, unknown>);
 }
 
 function normalizeRecord(

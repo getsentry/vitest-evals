@@ -67,9 +67,7 @@ import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness({
-      agent: createRefundAgent,
-      tools: foobarTools,
+    harness: piAiHarness(createRefundAgent, {
       output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
     }),
     judges: [ToolCallJudge()],

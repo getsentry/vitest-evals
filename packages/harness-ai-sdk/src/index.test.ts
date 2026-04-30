@@ -675,6 +675,117 @@ test("normalizes arrays and empty objects without dropping positions", async () 
   ]);
 });
 
+test("preserves empty root tool arguments and omits zero tool usage", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "done",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [
+            {
+              type: "tool-call",
+              toolCallId: "call_empty",
+              toolName: "checkPolicy",
+              input: {},
+            },
+          ],
+          toolResults: [
+            {
+              type: "tool-result",
+              toolCallId: "call_empty",
+              toolName: "checkPolicy",
+              input: {},
+              output: {
+                ok: true,
+              },
+            },
+          ],
+          response: {
+            messages: [],
+          },
+        },
+        {
+          stepNumber: 1,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "done",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [],
+          toolResults: [],
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.usage.toolCalls).toBe(1);
+  expect(toolCalls(run.session)[0].arguments).toEqual({});
+
+  const noToolHarness = aiSdkHarness({
+    task: async () => ({
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "done",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [],
+          toolResults: [],
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const noToolRun = await noToolHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(noToolRun.usage.toolCalls).toBeUndefined();
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");

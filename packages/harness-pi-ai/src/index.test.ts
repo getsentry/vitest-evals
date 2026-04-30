@@ -11,7 +11,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
 import {
   piAiHarness,
-  piAiPrompt,
   type PiAiAgentTool,
   type PiAiRuntime,
   type PiAiToolset,
@@ -159,8 +158,8 @@ test("runs native pi-agent-core agents with instrumented AgentTool instances", a
   ]);
 
   try {
-    const harness = piAiHarness({
-      agent: () =>
+    const harness = piAiHarness(
+      () =>
         new Agent({
           initialState: {
             systemPrompt: "You approve refunds.",
@@ -168,8 +167,10 @@ test("runs native pi-agent-core agents with instrumented AgentTool instances", a
             tools: nativeTools,
           },
         }),
-      output: ({ outputText }) => JSON.parse(outputText ?? "{}"),
-    });
+      {
+        output: ({ outputText }) => JSON.parse(outputText ?? "{}"),
+      },
+    );
 
     const run = await harness.run("Refund invoice inv_123", {
       caseData: {
@@ -312,7 +313,7 @@ test("task can own agent creation while receiving wrapped runtime tools", async 
   ]);
 });
 
-test("piAiPrompt prompts the configured model", async () => {
+test("promptModel exposes a harness prompt helper", async () => {
   const provider = registerFauxProvider();
   provider.setResponses([
     (context) => {
@@ -330,12 +331,12 @@ test("piAiPrompt prompts the configured model", async () => {
   ]);
 
   try {
-    const prompt = piAiPrompt({
-      model: provider.getModel(),
+    const harness = piAiHarness(createAgent, {
+      promptModel: provider.getModel(),
     });
 
     await expect(
-      prompt("Judge this run", {
+      harness.prompt?.("Judge this run", {
         system: "Grade refund behavior.",
       }),
     ).resolves.toBe(

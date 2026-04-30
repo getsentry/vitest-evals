@@ -36,9 +36,7 @@ export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
 Use it from an eval test:
 
 ```ts
-const harness = piAiHarness({
-  agent: createRefundAgent,
-  tools: foobarTools,
+const harness = piAiHarness(createRefundAgent, {
   output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 

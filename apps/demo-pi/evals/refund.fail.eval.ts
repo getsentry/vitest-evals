@@ -1,15 +1,9 @@
 import { expect } from "vitest";
-import {
-  createRefundAgent,
-  foobarTools,
-  parseRefundDecision,
-} from "@demo/foobar";
+import { createRefundAgent, parseRefundDecision } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
 
-const harness = piAiHarness({
-  agent: createRefundAgent,
-  tools: foobarTools,
+const harness = piAiHarness(createRefundAgent, {
   output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 

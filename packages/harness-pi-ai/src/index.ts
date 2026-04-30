@@ -73,12 +73,12 @@ export type PiAiAgentTools<
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
 > = readonly PiAiAgentTool<any, TInput, TCase>[];
 
-export interface PiAiPromptOptions {
+interface PiAiPromptOptions {
   model: PiAiPromptModel;
   system?: string;
 }
 
-export function piAiPrompt(options: PiAiPromptOptions): HarnessPrompt {
+function createPiAiPrompt(options: PiAiPromptOptions): HarnessPrompt {
   return async (input, promptOptions) => {
     const response = await complete(options.model, {
       systemPrompt: promptOptions?.system ?? options.system,
@@ -257,9 +257,19 @@ interface PiAiHarnessBaseOptions<
   errors?: (
     args: PiAiHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
+  promptModel?: PiAiPromptModel;
+  promptSystem?: string;
   prompt?: HarnessPrompt;
   name?: string;
 }
+
+export type PiAiHarnessConfig<
+  TAgent,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TCase> = PiAiToolset<TInput, TCase>,
+> = PiAiHarnessBaseOptions<TAgent, TInput, TCase, TResult, TTools>;
 
 type PiAiNativeAgentRunResult = {
   [piAiAgentResultSymbol]: true;
@@ -282,18 +292,108 @@ export function piAiHarness<
   TTools extends PiAiToolset<TInput, TCase> = PiAiToolset<TInput, TCase>,
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+): Harness<TInput, TCase, TAgent>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TCase> = PiAiToolset<TInput, TCase>,
+>(
+  agent: AgentSource<TAgent>,
+  options?: PiAiHarnessConfig<TAgent, TInput, TCase, TResult, TTools>,
+): Harness<TInput, TCase, TAgent>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TCase> = PiAiToolset<TInput, TCase>,
+>(
+  agentOrOptions:
+    | AgentSource<TAgent>
+    | PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+  options?: PiAiHarnessConfig<TAgent, TInput, TCase, TResult, TTools>,
 ): Harness<TInput, TCase, TAgent> {
-  validateOptions(options);
+  const harnessOptions = normalizePiAiHarnessOptions(agentOrOptions, options);
+  validateOptions(harnessOptions);
 
   return {
-    name: options.name ?? "pi-ai",
-    prompt: options.prompt,
-    setup: () => createPiAiHarnessExecution(options),
+    name: harnessOptions.name ?? "pi-ai",
+    prompt: resolveHarnessPrompt(harnessOptions),
+    setup: () => createPiAiHarnessExecution(harnessOptions),
     run: async (input, context) => {
-      const execution = await createPiAiHarnessExecution(options);
+      const execution = await createPiAiHarnessExecution(harnessOptions);
       return execution.run(input, context);
     },
   };
+}
+
+function normalizePiAiHarnessOptions<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends PiAiToolset<TInput, TCase>,
+>(
+  agentOrOptions:
+    | AgentSource<TAgent>
+    | PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+  options: PiAiHarnessConfig<TAgent, TInput, TCase, TResult, TTools> = {},
+): PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools> {
+  if (isPiAiHarnessOptions(agentOrOptions)) {
+    return agentOrOptions as PiAiHarnessOptions<
+      TAgent,
+      TInput,
+      TCase,
+      TResult,
+      TTools
+    >;
+  }
+
+  return {
+    ...options,
+    agent: agentOrOptions as AgentSource<TAgent>,
+  } as PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>;
+}
+
+function isPiAiHarnessOptions(
+  value: unknown,
+): value is PiAiHarnessOptions<
+  unknown,
+  unknown,
+  HarnessCase<unknown>,
+  unknown,
+  PiAiToolset<unknown, HarnessCase<unknown>>
+> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    ("agent" in value || "task" in value)
+  );
+}
+
+function resolveHarnessPrompt<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends PiAiToolset<TInput, TCase>,
+>(
+  options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+): HarnessPrompt | undefined {
+  if (options.prompt) {
+    return options.prompt;
+  }
+
+  if (options.promptModel) {
+    return createPiAiPrompt({
+      model: options.promptModel,
+      system: options.promptSystem,
+    });
+  }
+
+  return undefined;
 }
 
 async function createPiAiHarnessExecution<

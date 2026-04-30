@@ -55,19 +55,11 @@ The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
 
 ```ts
 import { expect } from "vitest";
-import {
-  createRefundAgent,
-  foobarTools,
-  parseRefundDecision,
-} from "@demo/foobar";
+import { createRefundAgent } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, toolCalls } from "vitest-evals";
 
-const harness = piAiHarness({
-  agent: createRefundAgent,
-  tools: foobarTools,
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-});
+const harness = piAiHarness(createRefundAgent);
 
 describeEval(
   "demo pi refund agent",
@@ -79,9 +71,7 @@ describeEval(
       const result = await run("Refund invoice inv_123");
 
       expect(agent).toBeDefined();
-      expect(result.output).toMatchObject({
-        status: "approved",
-      });
+      expect(result.session.outputText).toContain('"status":"approved"');
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
         ["lookupInvoice", "createRefund"],
       );
