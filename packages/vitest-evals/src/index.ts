@@ -42,7 +42,9 @@ export interface HarnessEvalContext<
   input: TCase["input"];
   caseData: TCase;
   run: HarnessRun;
+  output: HarnessRun["output"];
   session: HarnessRun["session"];
+  usage: HarnessRun["usage"];
   judge: RunJudge<TCase>;
 }
 
@@ -87,30 +89,46 @@ export interface HarnessSuiteOptions<
   afterEach?: () => void | Promise<void>;
 }
 
-export type HarnessTaskOptions<TCase extends HarnessCase = HarnessCase> = Omit<
-  TCase,
-  "name"
+export type HarnessRunOptions<TCase extends HarnessCase = HarnessCase> = Omit<
+  Partial<TCase>,
+  "input" | "name"
 > & {
-  name?: string;
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
   threshold?: number | null;
-  skipIf?: () => boolean;
-  timeout?: number;
 };
 
-export type HarnessTaskFn<
+export interface HarnessTestContext<
   TCase extends HarnessCase = HarnessCase,
   TAgent = unknown,
-> = (context: HarnessEvalContext<TCase, TAgent>) => Promise<void> | void;
+> {
+  agent: TAgent | undefined;
+  run: <TRunCase extends TCase = TCase>(
+    input: TRunCase["input"],
+    options?: HarnessRunOptions<TRunCase>,
+  ) => Promise<HarnessEvalContext<TRunCase, TAgent>>;
+}
 
-export type HarnessTaskRegistrar<
+export type HarnessTestOptions = {
+  timeout?: number;
+  skipIf?: () => boolean;
+};
+
+export type HarnessEvalTestFn<
   TCase extends HarnessCase = HarnessCase,
   TAgent = unknown,
-> = <TTaskCase extends TCase>(
-  name: string,
-  options: HarnessTaskOptions<TTaskCase>,
-  task?: HarnessTaskFn<TTaskCase, TAgent>,
-) => void;
+> = (context: HarnessTestContext<TCase, TAgent>) => Promise<void> | void;
+
+export type HarnessEvalTestRegistrar<
+  TCase extends HarnessCase = HarnessCase,
+  TAgent = unknown,
+> = {
+  (name: string, fn: HarnessEvalTestFn<TCase, TAgent>): void;
+  (
+    name: string,
+    options: HarnessTestOptions,
+    fn: HarnessEvalTestFn<TCase, TAgent>,
+  ): void;
+};
 
 export type JudgeAssertionOptions<TCase extends HarnessCase = HarnessCase> =
   Partial<
@@ -219,17 +237,15 @@ expect.extend({
  *     }),
  *   },
  *   (it) => {
- *     it(
- *       "approves refundable invoice",
- *       { input: "Refund invoice inv_123" },
- *       async ({ run, session, judge }) => {
- *         expect(run.output).toMatchObject({ status: "approved" });
- *         expect(toolCalls(session)).toHaveLength(2);
- *         await judge(StructuredOutputJudge(), {
- *           expected: { status: "approved" },
- *         });
- *       },
- *     );
+ *     it("approves refundable invoice", async ({ run }) => {
+ *       const result = await run("Refund invoice inv_123");
+ *
+ *       expect(result.output).toMatchObject({ status: "approved" });
+ *       expect(toolCalls(result.session)).toHaveLength(2);
+ *       await result.judge(StructuredOutputJudge(), {
+ *         expected: { status: "approved" },
+ *       });
+ *     });
  *   },
  * );
  * ```
@@ -237,7 +253,7 @@ expect.extend({
 export function describeEval<TCase extends HarnessCase, TAgent = unknown>(
   name: string,
   options: HarnessSuiteOptions<TCase, TAgent>,
-  define: (task: HarnessTaskRegistrar<TCase, TAgent>) => void,
+  define: (it: HarnessEvalTestRegistrar<TCase, TAgent>) => void,
 ): void;
 export function describeEval<TCase extends HarnessCase, TAgent = unknown>(
   name: string,
@@ -248,13 +264,13 @@ export function describeEval<TCase extends HarnessCase, TAgent = unknown>(
   options:
     | HarnessDescribeEvalOptions<TCase, TAgent>
     | HarnessSuiteOptions<TCase, TAgent>,
-  define?: (task: HarnessTaskRegistrar<TCase, TAgent>) => void,
+  define?: (it: HarnessEvalTestRegistrar<TCase, TAgent>) => void,
 ) {
   return describe(name, async () => {
     registerHarnessHooks(options);
 
     if (define) {
-      define(createHarnessTaskRegistrar(options));
+      define(createHarnessTestRegistrar(options));
       return;
     }
 
@@ -301,61 +317,37 @@ function isDataBackedEvalOptions<TCase extends HarnessCase, TAgent>(
   return "data" in options;
 }
 
-function createHarnessTaskRegistrar<
+function createHarnessTestRegistrar<
   TCase extends HarnessCase,
   TAgent = unknown,
 >(
   options: HarnessSuiteOptions<TCase, TAgent>,
-): HarnessTaskRegistrar<TCase, TAgent> {
-  return <TTaskCase extends TCase>(
+): HarnessEvalTestRegistrar<TCase, TAgent> {
+  return ((
     testName: string,
-    taskOptions: HarnessTaskOptions<TTaskCase>,
-    task?: HarnessTaskFn<TTaskCase, TAgent>,
+    optionsOrFn: HarnessTestOptions | HarnessEvalTestFn<TCase, TAgent>,
+    maybeFn?: HarnessEvalTestFn<TCase, TAgent>,
   ) => {
-    const { caseData, judges, threshold, skipIf, timeout } =
-      splitHarnessTaskOptions<TTaskCase>(testName, taskOptions);
-    const testFn = options.skipIf?.() || skipIf?.() ? test.skip : test;
+    const testOptions =
+      typeof optionsOrFn === "function" ? undefined : optionsOrFn;
+    const fn = typeof optionsOrFn === "function" ? optionsOrFn : maybeFn;
+    const testFn =
+      options.skipIf?.() || testOptions?.skipIf?.() ? test.skip : test;
 
-    registerHarnessCaseTest({
+    if (!fn) {
+      throw new Error(`describeEval test "${testName}" requires a callback.`);
+    }
+
+    registerHarnessFixtureTest({
       testFn: testFn as VitestEvalTestFn,
       testName,
-      harness: options.harness as unknown as Harness<
-        TTaskCase["input"],
-        TTaskCase,
-        TAgent
-      >,
-      caseData,
-      judges: [
-        ...((options.judges ?? []) as Array<
-          JudgeFn<HarnessJudgeOptions<TTaskCase>>
-        >),
-        ...(judges ?? []),
-      ],
-      threshold: threshold === undefined ? options.threshold : threshold,
-      timeout: timeout ?? options.timeout,
-      task,
+      harness: options.harness,
+      judges: options.judges,
+      threshold: options.threshold,
+      timeout: testOptions?.timeout ?? options.timeout,
+      fn,
     });
-  };
-}
-
-function splitHarnessTaskOptions<TCase extends HarnessCase>(
-  testName: string,
-  options: HarnessTaskOptions<TCase>,
-) {
-  const { judges, threshold, skipIf, timeout, ...caseFields } =
-    options as HarnessTaskOptions<TCase> & Record<string, unknown>;
-  const caseData = {
-    ...caseFields,
-    name: testName,
-  } as unknown as TCase;
-
-  return {
-    caseData,
-    judges,
-    threshold,
-    skipIf,
-    timeout,
-  };
+  }) as HarnessEvalTestRegistrar<TCase, TAgent>;
 }
 
 function registerHarnessCaseTest<TCase extends HarnessCase, TAgent = unknown>({
@@ -375,59 +367,161 @@ function registerHarnessCaseTest<TCase extends HarnessCase, TAgent = unknown>({
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
   threshold?: number | null;
   timeout?: number;
-  task?: HarnessTaskFn<TCase, TAgent>;
+  task?: (context: HarnessEvalContext<TCase, TAgent>) => Promise<void> | void;
 }) {
-  const { input } = caseData;
-
   testFn(
     testName,
     {
       timeout: timeout ?? 60000,
     },
     async ({ task: testTask }) => {
-      const artifacts: HarnessContext["artifacts"] = {};
-      const context: HarnessContext<any> = {
-        caseData,
-        task: testTask,
-        artifacts,
-        setArtifact: (artifactName, value) => {
-          artifacts[artifactName] = value;
-        },
-      };
       const execution = await resolveHarnessExecution(harness);
-
-      let run: HarnessRun;
-      try {
-        run = await execution.run(input, context);
-      } catch (error) {
-        const partialRun = getHarnessRunFromError(error);
-        if (partialRun) {
-          attachHarnessMeta(testTask, harness.name, partialRun, artifacts);
-        }
-
-        throw error;
-      }
-
-      attachHarnessMeta(testTask, harness.name, run, artifacts);
-      await runAutomaticJudges({
+      const result = await executeHarnessCase({
         testTask,
+        harnessName: harness.name,
+        execution,
+        caseData,
         judges,
         threshold,
-        caseData,
-        input,
-        run,
       });
 
-      await task?.({
-        agent: execution.agent,
-        input,
-        caseData,
-        run,
-        session: run.session,
-        judge: createRunJudge(input, caseData, run),
-      });
+      await task?.(result);
     },
   );
+}
+
+function registerHarnessFixtureTest<
+  TCase extends HarnessCase,
+  TAgent = unknown,
+>({
+  testFn,
+  testName,
+  harness,
+  judges,
+  threshold,
+  timeout,
+  fn,
+}: {
+  testFn: VitestEvalTestFn;
+  testName: string;
+  harness: Harness<TCase["input"], TCase, TAgent>;
+  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
+  threshold?: number | null;
+  timeout?: number;
+  fn: HarnessEvalTestFn<TCase, TAgent>;
+}) {
+  testFn(
+    testName,
+    {
+      timeout: timeout ?? 60000,
+    },
+    async ({ task: testTask }) => {
+      const execution = await resolveHarnessExecution(harness);
+      let hasRun = false;
+
+      await fn({
+        agent: execution.agent,
+        run: async <TRunCase extends TCase = TCase>(
+          input: TRunCase["input"],
+          runOptions?: HarnessRunOptions<TRunCase>,
+        ) => {
+          if (hasRun) {
+            throw new Error(
+              `describeEval test "${testName}" already called run(). Split multiple scenarios into separate tests so reporting stays one run per test.`,
+            );
+          }
+          hasRun = true;
+
+          const {
+            judges: runJudges,
+            threshold: runThreshold,
+            ...caseFields
+          } = (runOptions ?? {}) as HarnessRunOptions<TRunCase> &
+            Record<string, unknown>;
+          const caseData = {
+            ...caseFields,
+            input,
+            name: testName,
+          } as TRunCase;
+
+          return executeHarnessCase({
+            testTask,
+            harnessName: harness.name,
+            execution: execution as unknown as HarnessExecution<
+              TRunCase["input"],
+              TRunCase,
+              TAgent
+            >,
+            caseData,
+            judges: [
+              ...((judges ?? []) as Array<
+                JudgeFn<HarnessJudgeOptions<TRunCase>>
+              >),
+              ...(runJudges ?? []),
+            ],
+            threshold: runThreshold === undefined ? threshold : runThreshold,
+          });
+        },
+      });
+
+      if (!hasRun) {
+        throw new Error(
+          `describeEval test "${testName}" must call run(input) so the harness can capture reporting metadata.`,
+        );
+      }
+    },
+  );
+}
+
+async function executeHarnessCase<TCase extends HarnessCase, TAgent = unknown>({
+  testTask,
+  harnessName,
+  execution,
+  caseData,
+  judges,
+  threshold,
+}: {
+  testTask: { meta: Record<string, any> };
+  harnessName: string;
+  execution: HarnessExecution<TCase["input"], TCase, TAgent>;
+  caseData: TCase;
+  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
+  threshold?: number | null;
+}): Promise<HarnessEvalContext<TCase, TAgent>> {
+  const { input } = caseData;
+  const artifacts: HarnessContext["artifacts"] = {};
+  const context: HarnessContext<any> = {
+    caseData,
+    task: testTask,
+    artifacts,
+    setArtifact: (artifactName, value) => {
+      artifacts[artifactName] = value;
+    },
+  };
+
+  let run: HarnessRun;
+  try {
+    run = await execution.run(input, context);
+  } catch (error) {
+    const partialRun = getHarnessRunFromError(error);
+    if (partialRun) {
+      attachHarnessMeta(testTask, harnessName, partialRun, artifacts);
+    }
+
+    throw error;
+  }
+
+  attachHarnessMeta(testTask, harnessName, run, artifacts);
+  await runAutomaticJudges({
+    testTask,
+    judges,
+    threshold,
+    caseData,
+    input,
+    run,
+  });
+
+  return createHarnessEvalContext(execution.agent, input, caseData, run);
 }
 
 async function resolveHarnessExecution<
@@ -525,6 +619,24 @@ async function runAutomaticJudges<TCase extends HarnessCase>({
       ].join("\n\n"),
     );
   }
+}
+
+function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
+  agent: TAgent | undefined,
+  input: TCase["input"],
+  caseData: TCase,
+  run: HarnessRun,
+): HarnessEvalContext<TCase, TAgent> {
+  return {
+    agent,
+    input,
+    caseData,
+    run,
+    output: run.output,
+    session: run.session,
+    usage: run.usage,
+    judge: createRunJudge(input, caseData, run),
+  };
 }
 
 function createRunJudge<TCase extends HarnessCase>(

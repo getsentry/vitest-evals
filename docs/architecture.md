@@ -7,9 +7,10 @@ Vitest still runs the suite, but the primary contract is no longer
 `input -> task -> scorer`. The primary contract is:
 
 - one explicit `harness` per suite
+- named eval tests that call the instrumented `run(input)` fixture
 - one normalized `HarnessRun` per eval test
 - optional automatic `judges`
-- optional explicit Vitest assertions over `run` and `session`
+- optional explicit Vitest assertions over the returned result and session
 
 Legacy scorer-first support still exists, but it lives under
 `vitest-evals/legacy` and under `packages/vitest-evals/src/legacy/...`.
@@ -101,14 +102,15 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 For each eval test in a harness-backed suite:
 
 1. `describeEval(...)` configures one instrumented harness for the suite.
-2. The suite callback registers named eval tests with their task input.
-3. The configured harness runs the system under test exactly once.
-4. The harness returns a `HarnessRun` with `run.output`, `run.session`,
+2. The suite callback registers named eval tests.
+3. The eval test calls `run(input)` at the point execution should happen.
+4. The configured harness runs the system under test exactly once.
+5. The harness returns a `HarnessRun` with `run.output`, `run.session`,
    `usage`, `timings`, `artifacts`, and `errors`.
-5. Core stores that run on `task.meta.harness` for the reporter.
-6. Automatic suite-level judges run against the normalized run/session pair.
-7. The eval test callback receives the same `agent`, `run`, and `session`.
-8. The reporter renders the recorded metadata without re-executing the harness.
+6. Core stores that run on `task.meta.harness` for the reporter.
+7. Automatic suite-level judges run against the normalized run/session pair.
+8. The eval test asserts on the same returned result, session, and agent.
+9. The reporter renders the recorded metadata without re-executing the harness.
 
 ## First-Party Harness Packages
 

@@ -46,9 +46,10 @@ describeEval(
     judges: [RefundStatusJudge],
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-      expectedStatus: "approved",
+    it("approves refundable invoice", async ({ run }) => {
+      await run("Refund invoice inv_123", {
+        expectedStatus: "approved",
+      });
     });
   },
 );
@@ -57,12 +58,14 @@ describeEval(
 Or run it explicitly inside a test:
 
 ```ts
-await expect(run.output).toSatisfyJudge(RefundStatusJudge, {
-  rawInput: caseData.input,
-  caseData,
-  run,
-  session,
-  expectedStatus: caseData.expectedStatus,
+it("approves refundable invoice", async ({ run }) => {
+  const result = await run("Refund invoice inv_123", {
+    expectedStatus: "approved",
+  });
+
+  await result.judge(RefundStatusJudge, {
+    expectedStatus: result.caseData.expectedStatus,
+  });
 });
 ```
 

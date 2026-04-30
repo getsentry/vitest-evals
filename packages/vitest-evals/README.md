@@ -23,9 +23,9 @@ npm install -D @vitest-evals/harness-pi-ai
 - `run.output` is the application-facing result you assert on
 - `run.session` is the canonical JSON-serializable trace used for reporting,
   tool assertions, replay metadata, and generic judges
-- suite-level `judges` run automatically on that same `run` and `session`
-- the `test` callback gets a pre-bound `judge(...)` helper for explicit judge
-  assertions without rerunning the harness
+- suite-level `judges` run automatically on the same recorded run
+- each eval test gets an instrumented `run(input)` fixture and a pre-bound
+  `judge(...)` helper on the result
 
 ## Harness Example
 
@@ -50,19 +50,22 @@ describeEval(
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-      expectedStatus: "approved",
-      expectedTools: ["lookupInvoice", "createRefund"],
-    }, async ({ agent, run, session, caseData, judge }) => {
+    it("approves refundable invoice", async ({ agent, run }) => {
+      const result = await run("Refund invoice inv_123", {
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
+      });
+
       expect(agent).toBeDefined();
-      expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-      expect(toolCalls(session).map((call) => call.name)).toEqual(
-        caseData.expectedTools,
+      expect(result.output).toMatchObject({
+        status: result.caseData.expectedStatus,
+      });
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+        result.caseData.expectedTools,
       );
 
-      await judge(StructuredOutputJudge(), {
-        expected: { status: caseData.expectedStatus },
+      await result.judge(StructuredOutputJudge(), {
+        expected: { status: result.caseData.expectedStatus },
       });
     });
   },
@@ -86,9 +89,9 @@ For an existing `pi-ai` agent, the intended contract is:
   custom projection
 
 The harness owns normalization, diagnostics, tool capture, replay plumbing, and
-reporter-facing artifacts. Individual eval tests stay small: they declare the
-scenario input, assert on `run.output`, inspect the normalized `session`, and
-call judges when useful.
+reporter-facing artifacts. Individual eval tests stay small: they call
+`run(input)`, assert on `result.output`, inspect `result.session`, and call
+judges when useful.
 
 ```ts
 const harness = piAiHarness({
@@ -125,12 +128,13 @@ harness-backed suites.
 Inside an eval test you can call `judge(...)` directly:
 
 ```ts
-it("denies non-refundable invoice", {
-  input: "Refund invoice inv_404",
-  expectedStatus: "denied",
-}, async ({ judge, caseData }) => {
-  await judge(StructuredOutputJudge(), {
-    expected: { status: caseData.expectedStatus },
+it("denies non-refundable invoice", async ({ run }) => {
+  const result = await run("Refund invoice inv_404", {
+    expectedStatus: "denied",
+  });
+
+  await result.judge(StructuredOutputJudge(), {
+    expected: { status: result.caseData.expectedStatus },
   });
 });
 ```

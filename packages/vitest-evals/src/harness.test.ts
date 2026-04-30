@@ -134,37 +134,34 @@ describeEval(
   "harness mode with vitest-style tasks",
   { harness: agentHarness },
   (it) => {
-    it(
-      "refund request",
-      {
-        input: "Refund invoice inv_123",
+    it("refund request", async ({ agent, run }) => {
+      const result = await run("Refund invoice inv_123", {
         expectedStatus: "approved",
-      },
-      async ({ agent, input, caseData, run, session, judge }) => {
-        expect(agent?.id).toBe("refund-agent");
-        expect(input).toBe("Refund invoice inv_123");
-        expect(caseData.expectedStatus).toBe("approved");
-        expect(run.output).toEqual({
-          status: "approved",
-        });
-        expect(toolCalls(session)).toHaveLength(1);
+      });
 
-        await judge(judgeSpy, {
-          expectedStatus: caseData.expectedStatus,
-        });
+      expect(agent?.id).toBe("refund-agent");
+      expect(result.input).toBe("Refund invoice inv_123");
+      expect(result.caseData.expectedStatus).toBe("approved");
+      expect(result.output).toEqual({
+        status: "approved",
+      });
+      expect(toolCalls(result.session)).toHaveLength(1);
 
-        expect(judgeSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            input: "Refund invoice inv_123",
-            rawInput: "Refund invoice inv_123",
-            output: '{"status":"approved"}',
-            caseData: expect.objectContaining({
-              expectedStatus: "approved",
-            }),
+      await result.judge(judgeSpy, {
+        expectedStatus: result.caseData.expectedStatus,
+      });
+
+      expect(judgeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: "Refund invoice inv_123",
+          rawInput: "Refund invoice inv_123",
+          output: '{"status":"approved"}',
+          caseData: expect.objectContaining({
+            expectedStatus: "approved",
           }),
-        );
-      },
-    );
+        }),
+      );
+    });
   },
 );
 

@@ -16,13 +16,14 @@ describeEval(
     judges: [StructuredOutputJudge()],
   },
   (it) => {
-    it("judge expects approval for a denied invoice", {
-      input: "Refund invoice inv_404",
-      expectedStatus: "denied",
-      expectedTools: ["lookupInvoice"],
-      expected: {
-        status: "approved",
-      },
+    it("judge expects approval for a denied invoice", async ({ run }) => {
+      await run("Refund invoice inv_404", {
+        expectedStatus: "denied",
+        expectedTools: ["lookupInvoice"],
+        expected: {
+          status: "approved",
+        },
+      });
     });
   },
 );
@@ -34,24 +35,21 @@ describeEval(
     harness,
   },
   (it) => {
-    it(
-      "throws after the agent handles a missing invoice",
-      {
-        input: "Refund invoice inv_missing",
+    it("throws after the agent handles a missing invoice", async ({ run }) => {
+      const result = await run("Refund invoice inv_missing", {
         expectedStatus: "denied",
         expectedTools: ["lookupInvoice"],
-      },
-      async ({ run }) => {
-        expect(run.output).toMatchObject({
-          status: "denied",
-          invoiceId: "inv_missing",
-          reason: "Invoice inv_missing not found",
-        });
+      });
 
-        throw new Error(
-          "Intentional demo eval error after the agent handled a tool failure.",
-        );
-      },
-    );
+      expect(result.output).toMatchObject({
+        status: "denied",
+        invoiceId: "inv_missing",
+        reason: "Invoice inv_missing not found",
+      });
+
+      throw new Error(
+        "Intentional demo eval error after the agent handled a tool failure.",
+      );
+    });
   },
 );

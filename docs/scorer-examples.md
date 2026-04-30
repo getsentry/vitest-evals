@@ -50,12 +50,14 @@ export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
 ## Explicit Judge Assertion
 
 ```ts
-await expect(run.output).toSatisfyJudge(RefundApprovalJudge, {
-  rawInput: caseData.input,
-  caseData,
-  run,
-  session,
-  expectedStatus: caseData.expectedStatus,
+it("approves refundable invoice", async ({ run }) => {
+  const result = await run("Refund invoice inv_123", {
+    expectedStatus: "approved",
+  });
+
+  await result.judge(RefundApprovalJudge, {
+    expectedStatus: result.caseData.expectedStatus,
+  });
 });
 ```
 
@@ -74,20 +76,21 @@ describeEval(
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-      expected: { status: "approved" },
-      expectedTools: [
-        { name: "lookupInvoice" },
-        { name: "createRefund" },
-      ],
-    }, async ({ run, session, caseData }) => {
-      await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
-        rawInput: caseData.input,
-        caseData,
-        run,
-        session,
-        expected: caseData.expected,
+    it("approves refundable invoice", async ({ run }) => {
+      const result = await run("Refund invoice inv_123", {
+        expected: { status: "approved" },
+        expectedTools: [
+          { name: "lookupInvoice" },
+          { name: "createRefund" },
+        ],
+      });
+
+      await expect(result.output).toSatisfyJudge(StructuredOutputJudge(), {
+        rawInput: result.input,
+        caseData: result.caseData,
+        run: result.run,
+        session: result.session,
+        expected: result.caseData.expected,
       });
     });
   },

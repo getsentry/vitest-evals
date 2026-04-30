@@ -10,13 +10,14 @@ describeEval(
     judges: [StructuredOutputJudge()],
   },
   (it) => {
-    it("judge expects approval for a denied invoice", {
-      input: "Refund invoice inv_404",
-      expectedStatus: "denied",
-      expectedTools: ["lookupInvoice"],
-      expected: {
-        status: "approved",
-      },
+    it("judge expects approval for a denied invoice", async ({ run }) => {
+      await run("Refund invoice inv_404", {
+        expectedStatus: "denied",
+        expectedTools: ["lookupInvoice"],
+        expected: {
+          status: "approved",
+        },
+      });
     });
   },
 );
@@ -28,20 +29,17 @@ describeEval(
     harness: refundHarness,
   },
   (it) => {
-    it(
-      "asserts the wrong refund id after approval",
-      {
-        input: "Refund invoice inv_123",
+    it("asserts the wrong refund id after approval", async ({ run }) => {
+      const result = await run("Refund invoice inv_123", {
         expectedStatus: "approved",
         expectedTools: ["lookupInvoice", "createRefund"],
-      },
-      async ({ run }) => {
-        expect(run.output).toMatchObject({
-          status: "approved",
-          invoiceId: "inv_123",
-          refundId: "rf_wrong",
-        });
-      },
-    );
+      });
+
+      expect(result.output).toMatchObject({
+        status: "approved",
+        invoiceId: "inv_123",
+        refundId: "rf_wrong",
+      });
+    });
   },
 );

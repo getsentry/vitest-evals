@@ -19,25 +19,23 @@ describeEval(
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it(
-      "approves refundable invoice",
-      {
-        input: "Refund invoice inv_123",
-        expectedStatus: "approved",
-        expectedTools: ["lookupInvoice", "createRefund"],
-      },
-      assertRefundCase,
-    );
+    it("approves refundable invoice", async ({ run }) => {
+      await assertRefundCase(
+        await run("Refund invoice inv_123", {
+          expectedStatus: "approved",
+          expectedTools: ["lookupInvoice", "createRefund"],
+        }),
+      );
+    });
 
-    it(
-      "denies non-refundable invoice",
-      {
-        input: "Refund invoice inv_404",
-        expectedStatus: "denied",
-        expectedTools: ["lookupInvoice"],
-      },
-      assertRefundCase,
-    );
+    it("denies non-refundable invoice", async ({ run }) => {
+      await assertRefundCase(
+        await run("Refund invoice inv_404", {
+          expectedStatus: "denied",
+          expectedTools: ["lookupInvoice"],
+        }),
+      );
+    });
   },
 );
 

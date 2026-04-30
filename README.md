@@ -76,18 +76,21 @@ describeEval(
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-      expectedStatus: "approved",
-      expectedTools: ["lookupInvoice", "createRefund"],
-    }, async ({ agent, run, session, caseData, judge }) => {
-      expect(agent).toBeDefined();
-      expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-      await judge(StructuredOutputJudge(), {
-        expected: { status: caseData.expectedStatus },
+    it("approves refundable invoice", async ({ agent, run }) => {
+      const result = await run("Refund invoice inv_123", {
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
       });
-      expect(toolCalls(session).map((call) => call.name)).toEqual(
-        caseData.expectedTools,
+
+      expect(agent).toBeDefined();
+      expect(result.output).toMatchObject({
+        status: result.caseData.expectedStatus,
+      });
+      await result.judge(StructuredOutputJudge(), {
+        expected: { status: result.caseData.expectedStatus },
+      });
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+        result.caseData.expectedTools,
       );
     });
   },
@@ -100,21 +103,22 @@ example agent/runtime integration point.
 
 Harness-backed suites configure the instrumented runtime once, then register
 normal-looking eval tests inside the callback. Each test gets the resolved
-agent, the normalized `run`/`session`, and a pre-bound `judge(...)` helper.
-Suite-level `judges` run against the same recorded run, so the harness still
-executes exactly once per test.
+agent and an instrumented `run(input)` fixture. Calling `run(...)` executes the
+agent once and returns the normalized `run`/`session` plus a pre-bound
+`judge(...)` helper. Suite-level `judges` run against the same recorded run.
 
 For explicit judge assertions inside an eval test, use the pre-bound
 `judge(...)` helper. It reuses the current `run`, `session`, `rawInput`, and
 `caseData` automatically:
 
 ```ts
-it("denies non-refundable invoice", {
-  input: "Refund invoice inv_404",
-  expectedStatus: "denied",
-}, async ({ judge, caseData }) => {
-  await judge(StructuredOutputJudge(), {
-    expected: { status: caseData.expectedStatus },
+it("denies non-refundable invoice", async ({ run }) => {
+  const result = await run("Refund invoice inv_404", {
+    expectedStatus: "denied",
+  });
+
+  await result.judge(StructuredOutputJudge(), {
+    expected: { status: result.caseData.expectedStatus },
   });
 });
 ```

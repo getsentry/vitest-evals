@@ -144,12 +144,12 @@ describeEval(
     }),
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-    }, async ({ run, session, agent }) => {
+    it("approves refundable invoice", async ({ agent, run }) => {
+      const result = await run("Refund invoice inv_123");
+
       expect(agent).toBeDefined();
-      expect(run.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(session)).toContainEqual(
+      expect(result.output).toMatchObject({ status: "approved" });
+      expect(toolCalls(result.session)).toContainEqual(
         expect.objectContaining({ name: "lookupInvoice" }),
       );
     });
@@ -160,7 +160,8 @@ describeEval(
 The important behavior is:
 
 - the user passes their existing agent through the harness setup
-- each eval test declares its own task input and assertions
+- each eval test calls the instrumented `run(input)` fixture where execution
+  should happen
 - the harness supplies the instrumented runtime pieces as `runtime`
 - the agent executes normally
 - the harness returns both the domain result and the normalized trace

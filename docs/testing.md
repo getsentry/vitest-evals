@@ -80,11 +80,11 @@ describeEval(
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", {
-      input: "Refund invoice inv_123",
-    }, async ({ run, session }) => {
-      expect(run.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(session).map((call) => call.name)).toEqual([
+    it("approves refundable invoice", async ({ run }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(result.output).toMatchObject({ status: "approved" });
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",
       ]);
