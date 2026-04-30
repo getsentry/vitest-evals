@@ -72,7 +72,7 @@ describeEval("pi-ai harness adapter", {
   ],
   harness: piAiHarness({
     createAgent,
-    run: runAgent,
+    task: runAgent,
     tools,
   }),
   test: async ({ run, session }) => {

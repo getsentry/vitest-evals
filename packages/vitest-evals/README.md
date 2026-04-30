@@ -75,14 +75,15 @@ For an existing `pi-ai` agent, the intended contract is:
 
 - pass the per-test agent factory with `createAgent`
 - pass the tool/runtime definitions the harness should wrap
-- optionally pass `run` when the agent's entrypoint is not
+- optionally pass `task` when the agent's entrypoint is not
   `run(input, runtime)`
 - optionally pass `output` when the agent returns a domain object that needs a
   custom projection
 
 The harness owns normalization, diagnostics, tool capture, replay plumbing, and
-reporter-facing artifacts. Your agent just needs an execution seam where those
-wrapped runtime pieces can be injected.
+reporter-facing artifacts. The user-facing entrypoint can still be a simple
+task-shaped function; it just receives the runtime pieces the harness needs to
+wrap or observe.
 
 ## Legacy Compatibility
 

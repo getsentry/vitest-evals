@@ -28,6 +28,12 @@ That means the harness replaces `task` as the primary extension point.
 The user should not have to manually transform provider or framework output
 inside every test file.
 
+The user still gets a task-shaped entrypoint when they need one. First-party
+harnesses expose `task: ({ agent, input, runtime }) => ...` as the place to call
+an existing app entrypoint with harness-provided tools, model clients, event
+hooks, or replay wrappers. The harness owns the runtime contract around that
+task so core can report and replay the execution consistently.
+
 ## What The User Wires Up
 
 For an existing agent, the user should only need to supply:
@@ -132,7 +138,7 @@ describeEval("refund agent", {
   harness: piAiHarness({
     createAgent: () => createRefundAgent(),
     tools: foobarTools,
-    run: ({ agent, input, runtime }) => agent.run(input, runtime),
+    task: ({ agent, input, runtime }) => agent.run(input, runtime),
   }),
   data: async () => [{ input: "Refund invoice inv_123" }],
   test: async ({ run, session }) => {
@@ -174,7 +180,7 @@ entrypoint or custom result shape:
 ```ts
 harness: piAiHarness({
   createAgent: () => createRefundAgent(),
-  run: ({ agent, input, context }) => agent.execute(input, context.runtime),
+  task: ({ agent, input, runtime }) => agent.execute(input, runtime),
   output: (result) => result.decision,
 });
 ```

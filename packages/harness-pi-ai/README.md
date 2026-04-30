@@ -19,19 +19,20 @@ const harness = piAiHarness({
 });
 ```
 
-If your existing `pi-ai` agent already exposes its own entrypoint, wire that
-up directly and let the harness provide the runtime seam:
+If your existing `pi-ai` agent needs a custom entrypoint, wire that task-shaped
+function directly and let the harness provide the runtime seam:
 
 ```ts
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
   tools: foobarTools,
-  run: ({ agent, input, runtime }) => agent.execute(input, runtime),
+  task: ({ agent, input, runtime }) => agent.execute(input, runtime),
 });
 ```
 
-If the agent already implements `run(input, runtime)`, you can omit `run` and
-the harness will call that method automatically.
+If the agent already implements `run(input, runtime)`, you can omit `task` and
+the harness will call that method automatically. `run` remains available as a
+lower-level alias for custom harness adapters.
 
 The adapter provides:
 

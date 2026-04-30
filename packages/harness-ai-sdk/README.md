@@ -25,7 +25,7 @@ const tools = {
 
 const harness = aiSdkHarness({
   tools,
-  run: ({ input, runtime }) =>
+  task: ({ input, runtime }) =>
     generateText({
       model: openai("gpt-4o-mini"),
       prompt: input,
@@ -41,7 +41,7 @@ If your existing AI SDK app exposes its own entrypoint, wire that in directly:
 const harness = aiSdkHarness({
   createAgent: () => createRefundAgent(),
   tools,
-  run: ({ agent, input, runtime }) => agent.run(input, runtime),
+  task: ({ agent, input, runtime }) => agent.run(input, runtime),
 });
 ```
 

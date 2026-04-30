@@ -153,7 +153,7 @@ describeEval("ai-sdk harness adapter", {
     },
   ],
   harness: aiSdkHarness({
-    run: async () => ({
+    task: async () => ({
       ...generateTextLikeResult,
       object: {
         status: "approved",

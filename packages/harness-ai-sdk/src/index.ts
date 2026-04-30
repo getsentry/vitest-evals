@@ -158,6 +158,9 @@ export interface AiSdkHarnessOptions<
   agent?: TAgent;
   createAgent?: () => MaybePromise<TAgent>;
   tools?: TTools;
+  task?: (
+    args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
+  ) => MaybePromise<TResult | HarnessRun>;
   run?: (
     args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
   ) => MaybePromise<TResult | HarnessRun>;
@@ -311,6 +314,10 @@ async function runAgent<
   options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
   args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
 ): Promise<TResult | HarnessRun> {
+  if (options.task) {
+    return options.task(args);
+  }
+
   if (options.run) {
     return options.run(args);
   }
@@ -348,7 +355,7 @@ async function runAgent<
   }
 
   throw new Error(
-    "aiSdkHarness requires a run() function unless the provided agent exposes run(input, runtime) or generate(input, runtime).",
+    "aiSdkHarness requires a task() or run() function unless the provided agent exposes run(input, runtime) or generate(input, runtime).",
   );
 }
 

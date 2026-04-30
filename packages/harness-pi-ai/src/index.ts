@@ -143,6 +143,9 @@ export interface PiAiHarnessOptions<
   agent?: TAgent;
   createAgent?: () => MaybePromise<TAgent>;
   tools?: TTools;
+  task?: (
+    args: PiAiHarnessRunArgs<TAgent, TInput, TCase, TTools>,
+  ) => MaybePromise<TResult | HarnessRun>;
   run?: (
     args: PiAiHarnessRunArgs<TAgent, TInput, TCase, TTools>,
   ) => MaybePromise<TResult | HarnessRun>;
@@ -294,6 +297,10 @@ async function runAgent<
   options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
   args: PiAiHarnessRunArgs<TAgent, TInput, TCase, TTools>,
 ): Promise<TResult | HarnessRun> {
+  if (options.task) {
+    return options.task(args);
+  }
+
   if (options.run) {
     return options.run(args);
   }
@@ -315,7 +322,7 @@ async function runAgent<
   }
 
   throw new Error(
-    "piAiHarness requires a run() function unless the provided agent exposes run(input, runtime).",
+    "piAiHarness requires a task() or run() function unless the provided agent exposes run(input, runtime).",
   );
 }
 
