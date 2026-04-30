@@ -12,7 +12,7 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 
 ```ts
 import { getModel } from "@mariozechner/pi-ai";
-import { piAiHarness, piAiJudge } from "@vitest-evals/harness-pi-ai";
+import { piAiHarness, piAiPrompt } from "@vitest-evals/harness-pi-ai";
 import {
   createRefundAgent,
   foobarTools,
@@ -23,10 +23,9 @@ const harness = piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
   output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-  judge: piAiJudge({
+  prompt: piAiPrompt({
     model: getModel("anthropic", "claude-sonnet-4-5"),
   }),
-  judges: [RefundQualityJudge],
 });
 ```
 
@@ -69,10 +68,9 @@ export function createRefundAgent() {
 }
 ```
 
-Harness-level `judges` run automatically for each `run(...)`. Judges also
-receive the harness-provided `judge.prompt(...)` helper, so LLM-as-judge
-rubrics can call a simple prompt abstraction instead of wiring provider API
-calls in every test.
+Judges can run explicitly from `result.judge(...)` and receive the
+harness-provided `harness.prompt(...)` helper, so LLM-as-judge rubrics can call
+a simple prompt abstraction instead of wiring provider API calls in every test.
 
 If your existing `pi-ai` agent needs a custom entrypoint, wire that task-shaped
 function directly:

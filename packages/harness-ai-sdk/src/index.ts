@@ -9,11 +9,9 @@ import type {
   Harness,
   HarnessCase,
   HarnessContext,
-  HarnessJudgeOptions,
-  HarnessJudgeRuntime,
+  HarnessPrompt,
   HarnessRun,
   JsonValue,
-  JudgeFn,
   NormalizedMessage,
   NormalizedSession,
   TimingSummary,
@@ -201,9 +199,7 @@ interface AiSdkHarnessBaseOptions<
   errors?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
-  judge?: HarnessJudgeRuntime;
-  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
-  threshold?: number | null;
+  prompt?: HarnessPrompt;
   name?: string;
 }
 
@@ -220,9 +216,7 @@ export function aiSdkHarness<
 
   return {
     name: options.name ?? "ai-sdk",
-    judge: options.judge,
-    judges: options.judges,
-    threshold: options.threshold,
+    prompt: options.prompt,
     setup: () => createAiSdkHarnessExecution(options),
     run: async (input, context) => {
       const execution = await createAiSdkHarnessExecution(options);
@@ -259,11 +253,13 @@ async function runAiSdkHarness<
   context: HarnessContext<TCase>,
 ): Promise<HarnessRun> {
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
+  const runtimeToolCalls: ToolCallRecord[] = [];
   const tools = createToolset({
     input,
     context,
     tools: options.tools,
     replayMetadataByToolCallId,
+    runtimeToolCalls,
   });
   const runtime = {
     tools,
@@ -300,10 +296,16 @@ async function runAiSdkHarness<
       : resolveOutput(result);
     const usage = options.usage
       ? await options.usage(resultArgs)
-      : resolveUsage(result);
+      : resolveUsage(result, runtimeToolCalls.length);
     const session = options.session
       ? await options.session(resultArgs)
-      : resolveSession(input, result, output, replayMetadataByToolCallId);
+      : resolveSession(
+          input,
+          result,
+          output,
+          replayMetadataByToolCallId,
+          runtimeToolCalls,
+        );
 
     return {
       session,
@@ -325,9 +327,13 @@ async function runAiSdkHarness<
         undefined,
         undefined,
         replayMetadataByToolCallId,
+        runtimeToolCalls,
       ),
       output: undefined,
-      usage: {},
+      usage:
+        runtimeToolCalls.length > 0
+          ? { toolCalls: runtimeToolCalls.length }
+          : {},
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
@@ -465,11 +471,13 @@ function createToolset<
   context,
   tools,
   replayMetadataByToolCallId,
+  runtimeToolCalls,
 }: {
   input: TInput;
   context: HarnessContext<TCase>;
   tools: TTools | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
+  runtimeToolCalls: ToolCallRecord[];
 }) {
   return Object.fromEntries(
     Object.entries(tools ?? {}).map(([toolName, tool]) => {
@@ -479,7 +487,7 @@ function createToolset<
         );
       }
 
-      if (!tool.replay || !tool.execute) {
+      if (!tool.execute) {
         return [toolName, tool];
       }
 
@@ -490,6 +498,8 @@ function createToolset<
           toolInput: InferToolInput<typeof tool>,
           execution: ToolExecutionOptions,
         ) => {
+          const startedAt = new Date();
+          const normalizedArgs = normalizeArguments(toolInput);
           const replayContext = {
             input,
             caseData: context.caseData,
@@ -499,47 +509,65 @@ function createToolset<
           } satisfies AiSdkToolContext<TInput, TCase>;
 
           try {
-            const replayInput = toReplayJsonValue(
-              toolInput,
-              `${toolName} tool input`,
-            ) as InferToolInput<typeof tool> & JsonValue;
-            const result = await executeWithReplay({
-              toolName,
-              args: replayInput,
-              context: replayContext,
-              execute: async (replayedInput) => {
-                const output = execute(
-                  replayedInput as InferToolInput<typeof tool>,
+            const executionResult = tool.replay
+              ? await executeToolWithReplay({
+                  toolName,
+                  toolInput,
+                  execute,
                   execution,
-                );
+                  context: replayContext,
+                  replay: tool.replay,
+                })
+              : {
+                  result: await execute(toolInput, execution),
+                  replay: undefined,
+                };
+            const finishedAt = new Date();
+            const normalizedResult = toJsonValue(executionResult.result);
+            const replayMetadata = normalizeReplayMetadata(
+              executionResult.replay,
+            );
 
-                if (isAsyncIterable(output)) {
-                  throw new Error(
-                    `Tool replay only supports JSON-serializable outputs. ${toolName} returned an async iterable.`,
-                  );
-                }
-
-                return toReplayJsonValue(
-                  await output,
-                  `${toolName} tool output`,
-                ) as InferToolOutput<typeof tool> & JsonValue;
-              },
-              replay: tool.replay,
-            });
-
-            if (result.replay) {
+            if (executionResult.replay) {
               replayMetadataByToolCallId.set(
                 execution.toolCallId,
-                result.replay,
+                executionResult.replay,
               );
             }
 
-            return result.result as InferToolOutput<typeof tool>;
+            runtimeToolCalls.push({
+              id: execution.toolCallId,
+              name: toolName,
+              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
+              ...(normalizedResult !== undefined
+                ? { result: normalizedResult }
+                : {}),
+              startedAt: startedAt.toISOString(),
+              finishedAt: finishedAt.toISOString(),
+              durationMs: finishedAt.getTime() - startedAt.getTime(),
+              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+            });
+
+            return executionResult.result as InferToolOutput<typeof tool>;
           } catch (error) {
             const replay = getReplayMetadataFromError(error);
+            const finishedAt = new Date();
+            const replayMetadata = normalizeReplayMetadata(replay);
+
             if (replay) {
               replayMetadataByToolCallId.set(execution.toolCallId, replay);
             }
+
+            runtimeToolCalls.push({
+              id: execution.toolCallId,
+              name: toolName,
+              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
+              error: normalizeError(error),
+              startedAt: startedAt.toISOString(),
+              finishedAt: finishedAt.toISOString(),
+              durationMs: finishedAt.getTime() - startedAt.getTime(),
+              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+            });
             throw error;
           }
         },
@@ -548,6 +576,55 @@ function createToolset<
       return [toolName, wrappedTool];
     }),
   ) as AiSdkRuntimeToolset<TTools>;
+}
+
+async function executeToolWithReplay<
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TTool extends AiSdkToolDefinition<any, any, TInput, TCase>,
+>({
+  toolName,
+  toolInput,
+  execute,
+  execution,
+  context,
+  replay,
+}: {
+  toolName: string;
+  toolInput: InferToolInput<TTool>;
+  execute: NonNullable<TTool["execute"]>;
+  execution: ToolExecutionOptions;
+  context: AiSdkToolContext<TInput, TCase>;
+  replay: NonNullable<TTool["replay"]>;
+}) {
+  const replayInput = toReplayJsonValue(
+    toolInput,
+    `${toolName} tool input`,
+  ) as InferToolInput<TTool> & JsonValue;
+
+  return executeWithReplay({
+    toolName,
+    args: replayInput,
+    context,
+    execute: async (replayedInput) => {
+      const output = await execute(
+        replayedInput as InferToolInput<TTool>,
+        execution,
+      );
+
+      if (isAsyncIterable(output)) {
+        throw new Error(
+          `Tool replay only supports JSON-serializable outputs. ${toolName} returned an async iterable.`,
+        );
+      }
+
+      return toReplayJsonValue(
+        output,
+        `${toolName} tool output`,
+      ) as InferToolOutput<TTool> & JsonValue;
+    },
+    replay,
+  });
 }
 
 function resolveOutput(result: unknown): JsonValue | undefined {
@@ -574,7 +651,7 @@ function resolveOutput(result: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown): UsageSummary {
+function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
   const steps = resolveSteps(result);
   const usage = resolveLanguageModelUsage(result);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
@@ -589,13 +666,17 @@ function resolveUsage(result: unknown): UsageSummary {
             0,
           ),
         }
-      : {};
+      : runtimeToolCallCount > 0
+        ? { toolCalls: runtimeToolCallCount }
+        : {};
   }
 
-  const toolCallCount = steps.reduce(
+  const stepToolCallCount = steps.reduce(
     (count, step) => count + (step.toolCalls?.length ?? 0),
     0,
   );
+  const toolCallCount =
+    stepToolCallCount > 0 ? stepToolCallCount : runtimeToolCallCount;
 
   return {
     provider: lastStep?.model.provider,
@@ -621,6 +702,7 @@ function resolveSession(
   result: unknown,
   output: JsonValue | undefined,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
+  runtimeToolCalls: ToolCallRecord[] = [],
 ): NormalizedSession {
   if (
     isNormalizedSession(
@@ -648,6 +730,10 @@ function resolveSession(
     messages.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
+  if (steps.length === 0 && runtimeToolCalls.length > 0) {
+    messages.push(...normalizeRuntimeToolCalls(runtimeToolCalls));
+  }
+
   if (
     output !== undefined &&
     !messages.some(
@@ -670,6 +756,35 @@ function resolveSession(
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
   };
+}
+
+function normalizeRuntimeToolCalls(
+  runtimeToolCalls: ToolCallRecord[],
+): NormalizedMessage[] {
+  const messages: NormalizedMessage[] = [
+    {
+      role: "assistant",
+      toolCalls: runtimeToolCalls,
+    },
+  ];
+
+  for (const call of runtimeToolCalls) {
+    if (call.result === undefined && !call.error) {
+      continue;
+    }
+
+    messages.push({
+      role: "tool",
+      content: call.result ?? call.error?.message ?? "",
+      metadata: normalizeMetadata({
+        name: call.name,
+        toolCallId: call.id,
+        isError: Boolean(call.error),
+      }),
+    });
+  }
+
+  return messages;
 }
 
 function resolveSteps(result: unknown): StepLike[] {

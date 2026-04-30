@@ -102,11 +102,10 @@ agent once and returns the app-facing `output`, normalized `session`, usage,
 timings, artifacts, errors, and reporter metadata.
 
 Judges are optional. Use them when you want a reusable score, a semantic or
-LLM-backed rubric, or suite-level scoring in the report. They consume the
-recorded result from `run(...)`; they do not execute the agent again.
-Harnesses can provide default judges and a `judge.prompt(...)` helper so
-LLM-as-judge setup is configured once with the instrumented runtime instead of
-inside every test.
+LLM-backed rubric, or score details in the report. They consume the recorded
+result from `run(...)`; they do not execute the agent again. A harness can
+provide `harness.prompt(...)` so LLM-as-judge provider setup lives with the
+instrumented runtime while judge definitions stay provider-neutral.
 
 When a future extension needs scenario data, keep it under `metadata` so
 top-level run options stay reserved for framework behavior:
@@ -124,7 +123,7 @@ The lower-level matcher still exists as
 raw value or a custom synthetic run.
 
 If you need a custom judge name in reporter output, wrap it with
-`namedJudge("MyJudge", fn)`.
+`judge("MyJudge", fn)`.
 
 Older scorer-first APIs now live under `vitest-evals/legacy`. The root package
 is intentionally harness-first; judges are optional helpers on top of recorded

@@ -33,14 +33,13 @@ export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
 };
 ```
 
-Use it as an automatic harness-level judge:
+Use it from an eval test:
 
 ```ts
 const harness = piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
   output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
-  judges: [RefundStatusJudge],
 });
 
 describeEval(
@@ -50,31 +49,37 @@ describeEval(
   },
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
-      await run("Refund invoice inv_123", {
+      const result = await run("Refund invoice inv_123", {
         metadata: {
           expectedStatus: "approved",
         },
       });
+
+      await result.judge(RefundStatusJudge);
     });
   },
 );
 ```
 
-If the harness provides a judge runtime, custom judges can call
-`judge.prompt(...)` for LLM-as-judge rubrics without owning provider setup:
+If the harness provides a prompt runtime, custom judges can call
+`harness.prompt(...)` for LLM-as-judge rubrics without owning provider setup.
+The judge still consumes the normalized result shape, so it is not tied to a
+specific provider:
 
 ```ts
-const RefundQualityJudge = namedJudge("RefundQualityJudge", async ({
-  judge,
+import { judge } from "vitest-evals";
+
+const RefundQualityJudge = judge("RefundQualityJudge", async ({
+  harness,
   output,
   toolCalls,
 }) => {
-  if (!judge) {
-    throw new Error("RefundQualityJudge requires a harness judge runtime.");
+  if (!harness) {
+    throw new Error("RefundQualityJudge requires a harness prompt runtime.");
   }
 
   const verdict = JSON.parse(
-    await judge.prompt(
+    await harness.prompt(
       JSON.stringify({ output, toolCalls }, null, 2),
       {
         system: "Grade whether the refund decision follows policy.",

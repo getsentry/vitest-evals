@@ -11,7 +11,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
 import {
   piAiHarness,
-  piAiJudge,
+  piAiPrompt,
   type PiAiAgentTool,
   type PiAiRuntime,
   type PiAiToolset,
@@ -312,7 +312,7 @@ test("task can own agent creation while receiving wrapped runtime tools", async 
   ]);
 });
 
-test("piAiJudge prompts the configured model", async () => {
+test("piAiPrompt prompts the configured model", async () => {
   const provider = registerFauxProvider();
   provider.setResponses([
     (context) => {
@@ -330,12 +330,12 @@ test("piAiJudge prompts the configured model", async () => {
   ]);
 
   try {
-    const judge = piAiJudge({
+    const prompt = piAiPrompt({
       model: provider.getModel(),
     });
 
     await expect(
-      judge.prompt("Judge this run", {
+      prompt("Judge this run", {
         system: "Grade refund behavior.",
       }),
     ).resolves.toBe(

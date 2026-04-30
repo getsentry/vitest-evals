@@ -137,24 +137,23 @@ import {
 Use the legacy entrypoint for older suites. Use the root entrypoint for new
 harness-backed suites.
 
-Judges are optional. Inside an eval test, call `judge(...)` when you want a
-reusable score, a semantic or LLM-backed rubric, or score details in the
+Judges are optional. Inside an eval test, call `result.judge(...)` when you
+want a reusable score, a semantic or LLM-backed rubric, or score details in the
 report. Judges consume the recorded result from `run(...)`; they do not execute
-the agent again.
-Harness adapters can also provide default judges and a `judge.prompt(...)`
-runtime, so LLM-as-judge provider setup lives with the harness rather than
-inside every eval test.
+the agent again. Harness adapters can provide `harness.prompt(...)`, so
+LLM-as-judge provider setup lives with the harness runtime rather than inside
+every eval test.
 
 For lower-level cases, the matcher still exists as
 `await expect(value).toSatisfyJudge(judge, context)`.
 
-If you are writing a custom judge, wrap it with `namedJudge(...)` so reporter
-output uses a stable label:
+If you are writing a custom judge, wrap it with `judge(...)` so reporter output
+uses a stable label:
 
 ```ts
-import { namedJudge } from "vitest-evals";
+import { judge } from "vitest-evals";
 
-const RefundJudge = namedJudge("RefundJudge", async (opts) => {
+const RefundJudge = judge("RefundJudge", async (opts) => {
   return {
     score: opts.output.includes('"status":"approved"') ? 1 : 0,
   };

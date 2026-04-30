@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolExecutionOptions } from "ai";
 import { afterEach, expect, test, vi } from "vitest";
-import { describeEval, toolCalls } from "vitest-evals";
+import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
@@ -417,6 +417,94 @@ test("default agent run receives wrapped runtime tools", async () => {
   ]);
 });
 
+test("attaches partial runtime tool calls when a task errors", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string, DemoCase>,
+    task: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      throw new Error("agent failed after tool call");
+    },
+  });
+
+  const error = await harness
+    .run("Refund invoice inv_123", {
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+      task: {
+        meta: {},
+      },
+      artifacts: {},
+      setArtifact: vi.fn(),
+    })
+    .catch((caughtError) => caughtError);
+  const run = getHarnessRunFromError(error);
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(run).toBeDefined();
+  expect(run?.usage.toolCalls).toBe(1);
+  expect(toolCalls(run!.session)).toMatchObject([
+    {
+      id: "call_lookup",
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+  expect(run?.session.messages).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+      metadata: {
+        name: "lookupInvoice",
+        toolCallId: "call_lookup",
+        isError: false,
+      },
+    },
+  ]);
+});
+
 test("direct run and setup use the same execution lifecycle", async () => {
   const run = vi.fn(async () => ({
     object: {
@@ -742,6 +830,59 @@ test("records and replays opt-in tools in auto mode", async () => {
   expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
     status: "replayed",
   });
+});
+
+test("rejects async iterable replay outputs after awaiting execute", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  async function* streamOutput() {
+    yield "chunk";
+  }
+
+  const replayHarness = aiSdkHarness({
+    tools: {
+      streamRefund: {
+        replay: true,
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute: vi.fn(async () => streamOutput()),
+      },
+    } as unknown as AiSdkToolset<string, DemoCase>,
+    task: async ({ runtime }) => {
+      await runtime.tools.streamRefund.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_stream",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        text: '{"status":"approved"}',
+      };
+    },
+  });
+
+  const error = await replayHarness
+    .run("Refund invoice inv_123", {
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+      task: {
+        meta: {},
+      },
+      artifacts: {},
+      setArtifact: vi.fn(),
+    })
+    .catch((caughtError) => caughtError);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("async iterable");
 });
 
 test("errors when strict mode is missing a recording", async () => {

@@ -1,5 +1,3 @@
-import type { JudgeFn } from "./judges/types";
-
 export type JsonPrimitive = string | number | boolean | null;
 
 export type JsonValue =
@@ -65,16 +63,18 @@ export type HarnessRun = {
   errors: Array<Record<string, JsonValue>>;
 };
 
-export type HarnessJudgePromptOptions = {
+export type HarnessPromptOptions = {
   system?: string;
   metadata?: Record<string, JsonValue>;
 };
 
-export type HarnessJudgeRuntime = {
-  prompt: (
-    input: string,
-    options?: HarnessJudgePromptOptions,
-  ) => Promise<string>;
+export type HarnessPrompt = (
+  input: string,
+  options?: HarnessPromptOptions,
+) => Promise<string>;
+
+export type HarnessRuntime = {
+  prompt: HarnessPrompt;
 };
 
 export type HarnessRunError = Error & {
@@ -102,9 +102,7 @@ export type Harness<
   TAgent = unknown,
 > = {
   name: string;
-  judge?: HarnessJudgeRuntime;
-  judges?: Array<JudgeFn<any>>;
-  threshold?: number | null;
+  prompt?: HarnessPrompt;
   run: (input: TInput, context: HarnessContext<TCase>) => Promise<HarnessRun>;
   setup?: () => Promise<HarnessExecution<TInput, TCase, TAgent>>;
 };

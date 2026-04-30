@@ -21,11 +21,9 @@ import type {
   Harness,
   HarnessCase,
   HarnessContext,
-  HarnessJudgeOptions,
-  HarnessJudgeRuntime,
+  HarnessPrompt,
   HarnessRun,
   JsonValue,
-  JudgeFn,
   NormalizedMessage,
   NormalizedSession,
   TimingSummary,
@@ -46,7 +44,7 @@ import type {
 
 type MaybePromise<T> = T | Promise<T>;
 type AgentSource<TAgent> = TAgent | (() => MaybePromise<TAgent>);
-type PiAiJudgeModel = Parameters<typeof complete>[0];
+type PiAiPromptModel = Parameters<typeof complete>[0];
 type PiAiAgentInstance = Pick<PiAiAgent, "prompt" | "reset" | "state">;
 
 const piAiAgentResultSymbol = Symbol("vitest-evals.pi-ai-agent-result");
@@ -75,27 +73,25 @@ export type PiAiAgentTools<
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
 > = readonly PiAiAgentTool<any, TInput, TCase>[];
 
-export interface PiAiJudgeOptions {
-  model: PiAiJudgeModel;
+export interface PiAiPromptOptions {
+  model: PiAiPromptModel;
   system?: string;
 }
 
-export function piAiJudge(options: PiAiJudgeOptions): HarnessJudgeRuntime {
-  return {
-    prompt: async (input, promptOptions) => {
-      const response = await complete(options.model, {
-        systemPrompt: promptOptions?.system ?? options.system,
-        messages: [
-          {
-            role: "user",
-            content: input,
-            timestamp: Date.now(),
-          },
-        ],
-      });
+export function piAiPrompt(options: PiAiPromptOptions): HarnessPrompt {
+  return async (input, promptOptions) => {
+    const response = await complete(options.model, {
+      systemPrompt: promptOptions?.system ?? options.system,
+      messages: [
+        {
+          role: "user",
+          content: input,
+          timestamp: Date.now(),
+        },
+      ],
+    });
 
-      return getAssistantText(response);
-    },
+    return getAssistantText(response);
   };
 }
 
@@ -261,9 +257,7 @@ interface PiAiHarnessBaseOptions<
   errors?: (
     args: PiAiHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
-  judge?: HarnessJudgeRuntime;
-  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
-  threshold?: number | null;
+  prompt?: HarnessPrompt;
   name?: string;
 }
 
@@ -293,9 +287,7 @@ export function piAiHarness<
 
   return {
     name: options.name ?? "pi-ai",
-    judge: options.judge,
-    judges: options.judges,
-    threshold: options.threshold,
+    prompt: options.prompt,
     setup: () => createPiAiHarnessExecution(options),
     run: async (input, context) => {
       const execution = await createPiAiHarnessExecution(options);
