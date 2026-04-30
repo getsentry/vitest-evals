@@ -12,6 +12,7 @@ import type {
   HarnessCase,
   HarnessContext,
   HarnessExecution,
+  HarnessJudgeRuntime,
   HarnessRun,
   JsonValue,
   NormalizedSession,
@@ -59,6 +60,7 @@ export type HarnessJudgeOptions<TCase extends HarnessCase = HarnessCase> =
     rawInput: TCase["input"];
     assistantOutput?: string;
     caseData: TCase;
+    judge?: HarnessJudgeRuntime;
     run: HarnessRun;
     session: HarnessRun["session"];
   } & Record<string, any>;
@@ -240,6 +242,7 @@ expect.extend({
  *     harness: piAiHarness({
  *       agent: createRefundAgent,
  *       tools: refundTools,
+ *       output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
  *     }),
  *   },
  *   (it) => {
@@ -291,8 +294,8 @@ export function describeEval<TCase extends HarnessCase, TAgent = unknown>(
         testName: testName ?? formatHarnessTestName(input),
         harness: options.harness,
         caseData,
-        judges: options.judges,
-        threshold: options.threshold,
+        judges: resolveHarnessJudges(options.harness, options.judges),
+        threshold: resolveHarnessThreshold(options.harness, options.threshold),
         timeout: options.timeout,
         task: options.test,
       });
@@ -320,6 +323,25 @@ function isDataBackedEvalOptions<TCase extends HarnessCase, TAgent>(
   return "data" in options;
 }
 
+function resolveHarnessJudges<TCase extends HarnessCase, TAgent = unknown>(
+  harness: Harness<TCase["input"], TCase, TAgent>,
+  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>,
+): Array<JudgeFn<HarnessJudgeOptions<TCase>>> | undefined {
+  const combined = [
+    ...((harness.judges ?? []) as Array<JudgeFn<HarnessJudgeOptions<TCase>>>),
+    ...(judges ?? []),
+  ];
+
+  return combined.length > 0 ? combined : undefined;
+}
+
+function resolveHarnessThreshold<TCase extends HarnessCase, TAgent = unknown>(
+  harness: Harness<TCase["input"], TCase, TAgent>,
+  threshold?: number | null,
+) {
+  return threshold === undefined ? harness.threshold : threshold;
+}
+
 function createHarnessTestRegistrar<
   TCase extends HarnessCase,
   TAgent = unknown,
@@ -345,8 +367,8 @@ function createHarnessTestRegistrar<
       testFn: testFn as VitestEvalTestFn,
       testName,
       harness: options.harness,
-      judges: options.judges,
-      threshold: options.threshold,
+      judges: resolveHarnessJudges(options.harness, options.judges),
+      threshold: resolveHarnessThreshold(options.harness, options.threshold),
       timeout: testOptions?.timeout ?? options.timeout,
       fn,
     });
@@ -382,6 +404,7 @@ function registerHarnessCaseTest<TCase extends HarnessCase, TAgent = unknown>({
       const result = await executeHarnessCase({
         testTask,
         harnessName: harness.name,
+        harnessJudge: harness.judge,
         execution,
         caseData,
         judges,
@@ -450,6 +473,7 @@ function registerHarnessFixtureTest<
           return executeHarnessCase({
             testTask,
             harnessName: harness.name,
+            harnessJudge: harness.judge,
             execution: execution as unknown as HarnessExecution<
               TRunCase["input"],
               TRunCase,
@@ -479,6 +503,7 @@ function registerHarnessFixtureTest<
 async function executeHarnessCase<TCase extends HarnessCase, TAgent = unknown>({
   testTask,
   harnessName,
+  harnessJudge,
   execution,
   caseData,
   judges,
@@ -486,6 +511,7 @@ async function executeHarnessCase<TCase extends HarnessCase, TAgent = unknown>({
 }: {
   testTask: { meta: Record<string, any> };
   harnessName: string;
+  harnessJudge?: HarnessJudgeRuntime;
   execution: HarnessExecution<TCase["input"], TCase, TAgent>;
   caseData: TCase;
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
@@ -522,9 +548,16 @@ async function executeHarnessCase<TCase extends HarnessCase, TAgent = unknown>({
     caseData,
     input,
     run,
+    harnessJudge,
   });
 
-  return createHarnessEvalContext(execution.agent, input, caseData, run);
+  return createHarnessEvalContext(
+    execution.agent,
+    input,
+    caseData,
+    run,
+    harnessJudge,
+  );
 }
 
 async function resolveHarnessExecution<
@@ -559,6 +592,7 @@ async function runAutomaticJudges<TCase extends HarnessCase>({
   caseData,
   input,
   run,
+  harnessJudge,
 }: {
   testTask: { meta: Record<string, any> };
   judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
@@ -566,6 +600,7 @@ async function runAutomaticJudges<TCase extends HarnessCase>({
   caseData: TCase;
   input: TCase["input"];
   run: HarnessRun;
+  harnessJudge?: HarnessJudgeRuntime;
 }) {
   if (!judges || judges.length === 0) {
     return;
@@ -583,6 +618,7 @@ async function runAutomaticJudges<TCase extends HarnessCase>({
         assistantOutput: run.session.outputText,
         toolCalls: toolCallRecords,
         caseData,
+        judge: harnessJudge,
         run,
         session: run.session,
       });
@@ -629,6 +665,7 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
   input: TCase["input"],
   caseData: TCase,
   run: HarnessRun,
+  harnessJudge?: HarnessJudgeRuntime,
 ): HarnessEvalContext<TCase, TAgent> {
   return {
     agent,
@@ -640,7 +677,7 @@ function createHarnessEvalContext<TCase extends HarnessCase, TAgent = unknown>(
     output: run.output,
     session: run.session,
     usage: run.usage,
-    judge: createRunJudge(input, caseData, run),
+    judge: createRunJudge(input, caseData, run, harnessJudge),
   };
 }
 
@@ -655,6 +692,7 @@ function createRunJudge<TCase extends HarnessCase>(
   input: TCase["input"],
   caseData: TCase,
   run: HarnessRun,
+  harnessJudge?: HarnessJudgeRuntime,
 ): RunJudge<TCase> {
   return async (
     valueOrJudge: unknown | JudgeFn<any>,
@@ -675,6 +713,7 @@ function createRunJudge<TCase extends HarnessCase>(
     await expect(received).toSatisfyJudge(judge, {
       rawInput: input,
       caseData,
+      judge: harnessJudge,
       run,
       session: run.session,
       ...(judgeOptions ?? {}),
@@ -941,6 +980,8 @@ export {
   type HarnessCase,
   type HarnessContext,
   type HarnessExecution,
+  type HarnessJudgePromptOptions,
+  type HarnessJudgeRuntime,
   type HarnessRun,
   type HarnessRunError,
   type JsonPrimitive,

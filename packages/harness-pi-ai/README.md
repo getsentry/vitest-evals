@@ -11,31 +11,92 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 ## Usage
 
 ```ts
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { getModel } from "@mariozechner/pi-ai";
+import { piAiHarness, piAiJudge } from "@vitest-evals/harness-pi-ai";
+import {
+  createRefundAgent,
+  foobarTools,
+  parseRefundDecision,
+} from "@demo/foobar";
 
 const harness = piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
+  judge: piAiJudge({
+    model: getModel("anthropic", "claude-sonnet-4-5"),
+  }),
+  judges: [RefundQualityJudge],
 });
 ```
 
+`createRefundAgent` is a normal `pi-agent-core` factory, and `foobarTools` are
+normal `AgentTool[]`. The harness wraps the tools for normalized tool-call
+records and replay, then restores the agent's tool state after each run.
+
+```ts
+import { Agent } from "@mariozechner/pi-agent-core";
+import { Type, getModel } from "@mariozechner/pi-ai";
+import type { PiAiAgentTool } from "@vitest-evals/harness-pi-ai";
+
+export const refundTools = [
+  {
+    name: "lookupInvoice",
+    label: "Lookup Invoice",
+    description: "Look up invoice details.",
+    parameters: Type.Object({
+      invoiceId: Type.String(),
+    }),
+    replay: true,
+    execute: async (_toolCallId, args) => {
+      const invoice = await lookupInvoice(args);
+      return {
+        content: [{ type: "text", text: JSON.stringify(invoice) }],
+        details: invoice,
+      };
+    },
+  },
+] satisfies PiAiAgentTool[];
+
+export function createRefundAgent() {
+  return new Agent({
+    initialState: {
+      systemPrompt: REFUND_SYSTEM_PROMPT,
+      model: getModel("anthropic", "claude-sonnet-4-5"),
+      tools: refundTools,
+    },
+  });
+}
+```
+
+Harness-level `judges` run automatically for each `run(...)`. Judges also
+receive the harness-provided `judge.prompt(...)` helper, so LLM-as-judge
+rubrics can call a simple prompt abstraction instead of wiring provider API
+calls in every test.
+
 If your existing `pi-ai` agent needs a custom entrypoint, wire that task-shaped
-function directly and let the harness provide the runtime seam:
+function directly:
 
 ```ts
 const harness = piAiHarness({
-  tools: foobarTools,
-  task: ({ input, runtime }) => createRefundAgent().execute(input, runtime),
+  task: async ({ input }) => {
+    const agent = createRefundAgent();
+    await agent.prompt(input);
+    return {
+      outputText: getFinalText(agent.state.messages),
+    };
+  },
 });
 ```
 
 If the agent already implements `run(input, runtime)`, pass it as `agent` and
-the harness will call that method automatically. `agent` can be an instance or
-a factory function. Use `task` only when the app needs a custom entrypoint.
+the harness will call that method automatically. Use `task` only when the app
+needs a custom entrypoint.
 
 The adapter provides:
 
-- a runtime/tool injection seam for an existing agent
+- native `pi-agent-core` `Agent` and `AgentTool[]` instrumentation
+- a runtime/tool injection seam for custom entrypoints
 - normalized session capture from emitted events and wrapped tool calls
 - usage/output inference for common `pi-ai`-style result objects
 - opt-in tool replay/recording when the tool definition sets `replay: true`
@@ -62,12 +123,24 @@ export default defineConfig({
 Then opt individual tools into recording/replay:
 
 ```ts
-const tools = {
-  lookupInvoice: {
+const tools = [
+  {
+    name: "lookupInvoice",
+    label: "Lookup Invoice",
+    description: "Look up invoice details.",
+    parameters: Type.Object({
+      invoiceId: Type.String(),
+    }),
     replay: true,
-    execute: async ({ invoiceId }) => fetchInvoice(invoiceId),
+    execute: async (_toolCallId, { invoiceId }) => {
+      const invoice = await fetchInvoice(invoiceId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(invoice) }],
+        details: invoice,
+      };
+    },
   },
-};
+];
 ```
 
 Supported modes:

@@ -1,3 +1,15 @@
+import type {
+  Agent as PiAiAgent,
+  AgentMessage,
+  AgentTool,
+  AgentToolResult,
+} from "@mariozechner/pi-agent-core";
+import {
+  complete,
+  type AssistantMessage,
+  type ToolResultMessage,
+  type UserMessage,
+} from "@mariozechner/pi-ai";
 import {
   attachHarnessRunToError,
   isHarnessRun,
@@ -9,8 +21,11 @@ import type {
   Harness,
   HarnessCase,
   HarnessContext,
+  HarnessJudgeOptions,
+  HarnessJudgeRuntime,
   HarnessRun,
   JsonValue,
+  JudgeFn,
   NormalizedMessage,
   NormalizedSession,
   TimingSummary,
@@ -23,6 +38,7 @@ import {
   normalizeReplayMetadata,
 } from "vitest-evals/replay";
 import type {
+  ReplayMetadata,
   ReplayMode,
   ToolRecording,
   ToolReplayConfig,
@@ -30,8 +46,58 @@ import type {
 
 type MaybePromise<T> = T | Promise<T>;
 type AgentSource<TAgent> = TAgent | (() => MaybePromise<TAgent>);
+type PiAiJudgeModel = Parameters<typeof complete>[0];
+type PiAiAgentInstance = Pick<PiAiAgent, "prompt" | "reset" | "state">;
+
+const piAiAgentResultSymbol = Symbol("vitest-evals.pi-ai-agent-result");
 
 export type PiAiReplayMode = ReplayMode;
+
+export type PiAiAgentToolReplayConfig<
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = ToolReplayConfig<
+  Record<string, JsonValue>,
+  JsonValue,
+  PiAiToolContext<TInput, TCase>
+>;
+
+export type PiAiAgentTool<
+  TDetails = unknown,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = AgentTool<any, TDetails> & {
+  replay?: boolean | PiAiAgentToolReplayConfig<TInput, TCase>;
+};
+
+export type PiAiAgentTools<
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = readonly PiAiAgentTool<any, TInput, TCase>[];
+
+export interface PiAiJudgeOptions {
+  model: PiAiJudgeModel;
+  system?: string;
+}
+
+export function piAiJudge(options: PiAiJudgeOptions): HarnessJudgeRuntime {
+  return {
+    prompt: async (input, promptOptions) => {
+      const response = await complete(options.model, {
+        systemPrompt: promptOptions?.system ?? options.system,
+        messages: [
+          {
+            role: "user",
+            content: input,
+            timestamp: Date.now(),
+          },
+        ],
+      });
+
+      return getAssistantText(response);
+    },
+  };
+}
 
 export interface PiAiEventSink {
   message: (message: NormalizedMessage) => void;
@@ -118,6 +184,14 @@ export type PiAiRuntime<
   signal?: AbortSignal;
 };
 
+type PiAiRuntimeExecution<
+  TTools extends PiAiToolset<TInput, TCase>,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+> = PiAiRuntime<TTools, TInput, TCase> & {
+  toolCalls: ToolCallRecord[];
+};
+
 export interface PiAiHarnessRunArgs<
   TAgent,
   TInput,
@@ -138,6 +212,10 @@ export interface PiAiHarnessResultArgs<
   TTools extends PiAiToolset<TInput, TCase>,
 > extends PiAiHarnessRunArgs<TAgent, TInput, TCase, TTools> {
   result: TResult;
+  outputText?: string;
+  finalMessage?: AssistantMessage;
+  messages?: AgentMessage[];
+  toolCalls: ToolCallRecord[];
 }
 
 export type PiAiHarnessOptions<
@@ -167,7 +245,7 @@ interface PiAiHarnessBaseOptions<
   TResult = unknown,
   TTools extends PiAiToolset<TInput, TCase> = PiAiToolset<TInput, TCase>,
 > {
-  tools?: TTools;
+  tools?: TTools | PiAiAgentTools<TInput, TCase>;
   session?: (
     args: PiAiHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<NormalizedSession>;
@@ -183,8 +261,24 @@ interface PiAiHarnessBaseOptions<
   errors?: (
     args: PiAiHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
+  judge?: HarnessJudgeRuntime;
+  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
+  threshold?: number | null;
   name?: string;
 }
+
+type PiAiNativeAgentRunResult = {
+  [piAiAgentResultSymbol]: true;
+  messages: AgentMessage[];
+  normalizedMessages: NormalizedMessage[];
+  finalMessage?: AssistantMessage;
+  outputText?: string;
+  usage: UsageSummary;
+  toolCalls: ToolCallRecord[];
+  errors: Array<Record<string, JsonValue>>;
+  provider?: string;
+  model?: string;
+};
 
 export function piAiHarness<
   TAgent,
@@ -199,6 +293,9 @@ export function piAiHarness<
 
   return {
     name: options.name ?? "pi-ai",
+    judge: options.judge,
+    judges: options.judges,
+    threshold: options.threshold,
     setup: () => createPiAiHarnessExecution(options),
     run: async (input, context) => {
       const execution = await createPiAiHarnessExecution(options);
@@ -241,10 +338,10 @@ async function runPiAiHarness<
     },
   ];
 
-  const runtime = createRuntime({
+  const runtime = createRuntime<TInput, TCase, TTools>({
     input,
     context,
-    tools: options.tools,
+    tools: getRuntimeToolset(options.tools),
     messages,
   });
 
@@ -263,12 +360,19 @@ async function runPiAiHarness<
       return result;
     }
 
+    if (isPiAiNativeAgentRunResult(result)) {
+      messages.splice(0, messages.length, ...result.normalizedMessages);
+    }
+
+    const toolCallCount = getResultToolCallCount(result, runtime.toolCalls);
+    const resultConvenience = getResultConvenience(result, runtime.toolCalls);
     const resultArgs = {
       agent,
       input,
       context,
       runtime,
-      result,
+      result: result as TResult,
+      ...resultConvenience,
     } satisfies PiAiHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>;
 
     const output = options.output
@@ -276,7 +380,7 @@ async function runPiAiHarness<
       : resolveOutput(result);
     const usage = options.usage
       ? await options.usage(resultArgs)
-      : resolveUsage(result, runtime.toolCalls.length);
+      : resolveUsage(result, toolCallCount);
     const session = options.session
       ? await options.session(resultArgs)
       : resolveSession(result, messages, output, usage);
@@ -334,7 +438,7 @@ async function runAgent<
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
   args: PiAiHarnessRunArgs<TAgent, TInput, TCase, TTools>,
-): Promise<TResult | HarnessRun> {
+): Promise<TResult | HarnessRun | PiAiNativeAgentRunResult> {
   if (options.task) {
     return options.task(args);
   }
@@ -350,9 +454,319 @@ async function runAgent<
     ).run(args.input, args.runtime);
   }
 
+  if (isPiAiAgentInstance(args.agent)) {
+    return runNativePiAiAgent(options, {
+      agent: args.agent,
+      input: args.input,
+      context: args.context,
+    });
+  }
+
   throw new Error(
-    "piAiHarness agent must expose run(input, runtime), or use task() for a custom entrypoint.",
+    "piAiHarness agent must be a pi-agent-core Agent, expose run(input, runtime), or use task() for a custom entrypoint.",
   );
+}
+
+async function runNativePiAiAgent<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends PiAiToolset<TInput, TCase>,
+>(
+  options: PiAiHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+  args: {
+    agent: PiAiAgentInstance;
+    input: TInput;
+    context: HarnessContext<TCase>;
+  },
+): Promise<PiAiNativeAgentRunResult> {
+  const originalTools = args.agent.state.tools.slice();
+  const baseTools = isAgentToolArray(options.tools)
+    ? options.tools
+    : originalTools;
+  const toolCalls: ToolCallRecord[] = [];
+
+  args.agent.reset();
+  args.agent.state.tools = createInstrumentedAgentTools({
+    tools: baseTools,
+    input: args.input,
+    context: args.context,
+    toolCalls,
+  });
+
+  try {
+    await args.agent.prompt(toPromptInput(args.input));
+  } finally {
+    args.agent.state.tools = originalTools;
+  }
+
+  const agentMessages = args.agent.state.messages.slice();
+  const finalMessage = getFinalAssistantMessage(agentMessages);
+  const outputText = finalMessage ? getAssistantText(finalMessage) : undefined;
+
+  return {
+    [piAiAgentResultSymbol]: true,
+    messages: agentMessages,
+    normalizedMessages: normalizeAgentMessages(agentMessages, toolCalls),
+    finalMessage,
+    outputText,
+    usage: resolvePiAiUsage(finalMessage, toolCalls.length),
+    toolCalls,
+    errors: resolvePiAiAgentErrors(finalMessage, toolCalls),
+    provider: finalMessage?.provider,
+    model: finalMessage?.model,
+  };
+}
+
+function createInstrumentedAgentTools<
+  TInput,
+  TCase extends HarnessCase<TInput>,
+>({
+  tools,
+  input,
+  context,
+  toolCalls,
+}: {
+  tools: PiAiAgentTools<TInput, TCase>;
+  input: TInput;
+  context: HarnessContext<TCase>;
+  toolCalls: ToolCallRecord[];
+}): AgentTool<any, any>[] {
+  return tools.map((tool) => ({
+    ...tool,
+    execute: async (
+      toolCallId: string,
+      args: unknown,
+      signal?: AbortSignal,
+      onUpdate?: Parameters<AgentTool["execute"]>[3],
+    ) => {
+      const startedAt = new Date();
+      const normalizedArgs = normalizeAgentToolArguments(args);
+      const toolContext = {
+        input,
+        caseData: context.caseData,
+        signal: signal ?? context.signal,
+        setArtifact: context.setArtifact,
+      } satisfies PiAiToolContext<TInput, TCase>;
+
+      try {
+        const execution = await executeAgentToolWithReplay({
+          tool,
+          toolCallId,
+          args,
+          normalizedArgs,
+          context: toolContext,
+          signal,
+          onUpdate,
+        });
+        const finishedAt = new Date();
+        const call = {
+          id: toolCallId,
+          name: tool.name,
+          arguments: normalizedArgs,
+          result: serializeAgentToolRecordResult(execution.result),
+          startedAt: startedAt.toISOString(),
+          finishedAt: finishedAt.toISOString(),
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+          metadata: normalizeReplayMetadata(execution.replay),
+        } satisfies ToolCallRecord;
+        toolCalls.push(call);
+
+        return execution.result;
+      } catch (error) {
+        const finishedAt = new Date();
+        const call = {
+          id: toolCallId,
+          name: tool.name,
+          arguments: normalizedArgs,
+          error: serializeToolError(error),
+          startedAt: startedAt.toISOString(),
+          finishedAt: finishedAt.toISOString(),
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+          metadata: normalizeReplayMetadata(getReplayMetadataFromError(error)),
+        } satisfies ToolCallRecord;
+        toolCalls.push(call);
+        throw error;
+      }
+    },
+  }));
+}
+
+async function executeAgentToolWithReplay<
+  TInput,
+  TCase extends HarnessCase<TInput>,
+>({
+  tool,
+  toolCallId,
+  args,
+  normalizedArgs,
+  context,
+  signal,
+  onUpdate,
+}: {
+  tool: PiAiAgentTool<any, TInput, TCase>;
+  toolCallId: string;
+  args: unknown;
+  normalizedArgs: Record<string, JsonValue>;
+  context: PiAiToolContext<TInput, TCase>;
+  signal?: AbortSignal;
+  onUpdate?: Parameters<AgentTool["execute"]>[3];
+}): Promise<{
+  result: AgentToolResult<JsonValue>;
+  replay?: ReplayMetadata;
+}> {
+  if (!tool.replay) {
+    return {
+      result: (await tool.execute(
+        toolCallId,
+        args as never,
+        signal,
+        onUpdate,
+      )) as AgentToolResult<JsonValue>,
+    };
+  }
+
+  const execution = await executeWithReplay({
+    toolName: tool.name,
+    args: normalizedArgs,
+    context,
+    replay: tool.replay,
+    execute: async () =>
+      serializeAgentToolReplayResult(
+        await tool.execute(toolCallId, args as never, signal, onUpdate),
+      ),
+  });
+
+  return {
+    result: deserializeAgentToolReplayResult(execution.result),
+    replay: execution.replay,
+  };
+}
+
+function normalizeAgentMessages(
+  messages: AgentMessage[],
+  recordedToolCalls: ToolCallRecord[],
+): NormalizedMessage[] {
+  return messages.flatMap((message) => {
+    const normalized = normalizeAgentMessage(message, recordedToolCalls);
+    return normalized ? [normalized] : [];
+  });
+}
+
+function normalizeAgentMessage(
+  message: AgentMessage,
+  recordedToolCalls: ToolCallRecord[],
+): NormalizedMessage | undefined {
+  if (isPiAiUserMessage(message)) {
+    return {
+      role: "user",
+      content: normalizeContent(message.content),
+    };
+  }
+
+  if (isPiAiAssistantMessage(message)) {
+    const content = getAssistantText(message);
+    const toolCalls = message.content
+      .filter((block) => block.type === "toolCall")
+      .map((toolCall) => {
+        const recorded = recordedToolCalls.find(
+          (call) => call.id === toolCall.id,
+        );
+        return (
+          recorded ?? {
+            id: toolCall.id,
+            name: toolCall.name,
+            arguments: normalizeAgentToolArguments(toolCall.arguments),
+          }
+        );
+      });
+
+    return {
+      role: "assistant",
+      content: content.length > 0 ? content : undefined,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      metadata: normalizeRecord({
+        api: message.api,
+        provider: message.provider,
+        model: message.model,
+        stopReason: message.stopReason,
+        errorMessage: message.errorMessage,
+      }),
+    };
+  }
+
+  if (isPiAiToolResultMessage(message)) {
+    return {
+      role: "tool",
+      content: resolveAgentToolResultMessageContent(message),
+      metadata: normalizeRecord({
+        id: message.toolCallId,
+        name: message.toolName,
+        isError: message.isError,
+      }),
+    };
+  }
+
+  return undefined;
+}
+
+function resolvePiAiUsage(
+  message: AssistantMessage | undefined,
+  toolCallCount: number,
+): UsageSummary {
+  if (!message) {
+    return toolCallCount > 0 ? { toolCalls: toolCallCount } : {};
+  }
+
+  return {
+    provider: message.provider,
+    model: message.model,
+    inputTokens: message.usage.input,
+    outputTokens: message.usage.output,
+    totalTokens: message.usage.totalTokens,
+    estimatedCost: message.usage.cost.total,
+    toolCalls: toolCallCount > 0 ? toolCallCount : undefined,
+    metadata: {
+      api: message.api,
+      cacheReadTokens: message.usage.cacheRead,
+      cacheWriteTokens: message.usage.cacheWrite,
+      inputCost: message.usage.cost.input,
+      outputCost: message.usage.cost.output,
+      cacheReadCost: message.usage.cost.cacheRead,
+      cacheWriteCost: message.usage.cost.cacheWrite,
+    },
+  };
+}
+
+function resolvePiAiAgentErrors(
+  message: AssistantMessage | undefined,
+  toolCalls: ToolCallRecord[],
+): Array<Record<string, JsonValue>> {
+  const errors: Array<Record<string, JsonValue>> = toolCalls.flatMap((call) => {
+    if (!call.error) {
+      return [];
+    }
+
+    return [
+      {
+        type: call.error.type ?? "ToolError",
+        message: call.error.message,
+        toolName: call.name,
+      } satisfies Record<string, JsonValue>,
+    ];
+  });
+
+  if (message?.stopReason === "error" || message?.stopReason === "aborted") {
+    errors.push({
+      type: "PiAiAgentError",
+      message:
+        message.errorMessage ?? `Agent stopped with ${message.stopReason}`,
+      stopReason: message.stopReason,
+    });
+  }
+
+  return errors;
 }
 
 function validateOptions<
@@ -367,13 +781,13 @@ function validateOptions<
 
   if (hasAgent && hasTask) {
     throw new Error(
-      "piAiHarness accepts either agent or task, not both. Use agent for the zero-glue run(input, runtime) path, or task for a custom entrypoint.",
+      "piAiHarness accepts either agent or task, not both. Use agent for a pi-agent-core Agent or run(input, runtime) object, and task only for a custom entrypoint.",
     );
   }
 
   if (!hasAgent && !hasTask) {
     throw new Error(
-      "piAiHarness requires either agent or task. Use agent for objects with run(input, runtime), or task for a custom entrypoint.",
+      "piAiHarness requires either agent or task. Use agent for a pi-agent-core Agent or run(input, runtime) object, and task only for a custom entrypoint.",
     );
   }
 }
@@ -409,6 +823,242 @@ function hasCallableMethod(value: unknown, methodName: string) {
     methodName in value &&
     typeof (value as Record<string, unknown>)[methodName] === "function"
   );
+}
+
+function isPiAiAgentInstance(value: unknown): value is PiAiAgentInstance {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as {
+    prompt?: unknown;
+    reset?: unknown;
+    state?: {
+      tools?: unknown;
+      messages?: unknown;
+    };
+  };
+
+  return (
+    typeof candidate.prompt === "function" &&
+    typeof candidate.reset === "function" &&
+    Boolean(candidate.state) &&
+    Array.isArray(candidate.state?.tools) &&
+    Array.isArray(candidate.state?.messages)
+  );
+}
+
+function isAgentToolArray<TInput, TCase extends HarnessCase<TInput>>(
+  value: unknown,
+): value is PiAiAgentTools<TInput, TCase> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (tool) =>
+        tool &&
+        typeof tool === "object" &&
+        "name" in tool &&
+        "execute" in tool &&
+        typeof (tool as { execute?: unknown }).execute === "function",
+    )
+  );
+}
+
+function getRuntimeToolset<
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TTools extends PiAiToolset<TInput, TCase>,
+>(
+  tools: TTools | PiAiAgentTools<TInput, TCase> | undefined,
+): TTools | undefined {
+  return isAgentToolArray(tools) ? undefined : (tools as TTools | undefined);
+}
+
+function isPiAiNativeAgentRunResult(
+  result: unknown,
+): result is PiAiNativeAgentRunResult {
+  return Boolean(
+    result &&
+      typeof result === "object" &&
+      (result as { [piAiAgentResultSymbol]?: unknown })[
+        piAiAgentResultSymbol
+      ] === true,
+  );
+}
+
+function getResultToolCallCount(
+  result: unknown,
+  runtimeToolCalls: ToolCallRecord[],
+) {
+  if (isPiAiNativeAgentRunResult(result)) {
+    return result.toolCalls.length;
+  }
+
+  return runtimeToolCalls.length;
+}
+
+function getResultConvenience(
+  result: unknown,
+  runtimeToolCalls: ToolCallRecord[],
+): Pick<
+  PiAiHarnessResultArgs<unknown, unknown, HarnessCase<unknown>, unknown, any>,
+  "outputText" | "finalMessage" | "messages" | "toolCalls"
+> {
+  if (isPiAiNativeAgentRunResult(result)) {
+    return {
+      outputText: result.outputText,
+      finalMessage: result.finalMessage,
+      messages: result.messages,
+      toolCalls: result.toolCalls,
+    };
+  }
+
+  return {
+    outputText: resolveResultOutputText(result),
+    toolCalls: runtimeToolCalls,
+  };
+}
+
+function isPiAiUserMessage(message: AgentMessage): message is UserMessage {
+  return (
+    Boolean(message) &&
+    typeof message === "object" &&
+    "role" in message &&
+    (message as { role?: unknown }).role === "user"
+  );
+}
+
+function isPiAiAssistantMessage(
+  message: AgentMessage,
+): message is AssistantMessage {
+  return (
+    Boolean(message) &&
+    typeof message === "object" &&
+    "role" in message &&
+    (message as { role?: unknown }).role === "assistant"
+  );
+}
+
+function isPiAiToolResultMessage(
+  message: AgentMessage,
+): message is ToolResultMessage {
+  return (
+    Boolean(message) &&
+    typeof message === "object" &&
+    "role" in message &&
+    (message as { role?: unknown }).role === "toolResult"
+  );
+}
+
+function getFinalAssistantMessage(
+  messages: AgentMessage[],
+): AssistantMessage | undefined {
+  return [...messages].reverse().find(isPiAiAssistantMessage);
+}
+
+function toPromptInput(input: unknown) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  const normalized = normalizeContent(input);
+  return typeof normalized === "string"
+    ? normalized
+    : JSON.stringify(normalized);
+}
+
+function normalizeAgentToolArguments(args: unknown): Record<string, JsonValue> {
+  const normalized = toJsonValue(args);
+
+  if (
+    normalized &&
+    typeof normalized === "object" &&
+    !Array.isArray(normalized)
+  ) {
+    return normalized;
+  }
+
+  return {
+    value: normalized ?? String(args),
+  };
+}
+
+function serializeAgentToolReplayResult(
+  result: AgentToolResult<unknown>,
+): JsonValue {
+  return normalizeContent(result);
+}
+
+function deserializeAgentToolReplayResult(
+  value: JsonValue,
+): AgentToolResult<JsonValue> {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray(value.content)
+  ) {
+    return value as unknown as AgentToolResult<JsonValue>;
+  }
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: stringifyJsonValue(value),
+      },
+    ],
+    details: value,
+  };
+}
+
+function serializeAgentToolRecordResult(
+  result: AgentToolResult<unknown>,
+): JsonValue {
+  const details = toJsonValue(result.details);
+  if (details !== undefined) {
+    return details;
+  }
+
+  return resolveAgentToolResultContent(result);
+}
+
+function resolveAgentToolResultMessageContent(
+  message: ToolResultMessage,
+): JsonValue {
+  const details = toJsonValue(message.details);
+  if (details !== undefined) {
+    return details;
+  }
+
+  return resolveAgentToolResultContent(message);
+}
+
+function resolveAgentToolResultContent(result: {
+  content: AgentToolResult<unknown>["content"];
+}): JsonValue {
+  const text = result.content
+    .filter(
+      (
+        block,
+      ): block is Extract<
+        AgentToolResult<unknown>["content"][number],
+        { type: "text" }
+      > => block.type === "text",
+    )
+    .map((block) => block.text)
+    .join("")
+    .trim();
+
+  if (text.length > 0) {
+    return text;
+  }
+
+  return normalizeContent(result.content);
+}
+
+function stringifyJsonValue(value: JsonValue) {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function toJsonValue(value: unknown): JsonValue | undefined {
@@ -464,7 +1114,7 @@ function createRuntime<
   context: HarnessContext<TCase>;
   tools: TTools | undefined;
   messages: NormalizedMessage[];
-}) {
+}): PiAiRuntimeExecution<TTools, TInput, TCase> {
   const toolCalls: ToolCallRecord[] = [];
   const eventSink: PiAiEventSink = {
     message: (message) => {
@@ -587,6 +1237,8 @@ function resolveOutput(result: unknown): JsonValue | undefined {
     "decision",
     "result",
     "final",
+    "outputText",
+    "text",
   ] satisfies string[];
 
   for (const key of candidates) {
@@ -598,6 +1250,18 @@ function resolveOutput(result: unknown): JsonValue | undefined {
   }
 
   return undefined;
+}
+
+function resolveResultOutputText(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") {
+    return typeof result === "string" ? result : undefined;
+  }
+
+  const value =
+    (result as Record<string, unknown>).outputText ??
+    (result as Record<string, unknown>).text;
+
+  return typeof value === "string" ? value : undefined;
 }
 
 function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {
@@ -657,7 +1321,8 @@ function resolveSession(
 
   return {
     messages: sessionMessages,
-    outputText: typeof output === "string" ? output : undefined,
+    outputText:
+      typeof output === "string" ? output : resolveResultOutputText(result),
     provider:
       ((result as Record<string, unknown> | undefined)?.provider as
         | string
@@ -667,6 +1332,13 @@ function resolveSession(
         | string
         | undefined) ?? usage.model,
   };
+}
+
+function getAssistantText(message: AssistantMessage) {
+  return message.content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("")
+    .trim();
 }
 
 async function executeToolWithReplay<

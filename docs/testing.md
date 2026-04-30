@@ -76,6 +76,7 @@ describeEval(
     harness: piAiHarness({
       agent: createRefundAgent,
       tools: foobarTools,
+      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
     }),
   },
   (it) => {

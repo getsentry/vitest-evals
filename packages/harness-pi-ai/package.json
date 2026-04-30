@@ -18,9 +18,13 @@
     "build": "tsup --config ./tsup.config.ts"
   },
   "peerDependencies": {
+    "@mariozechner/pi-agent-core": ">=0.67 <1",
+    "@mariozechner/pi-ai": ">=0.67 <1",
     "vitest-evals": "*"
   },
   "devDependencies": {
+    "@mariozechner/pi-agent-core": "^0.67.68",
+    "@mariozechner/pi-ai": "^0.67.68",
     "vitest-evals": "workspace:*"
   }
 }

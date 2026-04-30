@@ -1,11 +1,6 @@
-import { Agent, type AgentTool } from "@mariozechner/pi-agent-core";
-import {
-  Type,
-  getModel,
-  type AssistantMessage,
-  type Static,
-} from "@mariozechner/pi-ai";
-import type { PiAiRuntime, PiAiToolset } from "@vitest-evals/harness-pi-ai";
+import { Agent } from "@mariozechner/pi-agent-core";
+import { Type, getModel, type Static } from "@mariozechner/pi-ai";
+import type { PiAiAgentTool } from "@vitest-evals/harness-pi-ai";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -32,6 +27,7 @@ export type RefundCase = {
   input: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
+  expected?: Record<string, unknown>;
 };
 
 export type LookupInvoiceInput = {
@@ -101,20 +97,6 @@ export async function createRefund({
   };
 }
 
-export const foobarTools = {
-  lookupInvoice: {
-    description: LOOKUP_INVOICE_DESCRIPTION,
-    replay: true,
-    execute: lookupInvoice,
-  },
-  createRefund: {
-    description: CREATE_REFUND_DESCRIPTION,
-    execute: createRefund,
-  },
-} satisfies PiAiToolset<string, RefundCase>;
-
-type FoobarRuntime = PiAiRuntime<typeof foobarTools, string, RefundCase>;
-
 const lookupInvoiceParameters = Type.Object({
   invoiceId: Type.String({
     description: "The invoice id to inspect, such as inv_123.",
@@ -133,146 +115,51 @@ const createRefundParameters = Type.Object({
 type LookupInvoiceArgs = Static<typeof lookupInvoiceParameters>;
 type CreateRefundArgs = Static<typeof createRefundParameters>;
 
-export class FoobarRefundAgent {
-  private readonly agent: Agent;
-
-  constructor(
-    private readonly model: FoobarRefundModel = DEFAULT_REFUND_MODEL,
-  ) {
-    this.agent = new Agent({
-      initialState: {
-        systemPrompt: REFUND_SYSTEM_PROMPT,
-        model: getModel("anthropic", model),
-        thinkingLevel: "off",
-      },
-      toolExecution: "sequential",
-    });
-  }
-
-  async run(input: string, runtime: FoobarRuntime) {
-    this.agent.reset();
-    this.agent.state.systemPrompt = REFUND_SYSTEM_PROMPT;
-    this.agent.state.model = getModel("anthropic", this.model);
-    this.agent.state.thinkingLevel = "off";
-    this.agent.state.tools = createAgentTools(runtime);
-
-    await this.agent.prompt(input);
-
-    const assistant = getFinalAssistantMessage(this.agent.state.messages);
-    if (!assistant) {
-      throw new Error(
-        "Refund agent did not produce a final assistant message.",
-      );
-    }
-    if (assistant.stopReason !== "stop") {
-      const providerMessage = assistant.errorMessage
-        ? ` ${assistant.errorMessage}`
-        : "";
-      throw new Error(
-        `Refund agent stopped unexpectedly with reason ${assistant.stopReason}.${providerMessage}`,
-      );
-    }
-
-    const outputText = getAssistantText(assistant);
-    if (!outputText) {
-      throw new Error("Refund agent returned an empty final response.");
-    }
-
-    runtime.events.assistant(outputText, {
-      provider: assistant.provider,
-      model: assistant.model,
-      totalTokens: assistant.usage.totalTokens,
-    });
-
-    return {
-      decision: parseRefundDecision(outputText),
-      metrics: {
-        provider: assistant.provider,
-        model: assistant.model,
-        inputTokens: assistant.usage.input,
-        outputTokens: assistant.usage.output,
-        totalTokens: assistant.usage.totalTokens,
-      },
-    };
-  }
-}
-
-export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
-  return new FoobarRefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
-}
-
-function createAgentTools(runtime: FoobarRuntime): Array<AgentTool<any, any>> {
-  const lookupInvoiceTool: AgentTool<
-    typeof lookupInvoiceParameters,
-    InvoiceRecord
-  > = {
+export const foobarTools: PiAiAgentTool<any, string, RefundCase>[] = [
+  {
     name: "lookupInvoice",
     label: "Lookup Invoice",
     description: LOOKUP_INVOICE_DESCRIPTION,
     parameters: lookupInvoiceParameters,
-    execute: async (_toolCallId, args: LookupInvoiceArgs) => {
-      const invoice = await runtime.tools.lookupInvoice({
+    replay: true,
+    execute: async (_toolCallId: string, args: LookupInvoiceArgs) => {
+      const invoice = await lookupInvoice({
         invoiceId: args.invoiceId,
       });
       return {
-        content: [{ type: "text", text: JSON.stringify(invoice) }],
+        content: [{ type: "text" as const, text: JSON.stringify(invoice) }],
         details: invoice,
       };
     },
-  };
-
-  const createRefundTool: AgentTool<
-    typeof createRefundParameters,
-    { refundId: string; amount: number; status: string }
-  > = {
+  },
+  {
     name: "createRefund",
     label: "Create Refund",
     description: CREATE_REFUND_DESCRIPTION,
     parameters: createRefundParameters,
-    execute: async (_toolCallId, args: CreateRefundArgs) => {
-      const refund = await runtime.tools.createRefund({
+    execute: async (_toolCallId: string, args: CreateRefundArgs) => {
+      const refund = await createRefund({
         invoiceId: args.invoiceId,
         amount: args.amount,
       });
       return {
-        content: [{ type: "text", text: JSON.stringify(refund) }],
+        content: [{ type: "text" as const, text: JSON.stringify(refund) }],
         details: refund,
       };
     },
-  };
+  },
+];
 
-  return [lookupInvoiceTool, createRefundTool];
-}
-
-function getFinalAssistantMessage(
-  messages: unknown[],
-): AssistantMessage | undefined {
-  return [...messages]
-    .reverse()
-    .find((message): message is AssistantMessage =>
-      Boolean(
-        message &&
-          typeof message === "object" &&
-          "role" in message &&
-          (message as { role?: unknown }).role === "assistant" &&
-          "content" in message,
-      ),
-    );
-}
-
-function getAssistantText(message: AssistantMessage) {
-  return message.content
-    .filter(
-      (
-        block,
-      ): block is Extract<
-        AssistantMessage["content"][number],
-        { type: "text" }
-      > => block.type === "text",
-    )
-    .map((block) => block.text)
-    .join("")
-    .trim();
+export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
+  return new Agent({
+    initialState: {
+      systemPrompt: REFUND_SYSTEM_PROMPT,
+      model: getModel("anthropic", options?.model ?? DEFAULT_REFUND_MODEL),
+      thinkingLevel: "off",
+      tools: foobarTools,
+    },
+    toolExecution: "sequential",
+  });
 }
 
 export function parseRefundDecision(text: string): RefundDecision {

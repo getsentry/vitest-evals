@@ -29,11 +29,9 @@ The user should not have to manually transform provider or framework output
 inside every test file.
 
 The user still gets a task-shaped entrypoint when they need one. First-party
-harnesses expose `task: ({ input, runtime }) => ...` as the place to call an
-existing app entrypoint with harness-provided tools, model clients, event hooks,
-or replay wrappers. Use `agent` for the zero-glue `agent.run(input, runtime)`
-path or `task` for a custom entrypoint; examples should not require both at
-once.
+harnesses expose `task: ({ input }) => ...` as the place to call an existing
+custom app entrypoint. Use `agent` for the zero-glue native agent path or
+`task` for a custom entrypoint; examples should not require both at once.
 
 ## What The User Wires Up
 
@@ -133,7 +131,11 @@ roughly like this:
 ```ts
 import { describeEval, toolCalls } from "vitest-evals";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { createRefundAgent } from "../src/refundAgent";
+import {
+  createRefundAgent,
+  foobarTools,
+  parseRefundDecision,
+} from "../src/refundAgent";
 
 describeEval(
   "refund agent",
@@ -141,6 +143,7 @@ describeEval(
     harness: piAiHarness({
       agent: createRefundAgent,
       tools: foobarTools,
+      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
     }),
   },
   (it) => {
@@ -159,10 +162,10 @@ describeEval(
 
 The important behavior is:
 
-- the user passes their existing agent through the harness setup
+- the user passes their existing `pi-agent-core` agent through the harness setup
 - each eval test calls the instrumented `run(input)` fixture where execution
   should happen
-- the harness supplies the instrumented runtime pieces as `runtime`
+- the harness wraps native `AgentTool[]` for trace and replay
 - the agent executes normally
 - the harness returns both the domain result and the normalized trace
 
@@ -176,19 +179,25 @@ The default path should be close to zero glue for standard apps:
 harness: piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
 
-That path should work when the runtime shape is conventional and the harness can
-infer the execution contract.
+That path should work for a normal `Agent` plus normal `AgentTool[]`.
 
 There should also be an explicit escape hatch for applications with a custom
 entrypoint or custom result shape:
 
 ```ts
 harness: piAiHarness({
-  task: ({ input, runtime }) => createRefundAgent().execute(input, runtime),
-  output: (result) => result.decision,
+  task: async ({ input }) => {
+    const agent = createRefundAgent();
+    await agent.prompt(input);
+    return {
+      outputText: getFinalText(agent.state.messages),
+    };
+  },
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
 

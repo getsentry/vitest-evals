@@ -31,7 +31,11 @@ npm install -D @vitest-evals/harness-pi-ai
 
 ```ts
 import { expect } from "vitest";
-import { createRefundAgent, foobarTools } from "@demo/foobar";
+import {
+  createRefundAgent,
+  foobarTools,
+  parseRefundDecision,
+} from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, toolCalls } from "vitest-evals";
 
@@ -41,6 +45,7 @@ describeEval(
     harness: piAiHarness({
       agent: createRefundAgent,
       tools: foobarTools,
+      output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
     }),
   },
   (it) => {
@@ -69,12 +74,12 @@ the user-facing task input and assertions.
 
 For an existing `pi-ai` agent, the intended contract is:
 
-- pass `agent` when the app already exposes `run(input, runtime)`; `agent` can
-  be an instance or a factory function
-- pass `task` when you need to call a custom entrypoint yourself
-- pass the tool/runtime definitions the harness should wrap
+- pass `agent` as a `pi-agent-core` `Agent` instance or factory
+- pass native `AgentTool[]` when the harness should wrap tools for trace and
+  replay; if the agent already has tools in state, this is optional
 - optionally pass `output` when the agent returns a domain object that needs a
   custom projection
+- pass `task` only when you need to call a custom entrypoint yourself
 
 The harness owns normalization, diagnostics, tool capture, replay plumbing, and
 reporter-facing artifacts. Individual eval tests stay small: they call
@@ -97,6 +102,7 @@ await run("Refund invoice inv_404", {
 const harness = piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
 
@@ -104,8 +110,14 @@ For custom entrypoints:
 
 ```ts
 const harness = piAiHarness({
-  task: ({ input, runtime }) => createRefundAgent().execute(input, runtime),
-  tools: foobarTools,
+  task: async ({ input }) => {
+    const agent = createRefundAgent();
+    await agent.prompt(input);
+    return {
+      outputText: getFinalText(agent.state.messages),
+    };
+  },
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 ```
 
@@ -129,6 +141,9 @@ Judges are optional. Inside an eval test, call `judge(...)` when you want a
 reusable score, a semantic or LLM-backed rubric, or score details in the
 report. Judges consume the recorded result from `run(...)`; they do not execute
 the agent again.
+Harness adapters can also provide default judges and a `judge.prompt(...)`
+runtime, so LLM-as-judge provider setup lives with the harness rather than
+inside every eval test.
 
 For lower-level cases, the matcher still exists as
 `await expect(value).toSatisfyJudge(judge, context)`.

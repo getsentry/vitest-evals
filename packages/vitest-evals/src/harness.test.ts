@@ -9,6 +9,7 @@ import {
   userMessages,
   type Harness,
   type HarnessJudgeOptions,
+  type HarnessJudgeRuntime,
   type HarnessContext,
   type HarnessRun,
 } from "./index";
@@ -86,9 +87,69 @@ const judgeSpy = vi.fn(async (opts: HarnessJudgeOptions<RefundEvalCase>) => ({
   score: opts.expectedStatus === "approved" ? 1 : 0,
 }));
 
+const judgePromptSpy = vi.fn(async () =>
+  JSON.stringify({
+    score: 1,
+    rationale: "The result approved the refund and used the expected tool.",
+  }),
+);
+
+const harnessPromptJudgeSpy = vi.fn(
+  async (opts: HarnessJudgeOptions<RefundEvalCase>) => {
+    if (!opts.judge) {
+      return {
+        score: 0,
+        metadata: {
+          rationale: "Harness did not provide a judge runtime.",
+        },
+      };
+    }
+
+    const verdict = JSON.parse(
+      await opts.judge.prompt(
+        JSON.stringify(
+          {
+            input: opts.input,
+            output: opts.output,
+            toolCalls: opts.toolCalls,
+          },
+          null,
+          2,
+        ),
+        {
+          system: "Grade refund decisions.",
+        },
+      ),
+    ) as { score: number; rationale: string };
+
+    return {
+      score: verdict.score,
+      metadata: {
+        rationale: verdict.rationale,
+      },
+    };
+  },
+);
+
+const harnessPromptJudge = namedJudge(
+  "HarnessPromptJudge",
+  harnessPromptJudgeSpy,
+);
+
+const harnessWithPromptJudge: Harness<string, RefundEvalCase, { id: string }> =
+  {
+    ...agentHarness,
+    judge: {
+      prompt: judgePromptSpy satisfies HarnessJudgeRuntime["prompt"],
+    },
+    judges: [harnessPromptJudge],
+  };
+
 beforeEach(() => {
   runSpy.mockClear();
   judgeSpy.mockClear();
+  judgePromptSpy.mockClear();
+  harnessPromptJudgeSpy.mockClear();
 });
 
 describeEval("harness mode", {
@@ -275,6 +336,46 @@ describeEval("harness mode with automatic judges", {
     );
   },
 });
+
+describeEval(
+  "harness mode with harness-provided judge runtime",
+  { harness: harnessWithPromptJudge },
+  (it) => {
+    it("runs default judges with the harness prompt helper", async ({
+      run,
+    }) => {
+      await run("Refund invoice inv_123", {
+        metadata: {
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(harnessPromptJudgeSpy).toHaveBeenCalledTimes(1);
+      expect(harnessPromptJudgeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          judge: expect.objectContaining({
+            prompt: judgePromptSpy,
+          }),
+          output: '{"status":"approved"}',
+          toolCalls: [
+            {
+              name: "lookupInvoice",
+              arguments: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+        }),
+      );
+      expect(judgePromptSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"output": "{\\"status\\":\\"approved\\"}"'),
+        {
+          system: "Grade refund decisions.",
+        },
+      );
+    });
+  },
+);
 
 test("toSatisfyJudge reuses normalized harness run data", async () => {
   const run = await harness.run("Refund invoice inv_123", {

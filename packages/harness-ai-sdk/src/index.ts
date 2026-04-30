@@ -9,8 +9,11 @@ import type {
   Harness,
   HarnessCase,
   HarnessContext,
+  HarnessJudgeOptions,
+  HarnessJudgeRuntime,
   HarnessRun,
   JsonValue,
+  JudgeFn,
   NormalizedMessage,
   NormalizedSession,
   TimingSummary,
@@ -198,6 +201,9 @@ interface AiSdkHarnessBaseOptions<
   errors?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
+  judge?: HarnessJudgeRuntime;
+  judges?: Array<JudgeFn<HarnessJudgeOptions<TCase>>>;
+  threshold?: number | null;
   name?: string;
 }
 
@@ -214,6 +220,9 @@ export function aiSdkHarness<
 
   return {
     name: options.name ?? "ai-sdk",
+    judge: options.judge,
+    judges: options.judges,
+    threshold: options.threshold,
     setup: () => createAiSdkHarnessExecution(options),
     run: async (input, context) => {
       const execution = await createAiSdkHarnessExecution(options);

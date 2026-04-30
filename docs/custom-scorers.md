@@ -33,17 +33,20 @@ export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
 };
 ```
 
-Use it as an automatic suite-level judge:
+Use it as an automatic harness-level judge:
 
 ```ts
+const harness = piAiHarness({
+  agent: createRefundAgent,
+  tools: foobarTools,
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
+  judges: [RefundStatusJudge],
+});
+
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness({
-      agent: createRefundAgent,
-      tools: foobarTools,
-    }),
-    judges: [RefundStatusJudge],
+    harness,
   },
   (it) => {
     it("approves refundable invoice", async ({ run }) => {
@@ -55,6 +58,37 @@ describeEval(
     });
   },
 );
+```
+
+If the harness provides a judge runtime, custom judges can call
+`judge.prompt(...)` for LLM-as-judge rubrics without owning provider setup:
+
+```ts
+const RefundQualityJudge = namedJudge("RefundQualityJudge", async ({
+  judge,
+  output,
+  toolCalls,
+}) => {
+  if (!judge) {
+    throw new Error("RefundQualityJudge requires a harness judge runtime.");
+  }
+
+  const verdict = JSON.parse(
+    await judge.prompt(
+      JSON.stringify({ output, toolCalls }, null, 2),
+      {
+        system: "Grade whether the refund decision follows policy.",
+      },
+    ),
+  );
+
+  return {
+    score: verdict.score,
+    metadata: {
+      rationale: verdict.rationale,
+    },
+  };
+});
 ```
 
 Or run it explicitly inside a test:

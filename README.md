@@ -55,13 +55,18 @@ The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
 
 ```ts
 import { expect } from "vitest";
-import { createRefundAgent, foobarTools } from "@demo/foobar";
+import {
+  createRefundAgent,
+  foobarTools,
+  parseRefundDecision,
+} from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = piAiHarness({
   agent: createRefundAgent,
   tools: foobarTools,
+  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
 });
 
 describeEval(
@@ -99,6 +104,9 @@ timings, artifacts, errors, and reporter metadata.
 Judges are optional. Use them when you want a reusable score, a semantic or
 LLM-backed rubric, or suite-level scoring in the report. They consume the
 recorded result from `run(...)`; they do not execute the agent again.
+Harnesses can provide default judges and a `judge.prompt(...)` helper so
+LLM-as-judge setup is configured once with the instrumented runtime instead of
+inside every test.
 
 When a future extension needs scenario data, keep it under `metadata` so
 top-level run options stay reserved for framework behavior:

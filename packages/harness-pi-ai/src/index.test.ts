@@ -1,8 +1,21 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { Agent } from "@mariozechner/pi-agent-core";
+import {
+  Type,
+  fauxAssistantMessage,
+  fauxToolCall,
+  registerFauxProvider,
+} from "@mariozechner/pi-ai";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
+import {
+  piAiHarness,
+  piAiJudge,
+  type PiAiAgentTool,
+  type PiAiRuntime,
+  type PiAiToolset,
+} from "./index";
 
 type DemoCase = {
   input: string;
@@ -85,6 +98,116 @@ describeEval("pi-ai harness adapter", {
     expect(session.outputText).toBeUndefined();
     expect(run.usage.totalTokens).toBe(12);
   },
+});
+
+test("runs native pi-agent-core agents with instrumented AgentTool instances", async () => {
+  const provider = registerFauxProvider();
+  const executeLookupInvoice = vi.fn(
+    async (_toolCallId: string, args: unknown) => {
+      expect(args).toEqual({
+        invoiceId: "inv_123",
+      });
+
+      const details = {
+        invoiceId: "inv_123",
+        refundable: true,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(details) }],
+        details,
+      };
+    },
+  );
+  const nativeTools = [
+    {
+      name: "lookupInvoice",
+      label: "Lookup Invoice",
+      description: "Look up an invoice.",
+      parameters: Type.Object({
+        invoiceId: Type.String(),
+      }),
+      execute: executeLookupInvoice,
+    },
+  ] satisfies PiAiAgentTool[];
+
+  provider.setResponses([
+    (context) => {
+      expect(context.tools?.map((tool) => tool.name)).toEqual([
+        "lookupInvoice",
+      ]);
+      return fauxAssistantMessage(
+        fauxToolCall("lookupInvoice", { invoiceId: "inv_123" }, { id: "tc_1" }),
+        {
+          stopReason: "toolUse",
+        },
+      );
+    },
+    (context) => {
+      expect(context.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "toolResult",
+            toolName: "lookupInvoice",
+          }),
+        ]),
+      );
+      return fauxAssistantMessage(
+        '{"status":"approved","invoiceId":"inv_123"}',
+      );
+    },
+  ]);
+
+  try {
+    const harness = piAiHarness({
+      agent: () =>
+        new Agent({
+          initialState: {
+            systemPrompt: "You approve refunds.",
+            model: provider.getModel(),
+            tools: nativeTools,
+          },
+        }),
+      output: ({ outputText }) => JSON.parse(outputText ?? "{}"),
+    });
+
+    const run = await harness.run("Refund invoice inv_123", {
+      caseData: {
+        input: "Refund invoice inv_123",
+      },
+      task: {
+        meta: {},
+      },
+      artifacts: {},
+      setArtifact: vi.fn(),
+    });
+
+    expect(run.output).toEqual({
+      status: "approved",
+      invoiceId: "inv_123",
+    });
+    expect(run.usage.provider).toBe("faux");
+    expect(run.usage.toolCalls).toBe(1);
+    expect(toolCalls(run.session)).toMatchObject([
+      {
+        id: "tc_1",
+        name: "lookupInvoice",
+        arguments: {
+          invoiceId: "inv_123",
+        },
+        result: {
+          invoiceId: "inv_123",
+          refundable: true,
+        },
+      },
+    ]);
+    expect(run.session.outputText).toBe(
+      '{"status":"approved","invoiceId":"inv_123"}',
+    );
+    expect(provider.state.callCount).toBe(2);
+  } finally {
+    provider.unregister();
+  }
 });
 
 test("attaches a partial run when the harness errors", async () => {
@@ -187,6 +310,41 @@ test("task can own agent creation while receiving wrapped runtime tools", async 
       },
     },
   ]);
+});
+
+test("piAiJudge prompts the configured model", async () => {
+  const provider = registerFauxProvider();
+  provider.setResponses([
+    (context) => {
+      expect(context.systemPrompt).toBe("Grade refund behavior.");
+      expect(context.messages).toMatchObject([
+        {
+          role: "user",
+          content: "Judge this run",
+        },
+      ]);
+      return fauxAssistantMessage(
+        '{"score":1,"rationale":"The refund behavior is correct."}',
+      );
+    },
+  ]);
+
+  try {
+    const judge = piAiJudge({
+      model: provider.getModel(),
+    });
+
+    await expect(
+      judge.prompt("Judge this run", {
+        system: "Grade refund behavior.",
+      }),
+    ).resolves.toBe(
+      '{"score":1,"rationale":"The refund behavior is correct."}',
+    );
+    expect(provider.state.callCount).toBe(1);
+  } finally {
+    provider.unregister();
+  }
 });
 
 test("direct run and setup use the same execution lifecycle", async () => {

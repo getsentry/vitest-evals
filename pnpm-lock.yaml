@@ -113,6 +113,12 @@ importers:
 
   packages/harness-pi-ai:
     devDependencies:
+      '@mariozechner/pi-agent-core':
+        specifier: ^0.67.68
+        version: 0.67.68(ws@8.20.0)(zod@4.3.6)
+      '@mariozechner/pi-ai':
+        specifier: ^0.67.68
+        version: 0.67.68(ws@8.20.0)(zod@4.3.6)
       vitest-evals:
         specifier: workspace:*
         version: link:../vitest-evals
