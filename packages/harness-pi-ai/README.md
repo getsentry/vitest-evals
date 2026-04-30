@@ -24,9 +24,8 @@ function directly and let the harness provide the runtime seam:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
   tools: foobarTools,
-  task: ({ agent, input, runtime }) => agent.execute(input, runtime),
+  task: ({ input, runtime }) => createRefundAgent().execute(input, runtime),
 });
 ```
 

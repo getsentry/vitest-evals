@@ -117,7 +117,7 @@ export interface PiAiHarnessRunArgs<
   TCase extends HarnessCase<TInput>,
   TTools extends PiAiToolset<TInput, TCase>,
 > {
-  agent: TAgent;
+  agent: TAgent | undefined;
   input: TInput;
   context: HarnessContext<TCase>;
   runtime: PiAiRuntime<TTools, TInput, TCase>;
@@ -282,8 +282,12 @@ async function resolveAgent<
     return options.createAgent();
   }
 
+  if (options.task || options.run) {
+    return undefined;
+  }
+
   throw new Error(
-    "piAiHarness requires either an agent instance or a createAgent() function.",
+    "piAiHarness requires task(), run(), an agent instance, or a createAgent() function.",
   );
 }
 

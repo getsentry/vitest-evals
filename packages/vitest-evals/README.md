@@ -73,10 +73,9 @@ setup.
 
 For an existing `pi-ai` agent, the intended contract is:
 
-- pass the per-test agent factory with `createAgent`
 - pass the tool/runtime definitions the harness should wrap
-- optionally pass `task` when the agent's entrypoint is not
-  `run(input, runtime)`
+- pass `createAgent` when the agent already exposes `run(input, runtime)`, or
+  pass `task` when you want to call a custom entrypoint yourself
 - optionally pass `output` when the agent returns a domain object that needs a
   custom projection
 

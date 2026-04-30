@@ -39,9 +39,8 @@ If your existing AI SDK app exposes its own entrypoint, wire that in directly:
 
 ```ts
 const harness = aiSdkHarness({
-  createAgent: () => createRefundAgent(),
   tools,
-  task: ({ agent, input, runtime }) => agent.run(input, runtime),
+  task: ({ input, runtime }) => createRefundAgent().run(input, runtime),
 });
 ```
 

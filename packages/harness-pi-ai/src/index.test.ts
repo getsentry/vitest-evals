@@ -40,11 +40,15 @@ const runAgent = vi.fn(
     context,
     runtime,
   }: {
-    agent: { id: string };
+    agent: { id: string } | undefined;
     input: string;
     context: { setArtifact: (name: string, value: string) => void };
     runtime: DemoRuntime;
   }) => {
+    if (!agent) {
+      throw new Error("Expected harness to provide an agent.");
+    }
+
     context.setArtifact("agentId", agent.id);
     await runtime.tools.lookupInvoice({
       invoiceId: "inv_123",
@@ -158,6 +162,47 @@ test("attaches a partial run when the harness errors", async () => {
       error: {
         type: "Error",
         message: "Invoice inv_missing not found",
+      },
+    },
+  ]);
+});
+
+test("task can own agent creation while receiving wrapped runtime tools", async () => {
+  const taskHarness = piAiHarness({
+    tools,
+    task: async ({ input, runtime }) => {
+      expect(input).toBe("Refund invoice inv_123");
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        decision: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const run = await taskHarness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toEqual({
+    status: "approved",
+  });
+  expect(toolCalls(run.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
       },
     },
   ]);
