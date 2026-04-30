@@ -96,15 +96,6 @@ const judgePromptSpy = vi.fn(async () =>
 
 const harnessPromptJudgeSpy = vi.fn(
   async (opts: HarnessJudgeOptions<RefundEvalCase>) => {
-    if (!opts.harness) {
-      return {
-        score: 0,
-        metadata: {
-          rationale: "Harness did not provide a prompt runtime.",
-        },
-      };
-    }
-
     const verdict = JSON.parse(
       await opts.harness.prompt(
         JSON.stringify(
@@ -284,6 +275,9 @@ describeEval("harness mode with bound judge helper", {
         output: '{"status":"approved"}',
         assistantOutput: "approved",
         expectedStatus: "approved",
+        harness: expect.objectContaining({
+          prompt: expect.any(Function),
+        }),
         caseData: {
           input: "Refund invoice inv_123",
           expectedStatus: "approved",
@@ -320,6 +314,9 @@ describeEval("harness mode with automatic judges", {
         caseData: expect.objectContaining({
           input: "Refund invoice inv_123",
           expectedStatus: "approved",
+        }),
+        harness: expect.objectContaining({
+          prompt: expect.any(Function),
         }),
         run: expect.objectContaining({
           output: {

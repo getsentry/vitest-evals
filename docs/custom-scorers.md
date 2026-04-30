@@ -65,33 +65,28 @@ The judge still consumes the normalized result shape, so it is not tied to a
 specific provider:
 
 ```ts
-import { judge } from "vitest-evals";
+import { judge, type HarnessJudgeOptions } from "vitest-evals";
 
-const RefundQualityJudge = judge("RefundQualityJudge", async ({
-  harness,
-  assistantOutput,
-  toolCalls,
-}) => {
-  if (!harness) {
-    throw new Error("RefundQualityJudge requires a harness prompt runtime.");
-  }
+const RefundQualityJudge = judge(
+  "RefundQualityJudge",
+  async ({ harness, assistantOutput, toolCalls }: HarnessJudgeOptions) => {
+    const verdict = JSON.parse(
+      await harness.prompt(
+        JSON.stringify({ assistantOutput, toolCalls }, null, 2),
+        {
+          system: "Grade whether the refund decision follows policy.",
+        },
+      ),
+    );
 
-  const verdict = JSON.parse(
-    await harness.prompt(
-      JSON.stringify({ assistantOutput, toolCalls }, null, 2),
-      {
-        system: "Grade whether the refund decision follows policy.",
+    return {
+      score: verdict.score,
+      metadata: {
+        rationale: verdict.rationale,
       },
-    ),
-  );
-
-  return {
-    score: verdict.score,
-    metadata: {
-      rationale: verdict.rationale,
-    },
-  };
-});
+    };
+  },
+);
 ```
 
 Or run it explicitly inside a test:

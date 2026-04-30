@@ -61,7 +61,7 @@ export type HarnessJudgeOptions<TCase extends HarnessCase = HarnessCase> =
     rawInput: TCase["input"];
     assistantOutput?: string;
     caseData: TCase;
-    harness?: HarnessRuntime;
+    harness: HarnessRuntime;
     run: HarnessRun;
     session: HarnessRun["session"];
   } & Record<string, any>;
@@ -600,7 +600,7 @@ async function runAutomaticJudges<TCase extends HarnessCase>({
         assistantOutput: run.session.outputText,
         toolCalls: toolCallRecords,
         caseData,
-        ...(harnessRuntime ? { harness: harnessRuntime } : {}),
+        harness: harnessRuntime,
         run,
         session: run.session,
       });
@@ -698,7 +698,7 @@ function createRunJudge<TCase extends HarnessCase>(
       ...(caseData as Record<string, any>),
       rawInput: input,
       caseData,
-      ...(harnessRuntime ? { harness: harnessRuntime } : {}),
+      harness: harnessRuntime,
       run,
       session: run.session,
       ...(judgeOptions ?? {}),
@@ -708,8 +708,19 @@ function createRunJudge<TCase extends HarnessCase>(
 
 function createHarnessRuntime(
   harnessPrompt: HarnessPrompt | undefined,
-): HarnessRuntime | undefined {
-  return harnessPrompt ? { prompt: harnessPrompt } : undefined;
+): HarnessRuntime {
+  return {
+    prompt: harnessPrompt ?? missingHarnessPrompt,
+  };
+}
+
+async function missingHarnessPrompt(): Promise<string> {
+  throw new Error(
+    [
+      "This harness did not configure a prompt runtime.",
+      "Pass a prompt-capable harness option before using harness.prompt(...) in a judge.",
+    ].join(" "),
+  );
 }
 
 function formatHarnessTestName(input: unknown) {
@@ -782,6 +793,7 @@ function buildJudgeAssertionOptions<TCase extends HarnessCase = HarnessCase>(
     caseData:
       options.caseData ??
       ((rawInput !== undefined ? { input: rawInput } : { input }) as TCase),
+    harness: options.harness ?? createHarnessRuntime(undefined),
     run,
     session: options.session ?? run.session,
     toolCalls: options.toolCalls ?? toolCalls(run.session),
