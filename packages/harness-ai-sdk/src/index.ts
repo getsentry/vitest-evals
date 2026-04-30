@@ -1,4 +1,10 @@
-import { attachHarnessRunToError } from "vitest-evals";
+import {
+  attachHarnessRunToError,
+  isHarnessRun,
+  isNormalizedSession,
+  resolveHarnessRunErrors,
+  serializeError,
+} from "vitest-evals";
 import type {
   Harness,
   HarnessCase,
@@ -34,6 +40,7 @@ import type {
 } from "ai";
 
 type MaybePromise<T> = T | Promise<T>;
+type AgentSource<TAgent> = TAgent | (() => MaybePromise<TAgent>);
 
 type StepLike = Pick<
   StepResult<ToolSet>,
@@ -148,22 +155,34 @@ export interface AiSdkHarnessResultArgs<
   result: TResult;
 }
 
-export interface AiSdkHarnessOptions<
+export type AiSdkHarnessOptions<
+  TAgent = unknown,
+  TInput = string,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TCase> = AiSdkToolset<TInput, TCase>,
+> = AiSdkHarnessBaseOptions<TAgent, TInput, TCase, TResult, TTools> &
+  (
+    | {
+        agent: AgentSource<TAgent>;
+        task?: never;
+      }
+    | {
+        task: (
+          args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
+        ) => MaybePromise<TResult | HarnessRun>;
+        agent?: never;
+      }
+  );
+
+interface AiSdkHarnessBaseOptions<
   TAgent = unknown,
   TInput = string,
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
   TResult = unknown,
   TTools extends AiSdkToolset<TInput, TCase> = AiSdkToolset<TInput, TCase>,
 > {
-  agent?: TAgent;
-  createAgent?: () => MaybePromise<TAgent>;
   tools?: TTools;
-  task?: (
-    args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
-  ) => MaybePromise<TResult | HarnessRun>;
-  run?: (
-    args: AiSdkHarnessRunArgs<TAgent, TInput, TCase, TTools>,
-  ) => MaybePromise<TResult | HarnessRun>;
   session?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>,
   ) => MaybePromise<NormalizedSession>;
@@ -190,100 +209,117 @@ export function aiSdkHarness<
   TTools extends AiSdkToolset<TInput, TCase> = AiSdkToolset<TInput, TCase>,
 >(
   options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
-): Harness<TInput, TCase> {
+): Harness<TInput, TCase, TAgent> {
+  validateOptions(options);
+
   return {
     name: options.name ?? "ai-sdk",
+    setup: async () => {
+      const agent = await resolveAgent(options);
+      return {
+        agent,
+        run: (input, context) =>
+          runAiSdkHarness(options, agent, input, context),
+      };
+    },
     run: async (input, context) => {
       const agent = await resolveAgent(options);
-      const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
-      const tools = createToolset({
-        input,
-        context,
-        tools: options.tools,
-        replayMetadataByToolCallId,
-      });
-      const runtime = {
-        tools,
-        signal: context.signal,
-      } satisfies AiSdkRuntime<TTools, TInput, TCase>;
-
-      try {
-        const result = await runAgent(options, {
-          agent,
-          input,
-          context,
-          runtime,
-          tools,
-        });
-
-        if (isHarnessRun(result)) {
-          if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
-            result.artifacts = context.artifacts;
-          }
-          return result;
-        }
-
-        const resultArgs = {
-          agent,
-          input,
-          context,
-          runtime,
-          tools,
-          result,
-        } satisfies AiSdkHarnessResultArgs<
-          TAgent,
-          TInput,
-          TCase,
-          TResult,
-          TTools
-        >;
-
-        const output = options.output
-          ? await options.output(resultArgs)
-          : resolveOutput(result);
-        const usage = options.usage
-          ? await options.usage(resultArgs)
-          : resolveUsage(result);
-        const session = options.session
-          ? await options.session(resultArgs)
-          : resolveSession(input, result, output, replayMetadataByToolCallId);
-
-        return {
-          session,
-          output,
-          usage,
-          timings: options.timings
-            ? await options.timings(resultArgs)
-            : undefined,
-          artifacts:
-            Object.keys(context.artifacts).length > 0
-              ? context.artifacts
-              : undefined,
-          errors: options.errors
-            ? await options.errors(resultArgs)
-            : resolveErrors(result),
-        };
-      } catch (error) {
-        const run = {
-          session: resolveSession(
-            input,
-            undefined,
-            undefined,
-            replayMetadataByToolCallId,
-          ),
-          output: undefined,
-          usage: {},
-          artifacts:
-            Object.keys(context.artifacts).length > 0
-              ? context.artifacts
-              : undefined,
-          errors: [serializeError(error)],
-        } satisfies HarnessRun;
-
-        throw attachHarnessRunToError(error, run);
-      }
+      return runAiSdkHarness(options, agent, input, context);
     },
   };
+}
+
+async function runAiSdkHarness<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TCase>,
+>(
+  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+  agent: TAgent | undefined,
+  input: TInput,
+  context: HarnessContext<TCase>,
+): Promise<HarnessRun> {
+  const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
+  const tools = createToolset({
+    input,
+    context,
+    tools: options.tools,
+    replayMetadataByToolCallId,
+  });
+  const runtime = {
+    tools,
+    signal: context.signal,
+  } satisfies AiSdkRuntime<TTools, TInput, TCase>;
+
+  try {
+    const result = await runAgent(options, {
+      agent,
+      input,
+      context,
+      runtime,
+      tools,
+    });
+
+    if (isHarnessRun(result)) {
+      if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
+        result.artifacts = context.artifacts;
+      }
+      return result;
+    }
+
+    const resultArgs = {
+      agent,
+      input,
+      context,
+      runtime,
+      tools,
+      result,
+    } satisfies AiSdkHarnessResultArgs<TAgent, TInput, TCase, TResult, TTools>;
+
+    const output = options.output
+      ? await options.output(resultArgs)
+      : resolveOutput(result);
+    const usage = options.usage
+      ? await options.usage(resultArgs)
+      : resolveUsage(result);
+    const session = options.session
+      ? await options.session(resultArgs)
+      : resolveSession(input, result, output, replayMetadataByToolCallId);
+
+    return {
+      session,
+      output,
+      usage,
+      timings: options.timings ? await options.timings(resultArgs) : undefined,
+      artifacts:
+        Object.keys(context.artifacts).length > 0
+          ? context.artifacts
+          : undefined,
+      errors: options.errors
+        ? await options.errors(resultArgs)
+        : resolveHarnessRunErrors(result),
+    };
+  } catch (error) {
+    const run = {
+      session: resolveSession(
+        input,
+        undefined,
+        undefined,
+        replayMetadataByToolCallId,
+      ),
+      output: undefined,
+      usage: {},
+      artifacts:
+        Object.keys(context.artifacts).length > 0
+          ? context.artifacts
+          : undefined,
+      errors: [serializeError(error)],
+    } satisfies HarnessRun;
+
+    throw attachHarnessRunToError(error, run);
+  }
 }
 
 async function resolveAgent<
@@ -293,15 +329,9 @@ async function resolveAgent<
   TResult,
   TTools extends AiSdkToolset<TInput, TCase>,
 >(options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>) {
-  if (options.agent !== undefined) {
-    return options.agent;
-  }
-
-  if (options.createAgent) {
-    return options.createAgent();
-  }
-
-  return undefined;
+  return hasAgentSource(options)
+    ? await resolveAgentSource(options.agent)
+    : undefined;
 }
 
 async function runAgent<
@@ -318,16 +348,7 @@ async function runAgent<
     return options.task(args);
   }
 
-  if (options.run) {
-    return options.run(args);
-  }
-
-  if (
-    args.agent &&
-    typeof args.agent === "object" &&
-    "run" in args.agent &&
-    typeof (args.agent as { run?: unknown }).run === "function"
-  ) {
+  if (hasCallableMethod(args.agent, "run")) {
     return (
       args.agent as {
         run: (
@@ -338,12 +359,7 @@ async function runAgent<
     ).run(args.input, args.runtime);
   }
 
-  if (
-    args.agent &&
-    typeof args.agent === "object" &&
-    "generate" in args.agent &&
-    typeof (args.agent as { generate?: unknown }).generate === "function"
-  ) {
+  if (hasCallableMethod(args.agent, "generate")) {
     return (
       args.agent as {
         generate: (
@@ -355,20 +371,71 @@ async function runAgent<
   }
 
   throw new Error(
-    "aiSdkHarness requires a task() or run() function unless the provided agent exposes run(input, runtime) or generate(input, runtime).",
+    "aiSdkHarness agent must expose run(input, runtime) or generate(input, runtime), or use task() for a custom entrypoint.",
   );
 }
 
-function isHarnessRun(value: unknown): value is HarnessRun {
-  if (!value || typeof value !== "object") {
-    return false;
+function validateOptions<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TCase>,
+>(options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>) {
+  const hasAgent = hasAgentSource(options);
+  const hasTask = typeof (options as { task?: unknown }).task === "function";
+
+  if (hasAgent && hasTask) {
+    throw new Error(
+      "aiSdkHarness accepts either agent or task, not both. Use agent for the zero-glue run(input, runtime) or generate(input, runtime) path, or task for a custom entrypoint.",
+    );
   }
 
+  if (!hasAgent && !hasTask) {
+    throw new Error(
+      "aiSdkHarness requires either agent or task. Use agent for objects with run(input, runtime) or generate(input, runtime), or task for a custom entrypoint.",
+    );
+  }
+}
+
+function hasAgentSource<
+  TAgent,
+  TInput,
+  TCase extends HarnessCase<TInput>,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TCase>,
+>(
+  options: AiSdkHarnessOptions<TAgent, TInput, TCase, TResult, TTools>,
+): options is AiSdkHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TCase,
+  TResult,
+  TTools
+> & { agent: AgentSource<TAgent> } {
+  return "agent" in options && options.agent !== undefined;
+}
+
+async function resolveAgentSource<TAgent>(
+  agent: AgentSource<TAgent>,
+): Promise<TAgent> {
+  if (
+    typeof agent === "function" &&
+    !hasCallableMethod(agent, "run") &&
+    !hasCallableMethod(agent, "generate")
+  ) {
+    return (agent as () => MaybePromise<TAgent>)();
+  }
+
+  return agent as TAgent;
+}
+
+function hasCallableMethod(value: unknown, methodName: string) {
   return (
-    "session" in value &&
-    "usage" in value &&
-    "errors" in value &&
-    Array.isArray((value as HarnessRun).errors)
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    methodName in value &&
+    typeof (value as Record<string, unknown>)[methodName] === "function"
   );
 }
 
@@ -539,13 +606,15 @@ function resolveSession(
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
 ): NormalizedSession {
   if (
-    looksLikeSession((result as Record<string, unknown> | undefined)?.session)
+    isNormalizedSession(
+      (result as Record<string, unknown> | undefined)?.session,
+    )
   ) {
     return (result as { session: NormalizedSession }).session;
   }
 
   if (
-    looksLikeSession((result as Record<string, unknown> | undefined)?.trace)
+    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
   ) {
     return (result as { trace: NormalizedSession }).trace;
   }
@@ -584,18 +653,6 @@ function resolveSession(
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
   };
-}
-
-function resolveErrors(result: unknown): Array<Record<string, JsonValue>> {
-  if (
-    result &&
-    typeof result === "object" &&
-    Array.isArray((result as Record<string, unknown>).errors)
-  ) {
-    return (result as { errors: Array<Record<string, JsonValue>> }).errors;
-  }
-
-  return [];
 }
 
 function resolveSteps(result: unknown): StepLike[] {
@@ -781,20 +838,6 @@ function normalizeError(error: unknown) {
   };
 }
 
-function serializeError(error: unknown): Record<string, JsonValue> {
-  if (error instanceof Error) {
-    return {
-      type: error.name,
-      message: error.message,
-    };
-  }
-
-  return {
-    type: "Error",
-    message: String(error),
-  };
-}
-
 function normalizeContent(value: unknown): JsonValue {
   return toJsonValue(value) ?? String(value);
 }
@@ -840,15 +883,5 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
     value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     Symbol.asyncIterator in value
-  );
-}
-
-function looksLikeSession(value: unknown): value is NormalizedSession {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    value !== null &&
-    "messages" in value &&
-    Array.isArray((value as { messages?: unknown[] }).messages)
   );
 }

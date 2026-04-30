@@ -17,6 +17,7 @@ npm install -D @vitest-evals/harness-pi-ai
 ## Core Model
 
 - `describeEval(...)` binds exactly one harness to a suite
+- the suite callback defines individual eval tests with Vitest-style names
 - the harness executes the system under test and returns a normalized
   `HarnessRun`
 - `run.output` is the application-facing result you assert on
@@ -29,6 +30,7 @@ npm install -D @vitest-evals/harness-pi-ai
 ## Harness Example
 
 ```ts
+import { expect } from "vitest";
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
@@ -38,51 +40,71 @@ import {
   toolCalls,
 } from "vitest-evals";
 
-describeEval("refund agent", {
-  data: [
-    {
+describeEval(
+  "refund agent",
+  {
+    harness: piAiHarness({
+      agent: createRefundAgent,
+      tools: foobarTools,
+    }),
+    judges: [ToolCallJudge()],
+  },
+  (it) => {
+    it("approves refundable invoice", {
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
       expectedTools: ["lookupInvoice", "createRefund"],
-    },
-  ],
-  harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    tools: foobarTools,
-  }),
-  judges: [ToolCallJudge()],
-  test: async ({ run, session, caseData, judge }) => {
-    expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-    expect(toolCalls(session).map((call) => call.name)).toEqual(
-      caseData.expectedTools,
-    );
+    }, async ({ agent, run, session, caseData, judge }) => {
+      expect(agent).toBeDefined();
+      expect(run.output).toMatchObject({ status: caseData.expectedStatus });
+      expect(toolCalls(session).map((call) => call.name)).toEqual(
+        caseData.expectedTools,
+      );
 
-    await judge(StructuredOutputJudge(), {
-      expected: { status: caseData.expectedStatus },
+      await judge(StructuredOutputJudge(), {
+        expected: { status: caseData.expectedStatus },
+      });
     });
   },
-});
+);
 ```
 
-Harness-backed suites should show the configured runtime seam, not an opaque
-placeholder. In practice that means the example should include the agent
-factory and any required tool/runtime configuration as part of the harness
-setup.
+Harness-backed suites should show the configured runtime integration point, not
+an opaque placeholder. In practice that means the harness setup includes the
+agent and any required tool/runtime configuration, while each eval test owns
+the user-facing task input and assertions.
 
 ## Existing Agents
 
 For an existing `pi-ai` agent, the intended contract is:
 
+- pass `agent` when the app already exposes `run(input, runtime)`; `agent` can
+  be an instance or a factory function
+- pass `task` when you need to call a custom entrypoint yourself
 - pass the tool/runtime definitions the harness should wrap
-- pass `createAgent` when the agent already exposes `run(input, runtime)`, or
-  pass `task` when you want to call a custom entrypoint yourself
 - optionally pass `output` when the agent returns a domain object that needs a
   custom projection
 
 The harness owns normalization, diagnostics, tool capture, replay plumbing, and
-reporter-facing artifacts. The user-facing entrypoint can still be a simple
-task-shaped function; it just receives the runtime pieces the harness needs to
-wrap or observe.
+reporter-facing artifacts. Individual eval tests stay small: they declare the
+scenario input, assert on `run.output`, inspect the normalized `session`, and
+call judges when useful.
+
+```ts
+const harness = piAiHarness({
+  agent: createRefundAgent,
+  tools: foobarTools,
+});
+```
+
+For custom entrypoints:
+
+```ts
+const harness = piAiHarness({
+  task: ({ input, runtime }) => createRefundAgent().execute(input, runtime),
+  tools: foobarTools,
+});
+```
 
 ## Legacy Compatibility
 
@@ -100,14 +122,17 @@ import {
 Use the legacy entrypoint for older suites. Use the root entrypoint for new
 harness-backed suites.
 
-Inside a `test` callback you can call `judge(...)` directly:
+Inside an eval test you can call `judge(...)` directly:
 
 ```ts
-test: async ({ judge, caseData }) => {
+it("denies non-refundable invoice", {
+  input: "Refund invoice inv_404",
+  expectedStatus: "denied",
+}, async ({ judge, caseData }) => {
   await judge(StructuredOutputJudge(), {
     expected: { status: caseData.expectedStatus },
   });
-}
+});
 ```
 
 For lower-level cases, the matcher still exists as

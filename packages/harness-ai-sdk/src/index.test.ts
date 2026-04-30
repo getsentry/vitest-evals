@@ -214,7 +214,7 @@ describeEval("ai-sdk harness adapter custom entrypoint", {
     },
   ],
   harness: aiSdkHarness({
-    createAgent: () => {
+    agent: () => {
       const generate = vi.fn(
         async (_input: string, runtime: { tools: Record<string, never> }) => ({
           object: {
@@ -373,7 +373,7 @@ test("default agent run receives wrapped runtime tools", async () => {
   );
 
   const harness = aiSdkHarness({
-    createAgent: () => ({
+    agent: () => ({
       run,
     }),
     tools: {
@@ -417,6 +417,51 @@ test("default agent run receives wrapped runtime tools", async () => {
   ]);
 });
 
+test("normalizes domain results that resemble harness runs", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      session: {
+        id: "domain-session",
+      },
+      usage: {
+        totalTokens: 7,
+      },
+      errors: [],
+      object: {
+        status: "approved",
+      },
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toEqual({
+    status: "approved",
+  });
+  expect(run.session.messages).toEqual([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      content: {
+        status: "approved",
+      },
+    },
+  ]);
+  expect(run.usage.totalTokens).toBe(7);
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -437,7 +482,7 @@ test("records and replays opt-in tools in auto mode", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoCase>,
-    run: async ({ runtime }) => {
+    task: async ({ runtime }) => {
       const lookupInvoice = runtime.tools.lookupInvoice;
       const toolInput = {
         invoiceId: "inv_123",
@@ -594,7 +639,7 @@ test("errors when strict mode is missing a recording", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoCase>,
-    run: async ({ runtime }) => {
+    task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",

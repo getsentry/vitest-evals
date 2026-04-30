@@ -7,7 +7,7 @@ Vitest still runs the suite, but the primary contract is no longer
 `input -> task -> scorer`. The primary contract is:
 
 - one explicit `harness` per suite
-- one normalized `HarnessRun` per case
+- one normalized `HarnessRun` per eval test
 - optional automatic `judges`
 - optional explicit Vitest assertions over `run` and `session`
 
@@ -58,8 +58,9 @@ Defines the harness-first public API:
 - harness/judge types
 - exports for built-in judges and harness helpers
 
-The root `describeEval(...)` executes the harness exactly once per case.
-Automatic judges and the optional `test` callback reuse the same normalized run.
+The root `describeEval(...)` executes the harness exactly once per eval test.
+Automatic judges and the per-test assertion callback reuse the same normalized
+run.
 
 ### `packages/vitest-evals/src/judges/*`
 
@@ -88,7 +89,7 @@ This keeps the root package surface clean without deleting older workflows.
 Provides the custom Vitest reporter that reads normalized run metadata from
 `task.meta` and renders:
 
-- per-case pass/fail status
+- per-test pass/fail status
 - duration
 - usage summaries
 - tool activity
@@ -97,16 +98,17 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 
 ## Harness Lifecycle
 
-For each case in a harness-backed suite:
+For each eval test in a harness-backed suite:
 
-1. `describeEval(...)` loads case data.
-2. The configured harness runs the system under test exactly once.
-3. The harness returns a `HarnessRun` with `run.output`, `run.session`,
+1. `describeEval(...)` configures one instrumented harness for the suite.
+2. The suite callback registers named eval tests with their task input.
+3. The configured harness runs the system under test exactly once.
+4. The harness returns a `HarnessRun` with `run.output`, `run.session`,
    `usage`, `timings`, `artifacts`, and `errors`.
-4. Core stores that run on `task.meta.harness` for the reporter.
-5. Automatic suite-level judges run against the normalized run/session pair.
-6. The optional `test` callback receives the same `run` and `session`.
-7. The reporter renders the recorded metadata without re-executing the harness.
+5. Core stores that run on `task.meta.harness` for the reporter.
+6. Automatic suite-level judges run against the normalized run/session pair.
+7. The eval test callback receives the same `agent`, `run`, and `session`.
+8. The reporter renders the recorded metadata without re-executing the harness.
 
 ## First-Party Harness Packages
 

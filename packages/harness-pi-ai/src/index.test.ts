@@ -10,6 +10,7 @@ type DemoCase = {
 
 const createAgent = vi.fn(() => ({
   id: "refund-agent",
+  run: runAgent,
 }));
 
 const tools = {
@@ -33,40 +34,24 @@ afterEach(() => {
   }
 });
 
-const runAgent = vi.fn(
-  async ({
-    agent,
-    input,
-    context,
-    runtime,
-  }: {
-    agent: { id: string } | undefined;
-    input: string;
-    context: { setArtifact: (name: string, value: string) => void };
-    runtime: DemoRuntime;
-  }) => {
-    if (!agent) {
-      throw new Error("Expected harness to provide an agent.");
-    }
+const runAgent = vi.fn(async (input: string, runtime: DemoRuntime) => {
+  expect(input).toBe("Refund invoice inv_123");
+  await runtime.tools.lookupInvoice({
+    invoiceId: "inv_123",
+  });
+  runtime.events.assistant("approved");
 
-    context.setArtifact("agentId", agent.id);
-    await runtime.tools.lookupInvoice({
-      invoiceId: "inv_123",
-    });
-    runtime.events.assistant("approved");
-
-    return {
-      decision: {
-        status: "approved",
-      },
-      metrics: {
-        provider: "pi-ai",
-        model: "pi-refund",
-        totalTokens: 12,
-      },
-    };
-  },
-);
+  return {
+    decision: {
+      status: "approved",
+    },
+    metrics: {
+      provider: "pi-ai",
+      model: "pi-refund",
+      totalTokens: 12,
+    },
+  };
+});
 
 describeEval("pi-ai harness adapter", {
   data: async () => [
@@ -75,8 +60,7 @@ describeEval("pi-ai harness adapter", {
     },
   ],
   harness: piAiHarness({
-    createAgent,
-    task: runAgent,
+    agent: createAgent,
     tools,
   }),
   test: async ({ run, session }) => {
@@ -85,9 +69,7 @@ describeEval("pi-ai harness adapter", {
     expect(run.output).toEqual({
       status: "approved",
     });
-    expect(run.artifacts).toEqual({
-      agentId: "refund-agent",
-    });
+    expect(run.artifacts).toBeUndefined();
     expect(toolCalls(session)).toMatchObject([
       {
         name: "lookupInvoice",
@@ -107,7 +89,6 @@ describeEval("pi-ai harness adapter", {
 
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute: async ({ invoiceId }: { invoiceId: string }) => {
@@ -115,7 +96,7 @@ test("attaches a partial run when the harness errors", async () => {
         },
       },
     } satisfies PiAiToolset<string, DemoCase>,
-    run: async ({ runtime }) => {
+    task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_missing",
       });
@@ -208,6 +189,51 @@ test("task can own agent creation while receiving wrapped runtime tools", async 
   ]);
 });
 
+test("normalizes domain results that resemble harness runs", async () => {
+  const harness = piAiHarness({
+    task: async () => ({
+      session: {
+        id: "domain-session",
+      },
+      usage: {
+        totalTokens: 7,
+      },
+      errors: [],
+      decision: {
+        status: "approved",
+      },
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toEqual({
+    status: "approved",
+  });
+  expect(run.session.messages).toEqual([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      content: {
+        status: "approved",
+      },
+    },
+  ]);
+  expect(run.usage.totalTokens).toBe(7);
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -219,14 +245,13 @@ test("records and replays opt-in tools in auto mode", async () => {
   }));
 
   const replayHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
         execute,
       },
     } satisfies PiAiToolset<string, DemoCase>,
-    run: async ({ runtime }) => {
+    task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_123",
       });
@@ -306,14 +331,13 @@ test("errors when strict mode is missing a recording", async () => {
   }));
 
   const replayHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
         execute,
       },
     } satisfies PiAiToolset<string, DemoCase>,
-    run: async ({ runtime }) => {
+    task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_123",
       });

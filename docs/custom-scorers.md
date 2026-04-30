@@ -36,19 +36,22 @@ export const RefundStatusJudge: JudgeFn<RefundJudgeOptions> = async ({
 Use it as an automatic suite-level judge:
 
 ```ts
-describeEval("refund agent", {
-  harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    tools: foobarTools,
-  }),
-  data: async () => [
-    {
+describeEval(
+  "refund agent",
+  {
+    harness: piAiHarness({
+      agent: createRefundAgent,
+      tools: foobarTools,
+    }),
+    judges: [RefundStatusJudge],
+  },
+  (it) => {
+    it("approves refundable invoice", {
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
-    },
-  ],
-  judges: [RefundStatusJudge],
-});
+    });
+  },
+);
 ```
 
 Or run it explicitly inside a test:

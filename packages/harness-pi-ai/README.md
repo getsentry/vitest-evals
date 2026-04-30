@@ -14,7 +14,7 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: createRefundAgent,
   tools: foobarTools,
 });
 ```
@@ -29,9 +29,9 @@ const harness = piAiHarness({
 });
 ```
 
-If the agent already implements `run(input, runtime)`, you can omit `task` and
-the harness will call that method automatically. `run` remains available as a
-lower-level alias for custom harness adapters.
+If the agent already implements `run(input, runtime)`, pass it as `agent` and
+the harness will call that method automatically. `agent` can be an instance or
+a factory function. Use `task` only when the app needs a custom entrypoint.
 
 The adapter provides:
 

@@ -54,6 +54,7 @@ tables.
 The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
 
 ```ts
+import { expect } from "vitest";
 import { createRefundAgent, foobarTools } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
@@ -63,50 +64,59 @@ import {
   toolCalls,
 } from "vitest-evals";
 
-describeEval("demo pi refund agent", {
-  data: [
-    {
+const harness = piAiHarness({
+  agent: createRefundAgent,
+  tools: foobarTools,
+});
+
+describeEval(
+  "demo pi refund agent",
+  {
+    harness,
+    judges: [ToolCallJudge()],
+  },
+  (it) => {
+    it("approves refundable invoice", {
       input: "Refund invoice inv_123",
       expectedStatus: "approved",
       expectedTools: ["lookupInvoice", "createRefund"],
-    },
-  ],
-  harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    tools: foobarTools,
-  }),
-  judges: [ToolCallJudge()],
-  test: async ({ run, session, caseData, judge }) => {
-    expect(run.output).toMatchObject({ status: caseData.expectedStatus });
-    await judge(StructuredOutputJudge(), {
-      expected: { status: caseData.expectedStatus },
+    }, async ({ agent, run, session, caseData, judge }) => {
+      expect(agent).toBeDefined();
+      expect(run.output).toMatchObject({ status: caseData.expectedStatus });
+      await judge(StructuredOutputJudge(), {
+        expected: { status: caseData.expectedStatus },
+      });
+      expect(toolCalls(session).map((call) => call.name)).toEqual(
+        caseData.expectedTools,
+      );
     });
-    expect(toolCalls(session).map((call) => call.name)).toEqual(
-      caseData.expectedTools,
-    );
   },
-});
+);
 ```
 
 See [apps/demo-pi/README.md](apps/demo-pi/README.md) for the demo app entrypoint
 and [packages/foobar/src/index.ts](packages/foobar/src/index.ts) for the
-example agent/runtime seam.
+example agent/runtime integration point.
 
-Harness-backed suites can also declare automatic `judges`. Those judge
-functions run against the same normalized `run`/`session` pair that the
-optional `test` callback receives, so the harness still executes exactly once
-per case.
+Harness-backed suites configure the instrumented runtime once, then register
+normal-looking eval tests inside the callback. Each test gets the resolved
+agent, the normalized `run`/`session`, and a pre-bound `judge(...)` helper.
+Suite-level `judges` run against the same recorded run, so the harness still
+executes exactly once per test.
 
-For explicit judge assertions inside a `test` callback, use the pre-bound
+For explicit judge assertions inside an eval test, use the pre-bound
 `judge(...)` helper. It reuses the current `run`, `session`, `rawInput`, and
 `caseData` automatically:
 
 ```ts
-test: async ({ judge, caseData }) => {
+it("denies non-refundable invoice", {
+  input: "Refund invoice inv_404",
+  expectedStatus: "denied",
+}, async ({ judge, caseData }) => {
   await judge(StructuredOutputJudge(), {
     expected: { status: caseData.expectedStatus },
   });
-}
+});
 ```
 
 The lower-level matcher still exists as

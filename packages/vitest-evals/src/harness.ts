@@ -85,8 +85,19 @@ export type HarnessContext<TCase extends HarnessCase = HarnessCase> = {
 export type Harness<
   TInput = unknown,
   TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TAgent = unknown,
 > = {
   name: string;
+  run: (input: TInput, context: HarnessContext<TCase>) => Promise<HarnessRun>;
+  setup?: () => Promise<HarnessExecution<TInput, TCase, TAgent>>;
+};
+
+export type HarnessExecution<
+  TInput = unknown,
+  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
+  TAgent = unknown,
+> = {
+  agent?: TAgent;
   run: (input: TInput, context: HarnessContext<TCase>) => Promise<HarnessRun>;
 };
 
@@ -143,14 +154,62 @@ export function getHarnessRunFromError(error: unknown): HarnessRun | undefined {
   return undefined;
 }
 
-function isHarnessRun(value: unknown): value is HarnessRun {
+export function isHarnessRun(value: unknown): value is HarnessRun {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as {
+    session?: unknown;
+    usage?: unknown;
+    errors?: unknown;
+  };
+
+  return (
+    isNormalizedSession(candidate.session) &&
+    Boolean(candidate.usage) &&
+    typeof candidate.usage === "object" &&
+    !Array.isArray(candidate.usage) &&
+    Array.isArray(candidate.errors)
+  );
+}
+
+export function isNormalizedSession(
+  value: unknown,
+): value is NormalizedSession {
   return (
     Boolean(value) &&
     typeof value === "object" &&
     value !== null &&
-    "session" in value &&
-    "usage" in value &&
-    "errors" in value &&
-    Array.isArray((value as HarnessRun).errors)
+    "messages" in value &&
+    Array.isArray((value as { messages?: unknown }).messages)
   );
+}
+
+export function resolveHarnessRunErrors(
+  result: unknown,
+): Array<Record<string, JsonValue>> {
+  if (
+    result &&
+    typeof result === "object" &&
+    Array.isArray((result as Record<string, unknown>).errors)
+  ) {
+    return (result as { errors: Array<Record<string, JsonValue>> }).errors;
+  }
+
+  return [];
+}
+
+export function serializeError(error: unknown): Record<string, JsonValue> {
+  if (error instanceof Error) {
+    return {
+      type: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    type: "Error",
+    message: String(error),
+  };
 }

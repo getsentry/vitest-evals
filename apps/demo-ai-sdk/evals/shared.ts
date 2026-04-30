@@ -35,7 +35,7 @@ const refundTools = {
 
 export const refundHarness = aiSdkHarness({
   tools: refundTools,
-  run: async ({ input, runtime }) =>
+  task: async ({ input, runtime }) =>
     generateText({
       model: anthropic("claude-sonnet-4-5"),
       system: REFUND_SYSTEM_PROMPT,

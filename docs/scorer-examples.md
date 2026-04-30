@@ -64,32 +64,34 @@ await expect(run.output).toSatisfyJudge(RefundApprovalJudge, {
 ```ts
 import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
 
-describeEval("refund agent", {
-  harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    tools: foobarTools,
-  }),
-  data: async () => [
-    {
+describeEval(
+  "refund agent",
+  {
+    harness: piAiHarness({
+      agent: createRefundAgent,
+      tools: foobarTools,
+    }),
+    judges: [ToolCallJudge()],
+  },
+  (it) => {
+    it("approves refundable invoice", {
       input: "Refund invoice inv_123",
       expected: { status: "approved" },
       expectedTools: [
         { name: "lookupInvoice" },
         { name: "createRefund" },
       ],
-    },
-  ],
-  judges: [ToolCallJudge()],
-  test: async ({ run, session, caseData }) => {
-    await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
-      rawInput: caseData.input,
-      caseData,
-      run,
-      session,
-      expected: caseData.expected,
+    }, async ({ run, session, caseData }) => {
+      await expect(run.output).toSatisfyJudge(StructuredOutputJudge(), {
+        rawInput: caseData.input,
+        caseData,
+        run,
+        session,
+        expected: caseData.expected,
+      });
     });
   },
-});
+);
 ```
 
 ## Legacy Scorer Example

@@ -70,21 +70,27 @@ works.
 ## Example Harness Test Pattern
 
 ```ts
-describeEval("refund agent", {
-  harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    tools: foobarTools,
-  }),
-  data: async () => [{ input: "Refund invoice inv_123" }],
-  judges: [ToolCallJudge()],
-  test: async ({ run, session }) => {
-    expect(run.output).toMatchObject({ status: "approved" });
-    expect(toolCalls(session).map((call) => call.name)).toEqual([
-      "lookupInvoice",
-      "createRefund",
-    ]);
+describeEval(
+  "refund agent",
+  {
+    harness: piAiHarness({
+      agent: createRefundAgent,
+      tools: foobarTools,
+    }),
+    judges: [ToolCallJudge()],
   },
-});
+  (it) => {
+    it("approves refundable invoice", {
+      input: "Refund invoice inv_123",
+    }, async ({ run, session }) => {
+      expect(run.output).toMatchObject({ status: "approved" });
+      expect(toolCalls(session).map((call) => call.name)).toEqual([
+        "lookupInvoice",
+        "createRefund",
+      ]);
+    });
+  },
+);
 ```
 
 ## Example Legacy Test Pattern

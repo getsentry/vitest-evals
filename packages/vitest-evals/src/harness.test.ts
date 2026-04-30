@@ -71,6 +71,17 @@ const harness: Harness<string, RefundEvalCase> = {
   run: runSpy,
 };
 
+const agentHarness: Harness<string, RefundEvalCase, { id: string }> = {
+  name: "pi-ai",
+  setup: async () => ({
+    agent: {
+      id: "refund-agent",
+    },
+    run: runSpy,
+  }),
+  run: runSpy,
+};
+
 const judgeSpy = vi.fn(async (opts: HarnessJudgeOptions<RefundEvalCase>) => ({
   score: opts.expectedStatus === "approved" ? 1 : 0,
 }));
@@ -118,6 +129,44 @@ describeEval("harness mode", {
     );
   },
 });
+
+describeEval(
+  "harness mode with vitest-style tasks",
+  { harness: agentHarness },
+  (it) => {
+    it(
+      "refund request",
+      {
+        input: "Refund invoice inv_123",
+        expectedStatus: "approved",
+      },
+      async ({ agent, input, caseData, run, session, judge }) => {
+        expect(agent?.id).toBe("refund-agent");
+        expect(input).toBe("Refund invoice inv_123");
+        expect(caseData.expectedStatus).toBe("approved");
+        expect(run.output).toEqual({
+          status: "approved",
+        });
+        expect(toolCalls(session)).toHaveLength(1);
+
+        await judge(judgeSpy, {
+          expectedStatus: caseData.expectedStatus,
+        });
+
+        expect(judgeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            input: "Refund invoice inv_123",
+            rawInput: "Refund invoice inv_123",
+            output: '{"status":"approved"}',
+            caseData: expect.objectContaining({
+              expectedStatus: "approved",
+            }),
+          }),
+        );
+      },
+    );
+  },
+);
 
 describeEval("harness mode with bound judge helper", {
   data: [
