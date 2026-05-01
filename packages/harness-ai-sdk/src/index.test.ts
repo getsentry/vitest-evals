@@ -902,6 +902,71 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
   expect(noToolRun.usage.toolCalls).toBeUndefined();
 });
 
+test("uses invalid tool call details as the normalized error", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "error",
+          rawFinishReason: "error",
+          toolCalls: [
+            {
+              type: "tool-call",
+              toolCallId: "call_invalid",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: 123,
+              },
+              invalid: {
+                type: "ZodError",
+                message: "Expected string, received number",
+              },
+            },
+          ],
+          toolResults: [],
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    caseData: {
+      input: "Refund invoice inv_123",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(toolCalls(run.session)[0]).toMatchObject({
+    id: "call_invalid",
+    name: "lookupInvoice",
+    error: {
+      type: "ZodError",
+      message: "Expected string, received number",
+    },
+    metadata: {
+      invalid: {
+        type: "ZodError",
+        message: "Expected string, received number",
+      },
+    },
+  });
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");

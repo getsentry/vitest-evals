@@ -959,7 +959,7 @@ function normalizeToolCall(
   const toolResult = toolResultsById.get(toolCall.toolCallId);
   const errorValue =
     toolCall.invalid || toolCall.error !== undefined
-      ? normalizeError(toolCall.error)
+      ? normalizeError(toolCall.error ?? toolCall.invalid)
       : undefined;
   const replayMetadata = normalizeReplayMetadata(
     replayMetadataByToolCallId.get(toolCall.toolCallId),
