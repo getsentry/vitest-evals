@@ -3,7 +3,7 @@ import {
   ToolCallScorer,
   type ToolCallScorerConfig,
   type ToolCallScorerOptions,
-} from "../legacy/scorers/toolCallScorer";
+} from "../internal/toolCallScorer";
 import type { HarnessMetadata } from "../harness";
 
 type ExpectedTool =

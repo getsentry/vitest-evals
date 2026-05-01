@@ -4,6 +4,7 @@ import {
   describeEval,
   namedJudge,
   type JudgeContext,
+  StructuredOutputJudge,
   ToolCallJudge,
   toolCalls,
   toolMessages,
@@ -508,6 +509,33 @@ test("ToolCallJudge accepts string expected tools", async () => {
         name: "createRefund",
       },
     ],
+  });
+
+  expect(result.score).toBe(1);
+});
+
+test("StructuredOutputJudge reads expected fields from metadata", async () => {
+  const judge = StructuredOutputJudge();
+
+  const result = await judge({
+    input: "Refund invoice inv_123",
+    output: '{"status":"approved","reason":"invoice refunded"}',
+    run: {
+      session: {
+        messages: [],
+      },
+      output: {
+        status: "approved",
+        reason: "invoice refunded",
+      },
+      usage: {},
+      errors: [],
+    },
+    metadata: {
+      expected: {
+        status: "approved",
+      },
+    },
   });
 
   expect(result.score).toBe(1);

@@ -182,6 +182,59 @@ describeEval(
   },
 );
 
+describeEval(
+  "pi-ai harness infers runtime toolsets from existing agents",
+  {
+    harness: piAiHarness({
+      createAgent: () => {
+        const toolset = {
+          lookupInvoice: {
+            execute: async ({ invoiceId }: { invoiceId: string }) => ({
+              invoiceId,
+              refundable: true,
+            }),
+          },
+        } satisfies PiAiToolset<string, DemoMetadata>;
+
+        return {
+          toolset,
+          async run(_input: string, runtime: PiAiRuntime<typeof toolset>) {
+            await runtime.tools.lookupInvoice({
+              invoiceId: "inv_123",
+            });
+
+            return {
+              decision: {
+                status: "approved",
+              },
+            };
+          },
+        };
+      },
+    }),
+  },
+  (it) => {
+    it("records inferred runtime tool calls without an explicit tools option", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+    });
+  },
+);
+
 test("supports normalize.output as a low-level escape hatch", async () => {
   const normalizedHarness = piAiHarness({
     createAgent: () => ({ id: "refund-agent" }),

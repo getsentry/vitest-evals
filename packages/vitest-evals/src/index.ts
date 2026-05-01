@@ -12,6 +12,9 @@ import type {
 import {
   assistantMessages,
   getHarnessRunFromError,
+  isHarnessRun,
+  isNormalizedSession,
+  normalizeContent,
   toolCalls,
   userMessages,
 } from "./harness";
@@ -209,7 +212,7 @@ const evalTest = test
         return run;
       };
     },
-  ) as unknown as TestAPI<InternalEvalFixtures>;
+  ) as TestAPI<InternalEvalFixtures>;
 
 expect.extend({
   toSatisfyJudge: async function toSatisfyJudge<
@@ -234,8 +237,8 @@ expect.extend({
       name: judge.name || "AnonymousJudge",
     };
 
-    if (this.task) {
-      appendJudgeScore(this.task as unknown as EvalTaskLike, {
+    if (isEvalTaskLike(this.task)) {
+      appendJudgeScore(this.task, {
         score: scoredJudge,
         output: judgeOptions.output,
         thresholdFailed: threshold !== null && !pass,
@@ -293,7 +296,7 @@ export function describeEval<
       harness: options.harness,
       automaticJudges: options.judges ?? [],
       judgeThreshold: options.judgeThreshold,
-    }) as unknown as EvalTestAPI<TInput, TMetadata>;
+    }) as EvalTestAPI<TInput, TMetadata>;
 
     define(it);
   });
@@ -404,6 +407,18 @@ function appendJudgeScore(
   };
 }
 
+function isEvalTaskLike(task: unknown): task is EvalTaskLike {
+  if (!task || typeof task !== "object") {
+    return false;
+  }
+
+  return (
+    "meta" in task &&
+    typeof (task as { meta?: unknown }).meta === "object" &&
+    (task as { meta?: unknown }).meta !== null
+  );
+}
+
 function formatJudgeInput(input: unknown) {
   if (typeof input === "string") {
     return input;
@@ -486,7 +501,7 @@ function resolveJudgeRun<
       : options.run;
   }
 
-  if (looksLikeHarnessRun(received)) {
+  if (isHarnessRun(received)) {
     return options.session
       ? {
           ...received,
@@ -497,7 +512,7 @@ function resolveJudgeRun<
 
   const session =
     options.session ??
-    (looksLikeNormalizedSession(received)
+    (isNormalizedSession(received)
       ? received
       : createSyntheticJudgeSession(received, options));
 
@@ -545,11 +560,11 @@ function inferJudgeOutputValue(
   received: unknown,
   session: NormalizedSession,
 ): JsonValue | undefined {
-  if (looksLikeHarnessRun(received)) {
+  if (isHarnessRun(received)) {
     return received.output;
   }
 
-  if (looksLikeNormalizedSession(received)) {
+  if (isNormalizedSession(received)) {
     return session.outputText ?? normalizeJudgeJsonValue(received.messages);
   }
 
@@ -570,34 +585,7 @@ function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {
     return undefined;
   }
 
-  try {
-    return JSON.parse(JSON.stringify(value)) as JsonValue;
-  } catch {
-    return String(value);
-  }
-}
-
-function looksLikeHarnessRun(value: unknown): value is HarnessRun {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    value !== null &&
-    "session" in value &&
-    "usage" in value &&
-    "errors" in value
-  );
-}
-
-function looksLikeNormalizedSession(
-  value: unknown,
-): value is NormalizedSession {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    value !== null &&
-    "messages" in value &&
-    Array.isArray((value as { messages?: unknown[] }).messages)
-  );
+  return normalizeContent(value);
 }
 
 /** Formats judge results for reporter and assertion output. */

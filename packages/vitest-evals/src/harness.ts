@@ -107,6 +107,42 @@ export type Harness<
   ) => Promise<HarnessRun>;
 };
 
+function isJsonPrimitive(value: unknown): value is JsonPrimitive {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeJsonArray(value: unknown[]): JsonValue[] {
+  return value.map((item) => {
+    const normalized = toJsonValue(item);
+    return normalized === undefined ? null : normalized;
+  });
+}
+
+function normalizeJsonObject(
+  value: Record<string, unknown>,
+): Record<string, JsonValue> {
+  const normalized: Record<string, JsonValue> = {};
+
+  for (const [key, entryValue] of Object.entries(value)) {
+    const entry = toJsonValue(entryValue);
+    if (entry !== undefined) {
+      normalized[key] = entry;
+    }
+  }
+
+  return normalized;
+}
+
+/** Returns true when a value exposes a callable method with the given name. */
 export function hasCallableMethod(value: unknown, methodName: string) {
   return (
     value !== null &&
@@ -116,41 +152,31 @@ export function hasCallableMethod(value: unknown, methodName: string) {
   );
 }
 
+/** Normalizes an unknown value into the JSON-safe shape used by harness runs. */
 export function toJsonValue(value: unknown): JsonValue | undefined {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
+  if (isJsonPrimitive(value)) {
     return value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => {
-      const normalized = toJsonValue(item);
-      return normalized === undefined ? null : normalized;
-    });
+    return normalizeJsonArray(value);
   }
 
-  if (typeof value === "object" && value !== null) {
-    return normalizeRecord(value as Record<string, unknown>);
+  if (isJsonRecord(value)) {
+    return normalizeJsonObject(value);
   }
 
   return undefined;
 }
 
+/** Drops non-JSON properties from a record while preserving valid values. */
 export function normalizeRecord(
   value: Record<string, unknown>,
 ): Record<string, JsonValue> {
-  const entries = Object.entries(value).flatMap(([key, entryValue]) => {
-    const normalized = toJsonValue(entryValue);
-    return normalized === undefined ? [] : [[key, normalized] as const];
-  });
-
-  return Object.fromEntries(entries);
+  return normalizeJsonObject(value);
 }
 
+/** Normalizes metadata and omits the field entirely when nothing survives. */
 export function normalizeMetadata(
   value: Record<string, unknown>,
 ): Record<string, JsonValue> | undefined {
@@ -158,14 +184,17 @@ export function normalizeMetadata(
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
+/** Converts arbitrary content into the JSON-safe message content shape. */
 export function normalizeContent(value: unknown): JsonValue {
   return toJsonValue(value) ?? String(value);
 }
 
+/** Flattens every recorded tool call from a normalized session. */
 export function toolCalls(session: NormalizedSession): ToolCallRecord[] {
   return session.messages.flatMap((message) => message.toolCalls ?? []);
 }
 
+/** Filters normalized session messages by role. */
 export function messagesByRole(
   session: NormalizedSession,
   role: NormalizedMessage["role"],
@@ -173,22 +202,27 @@ export function messagesByRole(
   return session.messages.filter((message) => message.role === role);
 }
 
+/** Returns every normalized system message from a session. */
 export function systemMessages(session: NormalizedSession) {
   return messagesByRole(session, "system");
 }
 
+/** Returns every normalized user message from a session. */
 export function userMessages(session: NormalizedSession) {
   return messagesByRole(session, "user");
 }
 
+/** Returns every normalized assistant message from a session. */
 export function assistantMessages(session: NormalizedSession) {
   return messagesByRole(session, "assistant");
 }
 
+/** Returns every normalized tool message from a session. */
 export function toolMessages(session: NormalizedSession) {
   return messagesByRole(session, "tool");
 }
 
+/** Attaches a partial or complete harness run to an arbitrary thrown error. */
 export function attachHarnessRunToError(
   error: unknown,
   run: HarnessRun,
@@ -202,6 +236,7 @@ export function attachHarnessRunToError(
   });
 }
 
+/** Reads an attached harness run back off a previously wrapped error value. */
 export function getHarnessRunFromError(error: unknown): HarnessRun | undefined {
   if (
     error &&
@@ -215,6 +250,7 @@ export function getHarnessRunFromError(error: unknown): HarnessRun | undefined {
   return undefined;
 }
 
+/** Returns true when a value matches the normalized `HarnessRun` contract. */
 export function isHarnessRun(value: unknown): value is HarnessRun {
   if (!value || typeof value !== "object") {
     return false;
@@ -235,6 +271,7 @@ export function isHarnessRun(value: unknown): value is HarnessRun {
   );
 }
 
+/** Returns true when a value matches the normalized session contract. */
 export function isNormalizedSession(
   value: unknown,
 ): value is NormalizedSession {
@@ -247,6 +284,7 @@ export function isNormalizedSession(
   );
 }
 
+/** Reuses pre-normalized harness errors when a runtime already returns them. */
 export function resolveHarnessRunErrors(
   result: unknown,
 ): Array<Record<string, JsonValue>> {
@@ -261,6 +299,7 @@ export function resolveHarnessRunErrors(
   return [];
 }
 
+/** Serializes an arbitrary thrown value into the normalized error shape. */
 export function serializeError(error: unknown): Record<string, JsonValue> {
   if (error instanceof Error) {
     return {

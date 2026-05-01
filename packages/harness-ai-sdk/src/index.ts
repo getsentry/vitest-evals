@@ -47,6 +47,10 @@ import type {
 
 type MaybePromise<T> = T | Promise<T>;
 type AgentSource<TAgent> = TAgent | (() => MaybePromise<TAgent>);
+type AnyAiSdkToolset<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = Record<string, AiSdkToolDefinition<any, any, TInput, TMetadata>>;
 
 type StepLike = Pick<
   StepResult<ToolSet>,
@@ -114,14 +118,14 @@ export type AiSdkToolDefinition<
 export type AiSdkToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-> = Record<string, AiSdkToolDefinition<any, any, TInput, TMetadata>>;
+> = AnyAiSdkToolset<TInput, TMetadata>;
 
-export type AiSdkRuntimeToolset<TTools extends AiSdkToolset<any, any>> = {
+export type AiSdkRuntimeToolset<TTools extends AnyAiSdkToolset<any, any>> = {
   [K in keyof TTools]: TTools[K] extends AiSdkToolDefinition<
     infer TArgs extends JsonValue,
     infer TResult extends JsonValue,
-    any,
-    any
+    infer _TInput,
+    infer _TMetadata
   >
     ? Omit<TTools[K], "execute"> & {
         execute?: ToolExecuteFunction<TArgs, TResult>;
@@ -213,6 +217,41 @@ interface AiSdkHarnessBaseOptions<
   prompt?: HarnessPrompt;
   name?: string;
 }
+
+type AiSdkRunnableAgent<
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> = {
+  run: (
+    input: TInput,
+    runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
+  ) => MaybePromise<TResult | HarnessRun>;
+};
+
+type AiSdkGeneratableAgent<
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> = {
+  generate: (
+    input: TInput,
+    runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
+  ) => MaybePromise<TResult | HarnessRun>;
+};
+
+type AiSdkResultOverrides<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> = Pick<
+  AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  "errors" | "output" | "session" | "timings" | "usage"
+>;
 
 export function aiSdkHarness<
   TAgent = unknown,
@@ -349,12 +388,13 @@ async function runAiSdkHarness<
   }
 }
 
-function hasResultOverrides(
-  options: Pick<
-    AiSdkHarnessOptions<any, any, any, any, any>,
-    "errors" | "output" | "session" | "timings" | "usage"
-  >,
-) {
+function hasResultOverrides<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+>(options: AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools>) {
   return Boolean(
     options.output ??
       options.session ??
@@ -390,26 +430,12 @@ async function runAgent<
     return options.task(args);
   }
 
-  if (hasCallableMethod(args.agent, "run")) {
-    return (
-      args.agent as {
-        run: (
-          input: TInput,
-          runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
-        ) => MaybePromise<TResult | HarnessRun>;
-      }
-    ).run(args.input, args.runtime);
+  if (hasAiSdkRunMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
+    return args.agent.run(args.input, args.runtime);
   }
 
-  if (hasCallableMethod(args.agent, "generate")) {
-    return (
-      args.agent as {
-        generate: (
-          input: TInput,
-          runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
-        ) => MaybePromise<TResult | HarnessRun>;
-      }
-    ).generate(args.input, args.runtime);
+  if (hasAiSdkGenerateMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
+    return args.agent.generate(args.input, args.runtime);
   }
 
   throw new Error(
@@ -461,15 +487,43 @@ function hasAgentSource<
 async function resolveAgentSource<TAgent>(
   agent: AgentSource<TAgent>,
 ): Promise<TAgent> {
-  if (
+  if (isAgentFactory(agent)) {
+    return agent();
+  }
+
+  return agent;
+}
+
+function hasAiSdkRunMethod<
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+>(
+  agent: unknown,
+): agent is AiSdkRunnableAgent<TInput, TMetadata, TResult, TTools> {
+  return hasCallableMethod(agent, "run");
+}
+
+function hasAiSdkGenerateMethod<
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+>(
+  agent: unknown,
+): agent is AiSdkGeneratableAgent<TInput, TMetadata, TResult, TTools> {
+  return hasCallableMethod(agent, "generate");
+}
+
+function isAgentFactory<TAgent>(
+  agent: AgentSource<TAgent>,
+): agent is () => MaybePromise<TAgent> {
+  return (
     typeof agent === "function" &&
     !hasCallableMethod(agent, "run") &&
     !hasCallableMethod(agent, "generate")
-  ) {
-    return (agent as () => MaybePromise<TAgent>)();
-  }
-
-  return agent as TAgent;
+  );
 }
 
 function createToolset<

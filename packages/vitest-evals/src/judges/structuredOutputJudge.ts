@@ -4,7 +4,7 @@ import {
   StructuredOutputScorer,
   type StructuredOutputScorerConfig,
   type StructuredOutputScorerOptions,
-} from "../legacy/scorers/structuredOutputScorer";
+} from "../internal/structuredOutputScorer";
 import type { HarnessMetadata } from "../harness";
 
 type StructuredOutputJudgeExpected = Record<string, unknown>;
