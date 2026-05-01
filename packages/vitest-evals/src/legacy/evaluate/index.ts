@@ -1,7 +1,13 @@
+/**
+ * Temporary compatibility wrapper for the old `evaluate(...)` helper.
+ *
+ * Keep this module isolated from the harness-first API so legacy suites can be
+ * removed cleanly in a later deletion pass.
+ */
 import { generateObject } from "ai";
 import { z } from "zod";
 import { assert, test } from "vitest";
-import { wrapText } from "../../wrapText";
+import { wrapText } from "../format";
 
 type LanguageModel = Parameters<typeof generateObject>[0]["model"];
 

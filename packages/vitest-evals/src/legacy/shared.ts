@@ -1,4 +1,9 @@
-import type { JudgeFn, JudgeResult } from "../judges/types";
+/**
+ * Temporary scorer-first compatibility types.
+ *
+ * Keep these local to `vitest-evals/legacy` so the legacy entrypoint can be
+ * deleted without preserving any dependency on the harness-first modules.
+ */
 
 export type ToolCall = {
   name: string;
@@ -13,7 +18,13 @@ export type TaskResult = {
 
 export type TaskFn = (input: string) => Promise<string | TaskResult>;
 
-export type Score = JudgeResult;
+export type Score = {
+  score: number | null;
+  metadata?: {
+    rationale?: string;
+    output?: unknown;
+  } & Record<string, unknown>;
+};
 
 export interface BaseScorerOptions {
   input: string;

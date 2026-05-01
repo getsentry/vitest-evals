@@ -1,3 +1,9 @@
+/**
+ * Temporary scorer-first compatibility entrypoint.
+ *
+ * Keep this module isolated from the harness-first API surface. Do not route
+ * new features through here; this file should stay easy to delete.
+ */
 import {
   assert,
   afterEach as vitestAfterEach,
@@ -7,15 +13,8 @@ import {
   test,
 } from "vitest";
 import "vitest";
-import {
-  describeEval as describeHarnessEval,
-  formatScores,
-  wrapText,
-  type HarnessCase,
-  type HarnessDescribeEvalOptions,
-  type JudgeResult,
-} from "./index";
 export { configure, evaluate } from "./legacy/evaluate";
+import { formatScores, wrapText } from "./legacy/format";
 import type {
   BaseScorerOptions,
   Score,
@@ -95,22 +94,11 @@ expect.extend({
   },
 });
 
-export function describeEval<TCase extends HarnessCase>(
-  name: string,
-  options: HarnessDescribeEvalOptions<TCase>,
-): void;
 export function describeEval(
   name: string,
   options: LegacyDescribeEvalOptions,
 ): void;
-export function describeEval(
-  name: string,
-  options: HarnessDescribeEvalOptions<any> | LegacyDescribeEvalOptions,
-) {
-  if ("harness" in options) {
-    return describeHarnessEval(name, options);
-  }
-
+export function describeEval(name: string, options: LegacyDescribeEvalOptions) {
   return describe(name, async () => {
     if (options.beforeEach) {
       vitestBeforeEach(options.beforeEach);
@@ -178,4 +166,4 @@ export function describeEval(
   });
 }
 
-export * from "./index";
+export { formatScores, wrapText } from "./legacy/format";
