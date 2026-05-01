@@ -463,6 +463,91 @@ test("toSatisfyJudge builds a synthetic run for raw output values", async () => 
   );
 });
 
+test("toSatisfyJudge ignores empty outputText when assistant text is available", async () => {
+  const outputJudge = vi.fn(async (opts: JudgeContext) => ({
+    score: opts.output === "approved" ? 1 : 0,
+  }));
+
+  await expect({
+    session: {
+      messages: [
+        {
+          role: "assistant",
+          content: "approved",
+        },
+      ],
+      outputText: "",
+    },
+    output: {
+      status: "approved",
+    },
+    usage: {},
+    errors: [],
+  } satisfies HarnessRun).toSatisfyJudge(outputJudge);
+
+  expect(outputJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      output: "approved",
+    }),
+  );
+});
+
+test("toSatisfyJudge falls back to structured output when text output is blank", async () => {
+  const outputJudge = vi.fn(async (opts: JudgeContext) => ({
+    score:
+      opts.output === '{"status":"approved","refundId":"rf_inv_123"}' ? 1 : 0,
+  }));
+
+  await expect({
+    session: {
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            status: "approved",
+            refundId: "rf_inv_123",
+          },
+        },
+      ],
+      outputText: "   ",
+    },
+    output: {
+      status: "approved",
+      refundId: "rf_inv_123",
+    },
+    usage: {},
+    errors: [],
+  } satisfies HarnessRun).toSatisfyJudge(outputJudge);
+
+  expect(outputJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      output: '{"status":"approved","refundId":"rf_inv_123"}',
+    }),
+  );
+});
+
+test("toSatisfyJudge ignores empty outputText on normalized sessions", async () => {
+  const outputJudge = vi.fn(async (opts: JudgeContext) => ({
+    score: opts.output === "approved" ? 1 : 0,
+  }));
+
+  await expect({
+    messages: [
+      {
+        role: "assistant",
+        content: "approved",
+      },
+    ],
+    outputText: "",
+  } satisfies NormalizedSession).toSatisfyJudge(outputJudge);
+
+  expect(outputJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      output: "approved",
+    }),
+  );
+});
+
 test("toSatisfyJudge accepts a null threshold to record without failing", async () => {
   const outputJudge = vi.fn(async () => ({
     score: 0,

@@ -431,6 +431,10 @@ function formatJudgeInput(input: unknown) {
   }
 }
 
+function hasMeaningfulText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function formatJudgeOutput(run: HarnessRun) {
   if (typeof run.output === "string") {
     return run.output;
@@ -448,11 +452,11 @@ function formatJudgeOutput(run: HarnessRun) {
 }
 
 function formatJudgeTextOutput(run: HarnessRun) {
-  return (
-    run.session.outputText ??
-    resolveAssistantOutput(run.session) ??
-    formatJudgeOutput(run)
-  );
+  if (hasMeaningfulText(run.session.outputText)) {
+    return run.session.outputText;
+  }
+
+  return resolveAssistantOutput(run.session) ?? formatJudgeOutput(run);
 }
 
 function buildJudgeAssertionOptions<
@@ -565,7 +569,13 @@ function inferJudgeOutputValue(
   }
 
   if (isNormalizedSession(received)) {
-    return session.outputText ?? normalizeJudgeJsonValue(received.messages);
+    return (
+      (hasMeaningfulText(session.outputText)
+        ? session.outputText
+        : undefined) ??
+      resolveAssistantOutput(session) ??
+      normalizeJudgeJsonValue(received.messages)
+    );
   }
 
   return normalizeJudgeJsonValue(received);
@@ -574,8 +584,8 @@ function inferJudgeOutputValue(
 function resolveAssistantOutput(session: NormalizedSession) {
   const assistantContent = [...assistantMessages(session)]
     .reverse()
-    .find((message) => typeof message.content === "string");
-  return typeof assistantContent?.content === "string"
+    .find((message) => hasMeaningfulText(message.content));
+  return hasMeaningfulText(assistantContent?.content)
     ? assistantContent.content
     : undefined;
 }
