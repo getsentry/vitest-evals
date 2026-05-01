@@ -45,4 +45,20 @@ describe("parseRefundDecision", () => {
       reason: "not refundable",
     });
   });
+
+  test("parses embedded JSON with braces inside string values", () => {
+    expect(
+      parseRefundDecision(
+        [
+          "Decision payload:",
+          '{"status":"denied","invoiceId":"inv_404","reason":"saw literal {brace} text"}',
+          "Thanks.",
+        ].join("\n"),
+      ),
+    ).toEqual({
+      status: "denied",
+      invoiceId: "inv_404",
+      reason: "saw literal {brace} text",
+    });
+  });
 });

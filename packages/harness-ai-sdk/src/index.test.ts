@@ -146,142 +146,149 @@ const generateTextLikeResult = {
   },
 } as const;
 
-describeEval("ai-sdk harness adapter", {
-  data: [
-    {
-      input: "Refund invoice inv_123",
-    },
-  ],
-  harness: aiSdkHarness({
-    task: async () => ({
-      ...generateTextLikeResult,
-      object: {
+describeEval(
+  "ai-sdk harness adapter",
+  {
+    harness: aiSdkHarness({
+      task: async () => ({
+        ...generateTextLikeResult,
+        object: {
+          status: "approved",
+          invoiceId: "inv_123",
+          refundId: "rf_inv_123",
+        },
+      }),
+    }),
+  },
+  (it) => {
+    it("normalizes explicit harness runs", async ({ run }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(result.output).toEqual({
         status: "approved",
         invoiceId: "inv_123",
         refundId: "rf_inv_123",
+      });
+      expect(result.usage).toMatchObject({
+        provider: "openai",
+        model: "gpt-4o-mini",
+        totalTokens: 21,
+        toolCalls: 2,
+      });
+      expect(result.session.provider).toBe("openai");
+      expect(result.session.model).toBe("gpt-4o-mini");
+      expect(result.session.outputText).toBe(
+        '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
+      );
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+        {
+          id: "call_refund",
+          name: "createRefund",
+          arguments: {
+            invoiceId: "inv_123",
+            amount: 4200,
+          },
+          result: {
+            refundId: "rf_inv_123",
+            status: "submitted",
+          },
+        },
+      ]);
+    });
+  },
+);
+
+describeEval(
+  "ai-sdk harness adapter custom entrypoint",
+  {
+    harness: aiSdkHarness({
+      agent: () => {
+        const generate = vi.fn(
+          async (
+            _input: string,
+            runtime: { tools: Record<string, never> },
+          ) => ({
+            object: {
+              status: "approved",
+            },
+            steps: [
+              {
+                stepNumber: 0,
+                model: {
+                  provider: "openai",
+                  modelId: "gpt-4o-mini",
+                },
+                text: '{"status":"approved"}',
+                content: [],
+                reasoningText: undefined,
+                finishReason: "stop",
+                rawFinishReason: "stop",
+                toolCalls: [],
+                toolResults: [],
+                usage: {
+                  inputTokens: 5,
+                  inputTokenDetails: {
+                    noCacheTokens: 5,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0,
+                  },
+                  outputTokens: 2,
+                  outputTokenDetails: {
+                    textTokens: 2,
+                    reasoningTokens: 0,
+                  },
+                  totalTokens: 7,
+                },
+                response: {
+                  messages: [],
+                },
+              },
+            ],
+            totalUsage: {
+              inputTokens: 5,
+              inputTokenDetails: {
+                noCacheTokens: 5,
+                cacheReadTokens: 0,
+                cacheWriteTokens: 0,
+              },
+              outputTokens: 2,
+              outputTokenDetails: {
+                textTokens: 2,
+                reasoningTokens: 0,
+              },
+              totalTokens: 7,
+            },
+          }),
+        );
+
+        return {
+          generate,
+        };
       },
     }),
-  }),
-  test: async ({ run, session }) => {
-    expect(run.output).toEqual({
-      status: "approved",
-      invoiceId: "inv_123",
-      refundId: "rf_inv_123",
-    });
-    expect(run.usage).toMatchObject({
-      provider: "openai",
-      model: "gpt-4o-mini",
-      totalTokens: 21,
-      toolCalls: 2,
-    });
-    expect(session.provider).toBe("openai");
-    expect(session.model).toBe("gpt-4o-mini");
-    expect(session.outputText).toBe(
-      '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
-    );
-    expect(toolCalls(session)).toMatchObject([
-      {
-        id: "call_lookup",
-        name: "lookupInvoice",
-        arguments: {
-          invoiceId: "inv_123",
-        },
-        result: {
-          invoiceId: "inv_123",
-          refundable: true,
-        },
-      },
-      {
-        id: "call_refund",
-        name: "createRefund",
-        arguments: {
-          invoiceId: "inv_123",
-          amount: 4200,
-        },
-        result: {
-          refundId: "rf_inv_123",
-          status: "submitted",
-        },
-      },
-    ]);
   },
-});
+  (it) => {
+    it("supports custom agent entrypoints", async ({ run }) => {
+      const result = await run("Generate structured output");
 
-describeEval("ai-sdk harness adapter custom entrypoint", {
-  data: [
-    {
-      input: "Generate structured output",
-    },
-  ],
-  harness: aiSdkHarness({
-    agent: () => {
-      const generate = vi.fn(
-        async (_input: string, runtime: { tools: Record<string, never> }) => ({
-          object: {
-            status: "approved",
-          },
-          steps: [
-            {
-              stepNumber: 0,
-              model: {
-                provider: "openai",
-                modelId: "gpt-4o-mini",
-              },
-              text: '{"status":"approved"}',
-              content: [],
-              reasoningText: undefined,
-              finishReason: "stop",
-              rawFinishReason: "stop",
-              toolCalls: [],
-              toolResults: [],
-              usage: {
-                inputTokens: 5,
-                inputTokenDetails: {
-                  noCacheTokens: 5,
-                  cacheReadTokens: 0,
-                  cacheWriteTokens: 0,
-                },
-                outputTokens: 2,
-                outputTokenDetails: {
-                  textTokens: 2,
-                  reasoningTokens: 0,
-                },
-                totalTokens: 7,
-              },
-              response: {
-                messages: [],
-              },
-            },
-          ],
-          totalUsage: {
-            inputTokens: 5,
-            inputTokenDetails: {
-              noCacheTokens: 5,
-              cacheReadTokens: 0,
-              cacheWriteTokens: 0,
-            },
-            outputTokens: 2,
-            outputTokenDetails: {
-              textTokens: 2,
-              reasoningTokens: 0,
-            },
-            totalTokens: 7,
-          },
-        }),
-      );
-
-      return {
-        generate,
-      };
-    },
-  }),
-  test: async ({ run, session }) => {
-    expect(run.output).toEqual({
-      status: "approved",
+      expect(result.output).toEqual({
+        status: "approved",
+      });
+      expect(result.session.outputText).toBe('{"status":"approved"}');
     });
-    expect(session.outputText).toBe('{"status":"approved"}');
   },
-});
+);
 
 test("default agent run receives wrapped runtime tools", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({

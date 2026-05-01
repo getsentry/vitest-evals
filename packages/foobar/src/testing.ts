@@ -1,15 +1,15 @@
 import { expect } from "vitest";
-import { type HarnessEvalContext, toolCalls } from "vitest-evals";
+import { type HarnessRun, toolCalls } from "vitest-evals";
 import type { RefundCase } from "./index";
 
 export async function assertRefundCase(
-  { run, session }: HarnessEvalContext<RefundCase>,
+  run: HarnessRun,
   expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
 ) {
   expect(run.output).toMatchObject({
     status: expected.expectedStatus,
   });
-  expect(toolCalls(session).map((call) => call.name)).toEqual(
+  expect(toolCalls(run.session).map((call) => call.name)).toEqual(
     expected.expectedTools,
   );
   expect(run.usage.provider).toContain("anthropic");

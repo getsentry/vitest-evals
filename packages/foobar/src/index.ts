@@ -286,7 +286,7 @@ function getAssistantText(message: AssistantMessage) {
 /** Parses the demo agent's final JSON payload into a typed refund decision. */
 export function parseRefundDecision(text: string): RefundDecision {
   const cleaned = stripMarkdownFence(text);
-  const jsonText = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
+  const jsonText = extractJsonObjectText(cleaned);
   const parsed = JSON.parse(jsonText) as Record<string, unknown>;
 
   if (
@@ -319,6 +319,73 @@ export function parseRefundDecision(text: string): RefundDecision {
 }
 
 function stripMarkdownFence(text: string) {
-  const match = text.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? text.trim();
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("```") || !trimmed.endsWith("```")) {
+    return trimmed;
+  }
+
+  const firstNewline = trimmed.indexOf("\n");
+  if (firstNewline === -1) {
+    return trimmed;
+  }
+
+  const fenceHeader = trimmed.slice(3, firstNewline).trim().toLowerCase();
+  if (fenceHeader !== "" && fenceHeader !== "json") {
+    return trimmed;
+  }
+
+  return trimmed.slice(firstNewline + 1, -3).trim();
+}
+
+function extractJsonObjectText(text: string) {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return text;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        isEscaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char !== "}") {
+      continue;
+    }
+
+    depth -= 1;
+    if (depth === 0) {
+      return text.slice(start, index + 1);
+    }
+  }
+
+  return text;
 }

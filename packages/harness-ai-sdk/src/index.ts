@@ -1,5 +1,4 @@
 import {
-  attachHarnessRunToError,
   hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
@@ -9,7 +8,8 @@ import {
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
-} from "vitest-evals";
+  attachHarnessRunToError,
+} from "vitest-evals/harness";
 import type {
   Harness,
   HarnessCase,
@@ -22,7 +22,7 @@ import type {
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
-} from "vitest-evals";
+} from "vitest-evals/harness";
 import {
   executeWithReplay,
   getReplayMetadataFromError,
