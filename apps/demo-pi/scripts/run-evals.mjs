@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createEvalEnv, parseEvalCliArgs } from "../../../scripts/eval-cli.mjs";
+
+const WORKSPACE_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 
 const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
   process.argv.slice(2),
@@ -20,15 +27,13 @@ const command = [
   "exec",
   "dotenv",
   "-e",
-  "../../.env",
+  ".env",
   "-e",
-  "../../.env.local",
+  ".env.local",
   "--",
   "vitest",
   "run",
   target,
-  "--root",
-  "../..",
   "--config",
   "vitest.config.ts",
   "--reporter",
@@ -37,7 +42,7 @@ const command = [
 ];
 
 const result = spawnSync("pnpm", command, {
-  cwd: process.cwd(),
+  cwd: WORKSPACE_ROOT,
   env,
   stdio: "inherit",
 });
