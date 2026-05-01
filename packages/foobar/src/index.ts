@@ -104,7 +104,7 @@ export async function createRefund({
   };
 }
 
-export const foobarTools = {
+const foobarTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
     replay: true,
