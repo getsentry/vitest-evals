@@ -510,6 +510,73 @@ test("attaches partial runtime tool calls when a task errors", async () => {
   ]);
 });
 
+test("omits empty runtime tool error content when a task errors", async () => {
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute: async () => {
+          throw new Error("");
+        },
+      },
+    } satisfies AiSdkToolset<string, DemoMetadata>,
+    task: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+    },
+  });
+
+  const error = await harness
+    .run("Refund invoice inv_123", createHarnessContext({}))
+    .catch((caughtError) => caughtError);
+  const run = getHarnessRunFromError(error);
+
+  expect(run).toBeDefined();
+  expect(toolCalls(run!.session)).toMatchObject([
+    {
+      id: "call_lookup",
+      name: "lookupInvoice",
+      error: {
+        message: "",
+        type: "Error",
+      },
+    },
+  ]);
+  expect(run?.session.messages).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+        },
+      ],
+    },
+    {
+      role: "tool",
+      metadata: {
+        name: "lookupInvoice",
+        toolCallId: "call_lookup",
+        isError: true,
+      },
+    },
+  ]);
+  expect(run?.session.messages[2]).not.toHaveProperty("content");
+});
+
 test("creates a fresh agent for each explicit run", async () => {
   const run = vi.fn(async () => ({
     object: {

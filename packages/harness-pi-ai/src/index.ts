@@ -511,7 +511,7 @@ function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
 
   for (const candidate of getAgentToolCandidates(agent)) {
     const nextRuntimeTools = getRuntimeToolset<TInput, TMetadata>(candidate);
-    if (!runtimeTools && nextRuntimeTools) {
+    if (runtimeTools === undefined && nextRuntimeTools !== undefined) {
       runtimeTools = nextRuntimeTools;
     }
 
@@ -656,13 +656,17 @@ function isPiAiToolset(value: unknown): value is PiAiToolset {
     return false;
   }
 
-  return Object.values(value).every((tool) =>
-    Boolean(
-      tool &&
-        typeof tool === "object" &&
-        "execute" in tool &&
-        typeof (tool as { execute?: unknown }).execute === "function",
-    ),
+  const tools = Object.values(value);
+  return (
+    tools.length > 0 &&
+    tools.every((tool) =>
+      Boolean(
+        tool &&
+          typeof tool === "object" &&
+          "execute" in tool &&
+          typeof (tool as { execute?: unknown }).execute === "function",
+      ),
+    )
   );
 }
 

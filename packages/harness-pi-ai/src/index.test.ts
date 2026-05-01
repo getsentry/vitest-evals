@@ -523,6 +523,63 @@ describeEval(
   },
 );
 
+test("prefers inferred non-empty runtime toolsets over empty placeholders", async () => {
+  const lookupInvoice = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = piAiHarness({
+    createAgent: () => {
+      const toolset = {
+        lookupInvoice: {
+          execute: lookupInvoice,
+        },
+      } satisfies PiAiToolset<string, DemoMetadata>;
+
+      return {
+        toolset: {},
+        state: {
+          toolset,
+        },
+        async run(_input: string, runtime: PiAiRuntime<typeof toolset>) {
+          await runtime.tools.lookupInvoice({
+            invoiceId: "inv_123",
+          });
+
+          return {
+            decision: {
+              status: "approved",
+            },
+          };
+        },
+      };
+    },
+  });
+
+  const result = await harness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(lookupInvoice).toHaveBeenCalledTimes(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+});
+
 test("supports normalize.output as a low-level escape hatch", async () => {
   const normalizedHarness = piAiHarness({
     createAgent: () => ({ id: "refund-agent" }),

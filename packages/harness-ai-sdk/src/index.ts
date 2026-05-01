@@ -899,9 +899,15 @@ function normalizeRuntimeToolCalls(
       continue;
     }
 
+    const content =
+      call.result ??
+      (call.error && call.error.message.length > 0
+        ? call.error.message
+        : undefined);
+
     messages.push({
       role: "tool",
-      content: call.result ?? call.error?.message ?? "",
+      ...(content !== undefined ? { content } : {}),
       metadata: normalizeMetadata({
         name: call.name,
         toolCallId: call.id,
