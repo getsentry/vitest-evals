@@ -986,6 +986,11 @@ test("omits undefined step-normalized arguments and results", async () => {
   });
   expect(toolCalls(run.session)[0]).not.toHaveProperty("arguments");
   expect(toolCalls(run.session)[0]).not.toHaveProperty("result");
+  const toolMessage = run.session.messages.find(
+    (message) => message.role === "tool",
+  );
+  expect(toolMessage).toBeDefined();
+  expect(toolMessage).not.toHaveProperty("content");
 });
 
 test("records and replays opt-in tools in auto mode", async () => {

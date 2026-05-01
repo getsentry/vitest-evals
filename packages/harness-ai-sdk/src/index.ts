@@ -987,9 +987,13 @@ function normalizeStep(
   }
 
   for (const toolResult of step.toolResults ?? []) {
+    const content =
+      toolResult.output === undefined
+        ? undefined
+        : normalizeContent(toolResult.output);
     messages.push({
       role: "tool",
-      content: normalizeContent(toolResult.output),
+      ...(content !== undefined ? { content } : {}),
       metadata: normalizeMetadata({
         name: toolResult.toolName,
         toolCallId: toolResult.toolCallId,
