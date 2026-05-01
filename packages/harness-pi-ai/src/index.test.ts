@@ -208,6 +208,98 @@ describeEval(
 );
 
 describeEval(
+  "pi-ai harness reapplies native tool instrumentation after reset",
+  {
+    harness: piAiHarness({
+      createAgent: () => {
+        const createNativeTool = () => ({
+          name: "lookupInvoice",
+          execute: async (
+            _toolCallId: string,
+            args: { invoiceId: string },
+          ) => ({
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  invoiceId: args.invoiceId,
+                  refundable: true,
+                }),
+              },
+            ],
+            details: {
+              invoiceId: args.invoiceId,
+              refundable: true,
+            },
+          }),
+        });
+
+        const agent = {
+          initialState: {
+            tools: [createNativeTool()],
+          },
+          state: {
+            tools: [createNativeTool()],
+          },
+          reset() {
+            this.state.tools = this.initialState.tools.map((tool) => ({
+              ...tool,
+            }));
+          },
+        };
+
+        return {
+          agent,
+          async run(
+            _input: string,
+            runtime: { events: DemoRuntime["events"] },
+          ) {
+            agent.reset();
+            const toolResult = await agent.state.tools[0].execute(
+              "lookupInvoice",
+              {
+                invoiceId: "inv_123",
+              },
+            );
+            runtime.events.tool("lookupInvoice", {
+              content: toolResult.content,
+              details: toolResult.details,
+            });
+            runtime.events.assistant("approved");
+
+            return {
+              decision: {
+                status: "approved",
+              },
+            };
+          },
+        };
+      },
+    }),
+  },
+  (it) => {
+    it("records native tool calls after reset restores tool state", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+    });
+  },
+);
+
+describeEval(
   "pi-ai harness infers runtime toolsets from existing agents",
   {
     harness: piAiHarness({

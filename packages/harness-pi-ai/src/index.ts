@@ -59,6 +59,8 @@ type PiAgentToolLike<
   execute: (toolCallId: string, args: Record<string, JsonValue>) => unknown;
 };
 
+const ORIGINAL_NATIVE_EXECUTE = Symbol("vitest-evals.originalNativeExecute");
+
 export type PiAiReplayMode = ReplayMode;
 
 export interface PiAiEventSink {
@@ -295,7 +297,7 @@ export interface PiAiHarnessNormalizeOptions<
 
 type InferredToolSurfaces<TInput, TMetadata extends HarnessMetadata> = {
   runtimeTools?: InferredPiAiToolset<TInput, TMetadata>;
-  nativeTools?: PiAgentToolLike<TInput, TMetadata>[];
+  nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>;
 };
 
 /** Adapts a Pi agent runtime into a normalized vitest-evals harness. */
@@ -369,7 +371,7 @@ export function piAiHarness<
         context,
         messages,
         inferredTools.runtimeTools,
-        inferredTools.nativeTools,
+        inferredTools.nativeToolsets,
       );
     },
   };
@@ -388,7 +390,7 @@ async function executePiHarnessRun<
   context: HarnessContext<TMetadata>,
   messages: NormalizedMessage[],
   runtimeTools: TTools | undefined,
-  nativeTools?: PiAgentToolLike<TInput, TMetadata>[],
+  nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>,
 ): Promise<HarnessRun> {
   const runtime = createRuntime({
     input,
@@ -399,7 +401,8 @@ async function executePiHarnessRun<
 
   try {
     const result = await withInstrumentedAgentTools(
-      nativeTools,
+      agent,
+      nativeToolsets,
       {
         input,
         context,
@@ -501,6 +504,9 @@ async function resolveAgent<
 function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
   agent: unknown,
 ): InferredToolSurfaces<TInput, TMetadata> {
+  const nativeToolsets: Array<PiAgentToolLike<TInput, TMetadata>[]> = [];
+  const seenToolsets = new Set<PiAgentToolLike<TInput, TMetadata>[]>();
+
   for (const candidate of getAgentToolCandidates(agent)) {
     const runtimeTools = getRuntimeToolset<TInput, TMetadata>(candidate);
     if (runtimeTools) {
@@ -510,20 +516,17 @@ function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
     }
 
     const nativeTools = getNativeToolArray(candidate);
-    if (nativeTools) {
-      return {
-        nativeTools,
-      };
+    if (nativeTools && !seenToolsets.has(nativeTools)) {
+      seenToolsets.add(nativeTools);
+      nativeToolsets.push(nativeTools);
     }
   }
 
-  return {};
+  return nativeToolsets.length > 0 ? { nativeToolsets } : {};
 }
 
 function getAgentToolCandidates(agent: unknown): object[] {
-  const roots = [asObject(agent)]
-    .concat(asObject(getObjectProperty(agent, "agent")))
-    .filter((value): value is object => value !== undefined);
+  const roots = getAgentRoots(agent);
   const candidates: object[] = [];
   const seen = new Set<object>();
 
@@ -534,6 +537,12 @@ function getAgentToolCandidates(agent: unknown): object[] {
   }
 
   return candidates;
+}
+
+function getAgentRoots(agent: unknown): object[] {
+  return [asObject(agent)]
+    .concat(asObject(getObjectProperty(agent, "agent")))
+    .filter((value): value is object => value !== undefined);
 }
 
 function addUniqueObject(
@@ -675,7 +684,8 @@ async function withInstrumentedAgentTools<
   TInput,
   TMetadata extends HarnessMetadata,
 >(
-  tools: PiAgentToolLike<TInput, TMetadata>[] | undefined,
+  agent: unknown,
+  toolsets: Array<PiAgentToolLike<TInput, TMetadata>[]> | undefined,
   args: {
     input: TInput;
     context: HarnessContext<TMetadata>;
@@ -684,15 +694,24 @@ async function withInstrumentedAgentTools<
   },
   callback: () => Promise<TResult>,
 ) {
-  if (!tools || tools.length === 0) {
+  if (!toolsets || toolsets.length === 0) {
     return callback();
   }
 
-  const originalExecutions = tools.map((tool) => tool.execute);
+  const originalExecutions = new Map<
+    PiAgentToolLike<TInput, TMetadata>,
+    PiAgentToolLike<TInput, TMetadata>["execute"]
+  >();
+  const originalResets = new Map<ResettableAgent, ResettableAgent["reset"]>();
 
-  for (const [index, tool] of tools.entries()) {
-    const originalExecute = originalExecutions[index];
-    tool.execute = async (toolCallId, rawArgs) => {
+  const patchTool = (tool: PiAgentToolLike<TInput, TMetadata>) => {
+    if (originalExecutions.has(tool)) {
+      return;
+    }
+
+    const originalExecute = getNativeToolExecuteOrigin(tool.execute);
+    originalExecutions.set(tool, originalExecute);
+    const instrumentedExecute = async (toolCallId, rawArgs) => {
       const startedAt = new Date();
       const toolContext = {
         input: args.input,
@@ -752,15 +771,94 @@ async function withInstrumentedAgentTools<
         throw error;
       }
     };
+    instrumentedExecute[ORIGINAL_NATIVE_EXECUTE] = originalExecute;
+    tool.execute = instrumentedExecute;
+  };
+
+  const patchToolsets = (
+    nextToolsets: Array<PiAgentToolLike<TInput, TMetadata>[]>,
+  ) => {
+    for (const toolset of nextToolsets) {
+      for (const tool of toolset) {
+        patchTool(tool);
+      }
+    }
+  };
+
+  patchToolsets(toolsets);
+
+  for (const target of getAgentResetTargets(agent)) {
+    const originalReset = target.reset;
+    originalResets.set(target, originalReset);
+    target.reset = function patchedReset(this: ResettableAgent, ...resetArgs) {
+      const resetResult = originalReset.apply(this, resetArgs);
+
+      if (isPromiseLike(resetResult)) {
+        return resetResult.finally(() => {
+          patchToolsets(
+            resolveInferredNativeToolsets<TInput, TMetadata>(agent),
+          );
+        });
+      }
+
+      patchToolsets(resolveInferredNativeToolsets<TInput, TMetadata>(agent));
+      return resetResult;
+    };
   }
 
   try {
     return await callback();
   } finally {
-    for (const [index, tool] of tools.entries()) {
-      tool.execute = originalExecutions[index];
+    for (const [target, originalReset] of originalResets) {
+      target.reset = originalReset;
+    }
+
+    for (const [tool, originalExecute] of originalExecutions) {
+      tool.execute = originalExecute;
     }
   }
+}
+
+type ResettableAgent = {
+  reset: (...args: unknown[]) => unknown;
+};
+
+function getAgentResetTargets(agent: unknown): ResettableAgent[] {
+  return getAgentRoots(agent).filter(isResettableAgent);
+}
+
+function isResettableAgent(value: object): value is ResettableAgent {
+  return "reset" in value && typeof value.reset === "function";
+}
+
+function resolveInferredNativeToolsets<
+  TInput,
+  TMetadata extends HarnessMetadata,
+>(agent: unknown): Array<PiAgentToolLike<TInput, TMetadata>[]> {
+  const toolsets: Array<PiAgentToolLike<TInput, TMetadata>[]> = [];
+  const seenToolsets = new Set<PiAgentToolLike<TInput, TMetadata>[]>();
+
+  for (const candidate of getAgentToolCandidates(agent)) {
+    const nativeTools = getNativeToolArray(candidate);
+    if (nativeTools && !seenToolsets.has(nativeTools)) {
+      seenToolsets.add(nativeTools);
+      toolsets.push(nativeTools);
+    }
+  }
+
+  return toolsets;
+}
+
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  return Boolean(
+    value && typeof (value as { then?: unknown }).then === "function",
+  );
+}
+
+function getNativeToolExecuteOrigin<TInput, TMetadata extends HarnessMetadata>(
+  execute: PiAgentToolLike<TInput, TMetadata>["execute"],
+) {
+  return execute[ORIGINAL_NATIVE_EXECUTE] ?? execute;
 }
 
 async function executeNativeToolWithReplay<
