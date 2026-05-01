@@ -349,6 +349,9 @@ export function piAiHarness<
           content: normalizeContent(input),
         },
       ];
+      const inferredTools = resolveInferredToolSurfaces<TInput, TMetadata>(
+        agent,
+      );
 
       if (hasExplicitToolset(options)) {
         return executePiHarnessRun(
@@ -358,12 +361,10 @@ export function piAiHarness<
           context,
           messages,
           options.tools,
+          inferredTools.nativeToolsets,
         );
       }
 
-      const inferredTools = resolveInferredToolSurfaces<TInput, TMetadata>(
-        agent,
-      );
       return executePiHarnessRun(
         options,
         agent,
@@ -504,15 +505,14 @@ async function resolveAgent<
 function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
   agent: unknown,
 ): InferredToolSurfaces<TInput, TMetadata> {
+  let runtimeTools: InferredPiAiToolset<TInput, TMetadata> | undefined;
   const nativeToolsets: Array<PiAgentToolLike<TInput, TMetadata>[]> = [];
   const seenToolsets = new Set<PiAgentToolLike<TInput, TMetadata>[]>();
 
   for (const candidate of getAgentToolCandidates(agent)) {
-    const runtimeTools = getRuntimeToolset<TInput, TMetadata>(candidate);
-    if (runtimeTools) {
-      return {
-        runtimeTools,
-      };
+    const nextRuntimeTools = getRuntimeToolset<TInput, TMetadata>(candidate);
+    if (!runtimeTools && nextRuntimeTools) {
+      runtimeTools = nextRuntimeTools;
     }
 
     const nativeTools = getNativeToolArray(candidate);
@@ -522,7 +522,10 @@ function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
     }
   }
 
-  return nativeToolsets.length > 0 ? { nativeToolsets } : {};
+  return {
+    ...(runtimeTools ? { runtimeTools } : {}),
+    ...(nativeToolsets.length > 0 ? { nativeToolsets } : {}),
+  };
 }
 
 function getAgentToolCandidates(agent: unknown): object[] {

@@ -208,6 +208,87 @@ describeEval(
 );
 
 describeEval(
+  "pi-ai harness wraps native tools even with an explicit tool override",
+  {
+    harness: piAiHarness({
+      createAgent: () => {
+        const nativeTools = [
+          {
+            name: "lookupInvoice",
+            execute: async (
+              _toolCallId: string,
+              args: { invoiceId: string },
+            ) => ({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    invoiceId: args.invoiceId,
+                    refundable: true,
+                  }),
+                },
+              ],
+              details: {
+                invoiceId: args.invoiceId,
+                refundable: true,
+              },
+            }),
+          },
+        ];
+
+        return {
+          agent: {
+            state: {
+              tools: nativeTools,
+            },
+          },
+          async run(
+            _input: string,
+            runtime: { events: DemoRuntime["events"] },
+          ) {
+            const toolResult = await nativeTools[0].execute("lookupInvoice", {
+              invoiceId: "inv_123",
+            });
+            runtime.events.tool("lookupInvoice", {
+              content: toolResult.content,
+              details: toolResult.details,
+            });
+            runtime.events.assistant("approved");
+
+            return {
+              decision: {
+                status: "approved",
+              },
+            };
+          },
+        };
+      },
+      tools,
+    }),
+  },
+  (it) => {
+    it("still traces native tool calls when runtime tools are configured", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+    });
+  },
+);
+
+describeEval(
   "pi-ai harness reapplies native tool instrumentation after reset",
   {
     harness: piAiHarness({
@@ -279,6 +360,96 @@ describeEval(
   },
   (it) => {
     it("records native tool calls after reset restores tool state", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+    });
+  },
+);
+
+describeEval(
+  "pi-ai harness infers runtime toolsets and native tools together",
+  {
+    harness: piAiHarness({
+      createAgent: () => {
+        const toolset = {
+          lookupInvoice: {
+            execute: async ({ invoiceId }: { invoiceId: string }) => ({
+              invoiceId,
+              refundable: true,
+            }),
+          },
+        } satisfies PiAiToolset<string, DemoMetadata>;
+
+        const nativeTools = [
+          {
+            name: "lookupInvoice",
+            execute: async (
+              _toolCallId: string,
+              args: { invoiceId: string },
+            ) => ({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    invoiceId: args.invoiceId,
+                    refundable: true,
+                  }),
+                },
+              ],
+              details: {
+                invoiceId: args.invoiceId,
+                refundable: true,
+              },
+            }),
+          },
+        ];
+
+        return {
+          toolset,
+          agent: {
+            state: {
+              tools: nativeTools,
+            },
+          },
+          async run(
+            _input: string,
+            runtime: { events: DemoRuntime["events"] },
+          ) {
+            const toolResult = await nativeTools[0].execute("lookupInvoice", {
+              invoiceId: "inv_123",
+            });
+            runtime.events.tool("lookupInvoice", {
+              content: toolResult.content,
+              details: toolResult.details,
+            });
+            runtime.events.assistant("approved");
+
+            return {
+              decision: {
+                status: "approved",
+              },
+            };
+          },
+        };
+      },
+    }),
+  },
+  (it) => {
+    it("does not skip native tracing when a runtime toolset is also present", async ({
       run,
     }) => {
       const result = await run("Refund invoice inv_123");
