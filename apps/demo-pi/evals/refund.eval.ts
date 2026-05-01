@@ -1,11 +1,7 @@
-import { expect } from "vitest";
-import {
-  createRefundAgent,
-  parseRefundDecision,
-  type RefundCase,
-} from "@demo/foobar";
+import { createRefundAgent, parseRefundDecision } from "@demo/foobar";
+import { assertRefundCase } from "@demo/foobar/testing";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, type HarnessEvalContext, toolCalls } from "vitest-evals";
+import { describeEval } from "vitest-evals";
 
 const harness = piAiHarness(createRefundAgent, {
   output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
@@ -33,18 +29,3 @@ describeEval(
     });
   },
 );
-
-async function assertRefundCase(
-  { run, session }: HarnessEvalContext<RefundCase>,
-  expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
-) {
-  expect(run.output).toMatchObject({
-    status: expected.expectedStatus,
-  });
-  expect(toolCalls(session).map((call) => call.name)).toEqual(
-    expected.expectedTools,
-  );
-  expect(run.usage.provider).toBe("anthropic");
-  expect(run.usage.model).toContain("claude");
-  expect(run.usage.totalTokens).toBeGreaterThan(0);
-}

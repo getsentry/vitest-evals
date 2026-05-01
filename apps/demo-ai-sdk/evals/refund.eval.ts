@@ -1,6 +1,5 @@
-import { expect } from "vitest";
-import type { RefundCase } from "@demo/foobar";
-import { describeEval, type HarnessEvalContext, toolCalls } from "vitest-evals";
+import { assertRefundCase } from "@demo/foobar/testing";
+import { describeEval } from "vitest-evals";
 import { refundHarness } from "./shared";
 
 describeEval(
@@ -25,18 +24,3 @@ describeEval(
     });
   },
 );
-
-async function assertRefundCase(
-  { run, session }: HarnessEvalContext<RefundCase>,
-  expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
-) {
-  expect(run.output).toMatchObject({
-    status: expected.expectedStatus,
-  });
-  expect(toolCalls(session).map((call) => call.name)).toEqual(
-    expected.expectedTools,
-  );
-  expect(run.usage.provider).toContain("anthropic");
-  expect(run.usage.model).toContain("claude");
-  expect(run.usage.totalTokens).toBeGreaterThan(0);
-}
