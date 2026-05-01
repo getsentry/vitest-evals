@@ -121,6 +121,12 @@ type FoobarRuntime = PiAiRuntime<
   string,
   RefundEvalMetadata
 >;
+type FoobarRuntimeTools = FoobarRuntime["tools"];
+
+const fallbackRuntimeTools: FoobarRuntimeTools = {
+  lookupInvoice,
+  createRefund,
+};
 
 const lookupInvoiceParameters = Type.Object({
   invoiceId: Type.String({
@@ -142,6 +148,7 @@ type CreateRefundArgs = Static<typeof createRefundParameters>;
 
 export class FoobarRefundAgent {
   private readonly agent: Agent;
+  readonly toolset = foobarTools;
 
   constructor(
     private readonly model: FoobarRefundModel = DEFAULT_REFUND_MODEL,
@@ -162,6 +169,7 @@ export class FoobarRefundAgent {
     this.agent.state.systemPrompt = REFUND_SYSTEM_PROMPT;
     this.agent.state.model = getModel("anthropic", this.model);
     this.agent.state.thinkingLevel = "off";
+    this.agent.state.tools = createAgentTools(runtime.tools);
 
     await this.agent.prompt(input);
 
@@ -209,7 +217,9 @@ export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
   return new FoobarRefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
 }
 
-function createAgentTools(): Array<AgentTool<any, any>> {
+function createAgentTools(
+  runtimeTools: FoobarRuntimeTools = fallbackRuntimeTools,
+): Array<AgentTool<any, any>> {
   const lookupInvoiceTool: AgentTool<
     typeof lookupInvoiceParameters,
     InvoiceRecord
@@ -219,7 +229,7 @@ function createAgentTools(): Array<AgentTool<any, any>> {
     description: LOOKUP_INVOICE_DESCRIPTION,
     parameters: lookupInvoiceParameters,
     execute: async (_toolCallId, args: LookupInvoiceArgs) => {
-      const invoice = await lookupInvoice({
+      const invoice = await runtimeTools.lookupInvoice({
         invoiceId: args.invoiceId,
       });
       return {
@@ -238,7 +248,7 @@ function createAgentTools(): Array<AgentTool<any, any>> {
     description: CREATE_REFUND_DESCRIPTION,
     parameters: createRefundParameters,
     execute: async (_toolCallId, args: CreateRefundArgs) => {
-      const refund = await createRefund({
+      const refund = await runtimeTools.createRefund({
         invoiceId: args.invoiceId,
         amount: args.amount,
       });
