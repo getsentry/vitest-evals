@@ -900,10 +900,11 @@ function normalizeRuntimeToolCalls(
     }
 
     const content =
-      call.result ??
-      (call.error && call.error.message.length > 0
-        ? call.error.message
-        : undefined);
+      call.result !== undefined
+        ? call.result
+        : call.error && call.error.message.length > 0
+          ? call.error.message
+          : undefined;
 
     messages.push({
       role: "tool",
