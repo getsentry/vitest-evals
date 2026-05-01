@@ -1010,6 +1010,9 @@ function normalizeToolCall(
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
 ): ToolCallRecord {
   const toolResult = toolResultsById.get(toolCall.toolCallId);
+  const normalizedArguments = normalizeArguments(toolCall.input);
+  const normalizedResult =
+    toolResult !== undefined ? toJsonValue(toolResult.output) : undefined;
   const errorValue =
     toolCall.invalid || toolCall.error !== undefined
       ? normalizeError(toolCall.error ?? toolCall.invalid)
@@ -1021,11 +1024,9 @@ function normalizeToolCall(
   return {
     id: toolCall.toolCallId,
     name: toolCall.toolName,
-    arguments: normalizeArguments(toolCall.input),
-    ...(toolResult
-      ? {
-          result: toJsonValue(toolResult.output),
-        }
+    ...(normalizedArguments ? { arguments: normalizedArguments } : {}),
+    ...(toolResult && normalizedResult !== undefined
+      ? { result: normalizedResult }
       : {}),
     ...(errorValue ? { error: errorValue } : {}),
     metadata: normalizeMetadata({

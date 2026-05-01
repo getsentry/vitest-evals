@@ -935,6 +935,59 @@ test("uses invalid tool call details as the normalized error", async () => {
   });
 });
 
+test("omits undefined step-normalized arguments and results", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: "inv_123",
+            },
+          ],
+          toolResults: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: "inv_123",
+              output: undefined,
+            },
+          ],
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(toolCalls(run.session)[0]).toMatchObject({
+    id: "call_lookup",
+    name: "lookupInvoice",
+  });
+  expect(toolCalls(run.session)[0]).not.toHaveProperty("arguments");
+  expect(toolCalls(run.session)[0]).not.toHaveProperty("result");
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
