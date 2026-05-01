@@ -9,75 +9,13 @@ scorer-first suite.
 ## Custom Judge Example
 
 ```ts
-import type { JudgeFn } from "vitest-evals";
+import { namedJudge } from "vitest-evals";
 
-type RefundJudgeOptions = {
-  expectedTools: string[];
-};
-
-export const RefundToolJudge: JudgeFn<RefundJudgeOptions> = async ({
-  expectedTools,
-  toolCalls,
-}) => {
-  const actualTools = toolCalls.map((call) => call.name);
-  const passed = expectedTools.every(
-    (name, index) => actualTools[index] === name,
-  );
-
-  return {
-    score: passed ? 1 : 0,
-    metadata: {
-      rationale: `Expected ${expectedTools.join(" -> ")}, got ${
-        actualTools.join(" -> ") || "none"
-      }`,
-    },
-  };
-};
-```
-
-Use it from an eval test:
-
-```ts
-const harness = piAiHarness(createRefundAgent);
-
-describeEval(
-  "refund agent",
-  {
-    harness,
-  },
-  (it) => {
-    it("approves refundable invoice", async ({ run }) => {
-      const result = await run("Refund invoice inv_123", {
-        metadata: {
-          expectedTools: ["lookupInvoice", "createRefund"],
-        },
-      });
-
-      await expect(result).toBeJudged(RefundToolJudge);
-    });
-  },
-);
-```
-
-If the harness provides a prompt runtime, custom judges can call
-`harness.prompt(...)` for LLM-as-judge rubrics without owning provider setup.
-The judge still consumes the normalized result shape, so it is not tied to a
-specific provider:
-
-```ts
-import { judge, type HarnessJudgeOptions } from "vitest-evals";
-
-const RefundQualityJudge = judge(
-  "RefundQualityJudge",
-  async ({ harness, assistantOutput, toolCalls }: HarnessJudgeOptions) => {
-    const verdict = JSON.parse(
-      await harness.prompt(
-        JSON.stringify({ assistantOutput, toolCalls }, null, 2),
-        {
-          system: "Grade whether the refund decision follows policy.",
-        },
-      ),
-    );
+export const FactualityJudge = namedJudge(
+  "FactualityJudge",
+  async ({ output }) => {
+    const answer = output;
+    const verdict = await judgeFactuality(answer);
 
     return {
       score: verdict.score,
@@ -89,17 +27,34 @@ const RefundQualityJudge = judge(
 );
 ```
 
+Use it as an automatic suite-level judge:
+
+```ts
+describeEval(
+  "refund agent",
+  {
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+    }),
+    judges: [FactualityJudge],
+  },
+  (it) => {
+    it("approves the refundable invoice", async ({ run }) => {
+      await run("Refund invoice inv_123");
+    });
+  },
+);
+```
+
 Or run it explicitly inside a test:
 
 ```ts
-it("approves refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_123");
-
-  await expect(result).toBeJudged(RefundToolJudge, {
-    expectedTools: ["lookupInvoice", "createRefund"],
-  });
-});
+await expect(result).toSatisfyJudge(FactualityJudge);
 ```
+
+For simple response-level checks, a judge can just score `output`. When a
+judge needs richer context, type it with `JudgeContext` and read `metadata`,
+`toolCalls`, or `session` from there.
 
 ## Built-In Root Judges
 

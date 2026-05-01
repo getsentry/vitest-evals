@@ -1,10 +1,15 @@
 import { expect } from "vitest";
-import { createRefundAgent, parseRefundDecision } from "@demo/foobar";
+import { createRefundAgent, type RefundCase } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
 
-const harness = piAiHarness(createRefundAgent, {
-  output: ({ outputText }) => parseRefundDecision(outputText ?? ""),
+type AssertionRefundCase = RefundCase;
+type ScoredRefundCase = RefundCase & {
+  expected: Record<string, unknown>;
+};
+
+const harness = piAiHarness({
+  createAgent: () => createRefundAgent(),
 });
 
 describeEval(
@@ -15,13 +20,19 @@ describeEval(
     judges: [StructuredOutputJudge()],
   },
   (it) => {
-    it("judge expects approval for a denied invoice", async ({ run }) => {
-      await run("Refund invoice inv_404", {
-        metadata: {
-          expected: {
-            status: "approved",
-          },
+    it.for<ScoredRefundCase>([
+      {
+        name: "judge expects approval for a denied invoice",
+        input: "Refund invoice inv_404",
+        expectedStatus: "denied",
+        expectedTools: ["lookupInvoice"],
+        expected: {
+          status: "approved",
         },
+      },
+    ])("$name", async ({ input, ...metadata }, { run }) => {
+      await run(input, {
+        metadata,
       });
     });
   },
@@ -34,8 +45,17 @@ describeEval(
     harness,
   },
   (it) => {
-    it("throws after the agent handles a missing invoice", async ({ run }) => {
-      const result = await run("Refund invoice inv_missing");
+    it.for<AssertionRefundCase>([
+      {
+        name: "throws after the agent handles a missing invoice",
+        input: "Refund invoice inv_missing",
+        expectedStatus: "denied",
+        expectedTools: ["lookupInvoice"],
+      },
+    ])("$name", async ({ input, ...metadata }, { run }) => {
+      const result = await run(input, {
+        metadata,
+      });
 
       expect(result.output).toMatchObject({
         status: "denied",

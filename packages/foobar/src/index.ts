@@ -1,5 +1,11 @@
 import { Agent, type AgentTool } from "@mariozechner/pi-agent-core";
-import { Type, getModel, type Static } from "@mariozechner/pi-ai";
+import {
+  Type,
+  getModel,
+  type AssistantMessage,
+  type Static,
+} from "@mariozechner/pi-ai";
+import type { PiAiRuntime, PiAiToolset } from "@vitest-evals/harness-pi-ai";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -21,12 +27,14 @@ export type RefundDecision =
       reason: string;
     };
 
-export type RefundCase = {
+export type RefundEvalMetadata = {
   name?: string;
-  input: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
-  expected?: Record<string, unknown>;
+};
+
+export type RefundCase = RefundEvalMetadata & {
+  input: string;
 };
 
 export type LookupInvoiceInput = {
@@ -96,6 +104,24 @@ export async function createRefund({
   };
 }
 
+export const foobarTools = {
+  lookupInvoice: {
+    description: LOOKUP_INVOICE_DESCRIPTION,
+    replay: true,
+    execute: lookupInvoice,
+  },
+  createRefund: {
+    description: CREATE_REFUND_DESCRIPTION,
+    execute: createRefund,
+  },
+} satisfies PiAiToolset<string, RefundEvalMetadata>;
+
+type FoobarRuntime = PiAiRuntime<
+  typeof foobarTools,
+  string,
+  RefundEvalMetadata
+>;
+
 const lookupInvoiceParameters = Type.Object({
   invoiceId: Type.String({
     description: "The invoice id to inspect, such as inv_123.",
@@ -113,60 +139,154 @@ const createRefundParameters = Type.Object({
 
 type LookupInvoiceArgs = Static<typeof lookupInvoiceParameters>;
 type CreateRefundArgs = Static<typeof createRefundParameters>;
-type ReplayableAgentTool = AgentTool<any, any> & {
-  replay?: boolean;
-};
 
-export const foobarTools: ReplayableAgentTool[] = [
-  {
+export class FoobarRefundAgent {
+  private readonly agent: Agent;
+
+  constructor(
+    private readonly model: FoobarRefundModel = DEFAULT_REFUND_MODEL,
+  ) {
+    this.agent = new Agent({
+      initialState: {
+        systemPrompt: REFUND_SYSTEM_PROMPT,
+        model: getModel("anthropic", model),
+        thinkingLevel: "off",
+        tools: createAgentTools(),
+      },
+      toolExecution: "sequential",
+    });
+  }
+
+  async run(input: string, runtime: FoobarRuntime) {
+    this.agent.reset();
+    this.agent.state.systemPrompt = REFUND_SYSTEM_PROMPT;
+    this.agent.state.model = getModel("anthropic", this.model);
+    this.agent.state.thinkingLevel = "off";
+
+    await this.agent.prompt(input);
+
+    const assistant = getFinalAssistantMessage(this.agent.state.messages);
+    if (!assistant) {
+      throw new Error(
+        "Refund agent did not produce a final assistant message.",
+      );
+    }
+    if (assistant.stopReason !== "stop") {
+      const providerMessage = assistant.errorMessage
+        ? ` ${assistant.errorMessage}`
+        : "";
+      throw new Error(
+        `Refund agent stopped unexpectedly with reason ${assistant.stopReason}.${providerMessage}`,
+      );
+    }
+
+    const outputText = getAssistantText(assistant);
+    if (!outputText) {
+      throw new Error("Refund agent returned an empty final response.");
+    }
+
+    runtime.events.assistant(outputText, {
+      provider: assistant.provider,
+      model: assistant.model,
+      totalTokens: assistant.usage.totalTokens,
+    });
+
+    return {
+      decision: parseRefundDecision(outputText),
+      metrics: {
+        provider: assistant.provider,
+        model: assistant.model,
+        inputTokens: assistant.usage.input,
+        outputTokens: assistant.usage.output,
+        totalTokens: assistant.usage.totalTokens,
+      },
+    };
+  }
+}
+
+/** Creates a fresh demo refund agent for one eval run. */
+export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
+  return new FoobarRefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
+}
+
+function createAgentTools(): Array<AgentTool<any, any>> {
+  const lookupInvoiceTool: AgentTool<
+    typeof lookupInvoiceParameters,
+    InvoiceRecord
+  > = {
     name: "lookupInvoice",
     label: "Lookup Invoice",
     description: LOOKUP_INVOICE_DESCRIPTION,
     parameters: lookupInvoiceParameters,
-    replay: true,
-    execute: async (_toolCallId: string, args: LookupInvoiceArgs) => {
+    execute: async (_toolCallId, args: LookupInvoiceArgs) => {
       const invoice = await lookupInvoice({
         invoiceId: args.invoiceId,
       });
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(invoice) }],
+        content: [{ type: "text", text: JSON.stringify(invoice) }],
         details: invoice,
       };
     },
-  },
-  {
+  };
+
+  const createRefundTool: AgentTool<
+    typeof createRefundParameters,
+    { refundId: string; amount: number; status: string }
+  > = {
     name: "createRefund",
     label: "Create Refund",
     description: CREATE_REFUND_DESCRIPTION,
     parameters: createRefundParameters,
-    execute: async (_toolCallId: string, args: CreateRefundArgs) => {
+    execute: async (_toolCallId, args: CreateRefundArgs) => {
       const refund = await createRefund({
         invoiceId: args.invoiceId,
         amount: args.amount,
       });
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(refund) }],
+        content: [{ type: "text", text: JSON.stringify(refund) }],
         details: refund,
       };
     },
-  },
-];
+  };
 
-export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
-  return new Agent({
-    initialState: {
-      systemPrompt: REFUND_SYSTEM_PROMPT,
-      model: getModel("anthropic", options?.model ?? DEFAULT_REFUND_MODEL),
-      thinkingLevel: "off",
-      tools: foobarTools,
-    },
-    toolExecution: "sequential",
-  });
+  return [lookupInvoiceTool, createRefundTool];
 }
 
+function getFinalAssistantMessage(
+  messages: unknown[],
+): AssistantMessage | undefined {
+  return [...messages]
+    .reverse()
+    .find((message): message is AssistantMessage =>
+      Boolean(
+        message &&
+          typeof message === "object" &&
+          "role" in message &&
+          (message as { role?: unknown }).role === "assistant" &&
+          "content" in message,
+      ),
+    );
+}
+
+function getAssistantText(message: AssistantMessage) {
+  return message.content
+    .filter(
+      (
+        block,
+      ): block is Extract<
+        AssistantMessage["content"][number],
+        { type: "text" }
+      > => block.type === "text",
+    )
+    .map((block) => block.text)
+    .join("")
+    .trim();
+}
+
+/** Parses the demo agent's final JSON payload into a typed refund decision. */
 export function parseRefundDecision(text: string): RefundDecision {
   const cleaned = stripMarkdownFence(text);
-  const jsonText = extractJsonObjectText(cleaned);
+  const jsonText = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
   const parsed = JSON.parse(jsonText) as Record<string, unknown>;
 
   if (
@@ -198,46 +318,7 @@ export function parseRefundDecision(text: string): RefundDecision {
   throw new Error(`Refund agent returned an invalid decision payload: ${text}`);
 }
 
-function extractJsonObjectText(text: string) {
-  const start = text.indexOf("{");
-  if (start === -1) {
-    return text;
-  }
-
-  const end = text.lastIndexOf("}");
-  if (end <= start) {
-    return text;
-  }
-
-  return text.slice(start, end + 1);
-}
-
 function stripMarkdownFence(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith("```")) {
-    return trimmed;
-  }
-
-  const afterFence = trimmed.slice(3);
-  let contentStart = 3;
-  if (afterFence.toLowerCase().startsWith("json")) {
-    contentStart += "json".length;
-  } else if (!isWhitespace(afterFence[0])) {
-    return trimmed;
-  }
-
-  const closingFenceStart = trimmed.lastIndexOf("```");
-  if (closingFenceStart <= contentStart) {
-    return trimmed;
-  }
-
-  if (trimmed.slice(closingFenceStart + 3).trim().length > 0) {
-    return trimmed;
-  }
-
-  return trimmed.slice(contentStart, closingFenceStart).trim();
-}
-
-function isWhitespace(character: string | undefined) {
-  return character === undefined || character.trim() === "";
+  const match = text.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim() ?? text.trim();
 }

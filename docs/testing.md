@@ -35,9 +35,10 @@ apps/demo-pi/evals/
 
 Cover:
 
+- explicit `run(...)` behavior
 - normalized run/session behavior
 - single-run semantics for automatic judges plus explicit assertions
-- matcher behavior for `toBeJudged(...)` and `toSatisfyJudge(...)`
+- matcher behavior for `toSatisfyJudge(...)`
 - any task metadata the reporter depends on
 
 ### Reporter Changes
@@ -73,21 +74,20 @@ works.
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness(createRefundAgent),
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+    }),
+    judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", async ({ run }) => {
+    it("approves a refund", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
-      const calls = toolCalls(result.session);
 
-      expect(calls.map((call) => call.name)).toEqual([
+      expect(result.output).toMatchObject({ status: "approved" });
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",
       ]);
-      expect(calls[1]?.arguments).toMatchObject({
-        invoiceId: "inv_123",
-        amount: 4200,
-      });
     });
   },
 );

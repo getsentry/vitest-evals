@@ -1,14 +1,16 @@
 # vitest-evals
 
-Monorepo for the harness-first `vitest-evals` shape:
+Monorepo for the explicit-run `vitest-evals` shape:
 
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
   types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
-- `packages/foobar`: example package with a small `pi-ai`-style refund agent
-- `apps/demo-pi`: end-to-end `pi-ai` demo evals wired through the workspace packages
-- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace packages
+- `packages/foobar`: example package with a small refund agent
+- `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace
+  packages
+- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace
+  packages
 
 ## Workspace Layout
 
@@ -51,78 +53,79 @@ tables.
 
 ## Example
 
-The `apps/demo-pi` app shows the intended harness-first `pi-ai` flow:
+The `apps/demo-pi` app shows the intended explicit-run flow:
 
 ```ts
-import { expect } from "vitest";
 import { createRefundAgent } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  ToolCallJudge,
+  namedJudge,
+  toolCalls,
+} from "vitest-evals";
 
-const harness = piAiHarness(createRefundAgent);
+const FactualityJudge = namedJudge(
+  "FactualityJudge",
+  async ({ output }) => {
+    const answer = output;
+    const verdict = await judgeFactuality(answer);
+
+    return {
+      score: verdict.score,
+      metadata: {
+        rationale: verdict.rationale,
+      },
+    };
+  },
+);
 
 describeEval(
   "demo pi refund agent",
   {
-    harness,
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+    }),
+    judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", async ({ agent, run }) => {
-      const result = await run("Refund invoice inv_123");
-      const calls = toolCalls(result.session);
-
-      expect(agent).toBeDefined();
-      expect(calls.map((call) => call.name)).toEqual([
-        "lookupInvoice",
-        "createRefund",
-      ]);
-      expect(calls[1]?.arguments).toMatchObject({
-        invoiceId: "inv_123",
-        amount: 4200,
+    it.for([
+      {
+        name: "approves refundable invoice",
+        input: "Refund invoice inv_123",
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
+      },
+    ])("$name", async ({ input, ...metadata }, { run }) => {
+      const result = await run(input, {
+        metadata,
       });
-      expect(result.usage.totalTokens).toBeGreaterThan(0);
+
+      expect(result.output).toMatchObject({
+        status: metadata.expectedStatus,
+      });
+      await expect(result).toSatisfyJudge(FactualityJudge);
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+        metadata.expectedTools,
+      );
     });
   },
 );
 ```
 
-See [apps/demo-pi/README.md](apps/demo-pi/README.md) for the demo app entrypoint
-and [packages/foobar/src/index.ts](packages/foobar/src/index.ts) for the
-example agent/runtime integration point.
+Harness-backed suites stay close to plain Vitest:
 
-Harness-backed suites configure the instrumented runtime once, then register
-normal-looking eval tests inside the callback. Each test gets the resolved
-agent and an instrumented `run(input)` fixture. Calling `run(...)` executes the
-agent once and returns the app-facing `output`, normalized `session`, usage,
-timings, artifacts, errors, and reporter metadata.
+- `describeEval(...)` binds a suite-level harness
+- tests call `run(...)` explicitly
+- ordinary `expect(...)` assertions stay first-class
+- judges layer in through `expect(...).toSatisfyJudge(...)`
+- per-run judge parameters should usually live under `metadata`
+- reporter output, replay, usage, and tool traces come from the normalized run
 
-Judges are optional. Use `await expect(result).toBeJudged(judge)` when you
-want a reusable score, a semantic or LLM-backed rubric, or score details in the
-report. They consume the recorded result from `run(...)`; they do not execute
-the agent again. A harness can provide `harness.prompt(...)` so LLM-as-judge
-provider setup lives with the instrumented runtime while judge definitions stay
-provider-neutral.
-
-When a future extension needs scenario data, keep it under `metadata` so
-top-level run options stay reserved for framework behavior:
-
-```ts
-await run("Refund invoice inv_404", {
-  metadata: {
-    scenario: "non-refundable invoice",
-  },
-});
-```
-
-The lower-level matcher `await expect(value).toSatisfyJudge(judge, context)` is
-also available when you need to judge a raw value or a custom synthetic run.
-
-If you need a custom judge name in reporter output, wrap it with
-`judge("MyJudge", fn)`.
-
-Older scorer-first APIs now live under `vitest-evals/legacy`. The root package
-is intentionally harness-first; judges are optional helpers on top of recorded
-runs.
+Built-in judges like `StructuredOutputJudge()` are still available for
+deterministic contract checks, but the more realistic explicit-judge path is a
+custom factuality or rubric judge over `output`, with `JudgeContext` available
+when the judge needs richer run/session data.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure it globally in Vitest and then mark individual tools with
@@ -154,7 +157,5 @@ errors on missing recordings. Recordings are stored under
 `.vitest-evals/recordings/<tool-name>/`.
 
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`
-script. Use `pnpm evals:fail` to run the intentional failure examples. The
-`apps/demo-pi` example is a live `pi-ai` demo backed by
-`@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`, so it expects
-`ANTHROPIC_API_KEY` in `.env` or `.env.local`.
+script. The demo apps expect provider keys in `.env` or `.env.local`. The
+intentional failing examples remain under the `evals:fail` scripts.

@@ -19,8 +19,8 @@ In the current package, the center of gravity is:
 In the proposed model, the center of gravity becomes:
 
 - exactly one `harness` per suite
-- named eval tests inside the suite callback
-- `harness.run(input, context)`
+- fixture-backed Vitest tests
+- explicit `run(input, { metadata? })`
 - normalized run/session artifacts
 - optional judges and explicit Vitest assertions
 
@@ -28,17 +28,12 @@ That means the harness replaces `task` as the primary extension point.
 The user should not have to manually transform provider or framework output
 inside every test file.
 
-The user still gets a task-shaped entrypoint when they need one. First-party
-harnesses expose `task: ({ input }) => ...` as the place to call an existing
-custom app entrypoint. Use `agent` for the zero-glue native agent path or
-`task` for a custom entrypoint; examples should not require both at once.
-
 ## What The User Wires Up
 
 For an existing agent, the user should only need to supply:
 
 - the existing app or agent instance, or a factory that creates it per test
-- the normal entrypoint for running one eval task
+- the normal entrypoint for running one case
 - any required test fixtures or setup
 - an optional output selector when the app returns a domain object instead of a
   plain assistant string
@@ -108,20 +103,22 @@ surface.
 ## Proposed Execution Flow
 
 1. `describeEval` selects one harness for the suite.
-2. For each eval test, core creates a `HarnessContext` containing replay policy,
-   artifact hooks, and reporter plumbing.
-3. The harness creates or receives the existing agent/application instance.
-4. The harness runs the application with the test input and any injected test
+2. Core overrides that harness onto a fixture-backed Vitest `it`.
+3. A test calls `run(input, { metadata? })`.
+4. Core creates a `HarnessContext` containing reporter plumbing, artifacts, and
+   the test signal.
+5. The harness creates or receives the existing agent/application instance.
+6. The harness runs the application with the provided input and injected test
    dependencies.
-5. The harness captures runtime events and converts them into a normalized
+7. The harness captures runtime events and converts them into a normalized
    session.
-6. The harness returns `HarnessRun`, including `run.output`, diagnostics, and
+8. The harness returns `HarnessRun`, including `run.output`, diagnostics, and
    any artifacts.
-7. Core runs suite-level judges and the explicit eval test callback against that
-   normalized result.
+9. Core stores that run on task metadata, runs any suite-level judges, and lets
+   explicit assertions consume the same recorded result.
 
-The harness runs the system once. Judges and assertions consume the recorded
-result rather than re-executing the agent.
+The harness runs the system once per explicit `run(...)` call. Judges and
+assertions consume the recorded result rather than re-executing the agent.
 
 ## Illustrative `pi-ai` Wiring
 
@@ -136,29 +133,29 @@ import { createRefundAgent } from "../src/refundAgent";
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness(createRefundAgent),
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+      run: ({ agent, input, runtime }) => agent.run(input, runtime),
+    }),
   },
   (it) => {
-    it("approves refundable invoice", async ({ agent, run }) => {
+    it("approves a refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
-      const calls = toolCalls(result.session);
 
-      expect(agent).toBeDefined();
-      expect(calls.map((call) => call.name)).toEqual([
-        "lookupInvoice",
-        "createRefund",
-      ]);
+      expect(result.output).toMatchObject({ status: "approved" });
+      expect(toolCalls(result.session)).toContainEqual(
+        expect.objectContaining({ name: "lookupInvoice" }),
+      );
     });
   },
 );
 ```
 
-The important behavior is:
+The important detail is not the exact option names above. Those are still
+illustrative. The important behavior is:
 
-- the user passes their existing `pi-agent-core` agent through the harness setup
-- each eval test calls the instrumented `run(input)` fixture where execution
-  should happen
-- the harness wraps the agent's native `AgentTool[]` for trace and replay
+- the user passes their existing agent through the harness
+- the harness supplies the instrumented runtime pieces as `runtime`
 - the agent executes normally
 - the harness returns both the domain result and the normalized trace
 
@@ -169,24 +166,36 @@ The built-in harness should support two authoring levels.
 The default path should be close to zero glue for standard apps:
 
 ```ts
-harness: piAiHarness(createRefundAgent);
+describeEval("refund agent", {
+  harness: piAiHarness({
+    createAgent: () => createRefundAgent(),
+  }),
+}, (it) => {
+  it("approves a refundable invoice", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+  });
+});
 ```
 
-That path should work for a normal `Agent` that already owns normal
-`AgentTool[]` in `state.tools`.
+That path should work when the runtime shape is conventional and the harness can
+infer the execution contract.
 
 There should also be an explicit escape hatch for applications with a custom
 entrypoint or custom result shape:
 
 ```ts
-harness: piAiHarness({
-  task: async ({ input }) => {
-    const agent = createRefundAgent();
-    await agent.prompt(input);
-    return {
-      outputText: getFinalText(agent.state.messages),
-    };
-  },
+describeEval("refund agent", {
+  harness: piAiHarness({
+    createAgent: () => createRefundAgent(),
+    run: ({ agent, input, runtime }) => agent.execute(input, runtime),
+    normalize: {
+      output: ({ result }) => result.decision,
+    },
+  }),
+}, (it) => {
+  it("approves a refundable invoice", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+  });
 });
 ```
 
@@ -200,8 +209,9 @@ Issue `#39` should say these points plainly:
 - A harness replaces `task` as the main runtime contract.
 - A built-in harness is responsible for instrumentation and normalization, not
   just judge input preparation.
-- A suite executes the harness once per eval test and reuses that run for
-  judges and explicit assertions.
+- A suite binds one harness and lets tests call `run(...)` explicitly.
+- Each `run(...)` executes the harness once and reuses that result for judges
+  and explicit assertions.
 - `run.output` is the app-facing assertion surface, while the normalized session
   trace is the framework-facing reporting surface.
 - Existing agents still need a supported injection or observation seam for

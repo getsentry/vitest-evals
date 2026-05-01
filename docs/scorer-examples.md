@@ -3,28 +3,25 @@
 This file keeps concrete examples of reusable evaluation helpers.
 For new suites, prefer judges over root-level scorers.
 
-## Domain Judge
+## Factuality Judge
 
 ```ts
-import type { JudgeFn } from "vitest-evals";
+import { namedJudge } from "vitest-evals";
 
-export const RefundApprovalJudge: JudgeFn<{
-  expectedTools: string[];
-}> = async ({ expectedTools, toolCalls }) => {
-  const actualTools = toolCalls.map((call) => call.name);
-  const passed = expectedTools.every(
-    (name, index) => actualTools[index] === name,
-  );
+export const FactualityJudge = namedJudge(
+  "FactualityJudge",
+  async ({ output }) => {
+    const answer = output;
+    const verdict = await judgeFactuality(answer);
 
-  return {
-    score: passed ? 1 : 0,
-    metadata: {
-      rationale: `Expected ${expectedTools.join(" -> ")}, got ${
-        actualTools.join(" -> ") || "none"
-      }`,
-    },
-  };
-};
+    return {
+      score: verdict.score,
+      metadata: {
+        rationale: verdict.rationale,
+      },
+    };
+  },
+);
 ```
 
 ## Tool Behavior Judge
@@ -51,35 +48,36 @@ export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
 ## Explicit Judge Assertion
 
 ```ts
-it("approves refundable invoice", async ({ run }) => {
-  const result = await run("Refund invoice inv_123");
-
-  await expect(result).toBeJudged(RefundApprovalJudge, {
-    expectedTools: ["lookupInvoice", "createRefund"],
-  });
-});
+await expect(result).toSatisfyJudge(FactualityJudge);
 ```
 
 ## Built-In Judge Helpers
 
 ```ts
-import { ToolCallJudge } from "vitest-evals";
+import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
 
 describeEval(
   "refund agent",
   {
-    harness: piAiHarness(createRefundAgent),
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+    }),
     judges: [ToolCallJudge()],
   },
   (it) => {
-    it("approves refundable invoice", async ({ run }) => {
+    it("approves a refund", async ({ run }) => {
       const result = await run("Refund invoice inv_123", {
         metadata: {
+          expected: { status: "approved" },
           expectedTools: [
             { name: "lookupInvoice" },
             { name: "createRefund" },
           ],
         },
+      });
+
+      await expect(result).toSatisfyJudge(StructuredOutputJudge(), {
+        expected: { status: "approved" },
       });
     });
   },

@@ -1,28 +1,13 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { Agent } from "@mariozechner/pi-agent-core";
-import {
-  Type,
-  fauxAssistantMessage,
-  fauxToolCall,
-  registerFauxProvider,
-} from "@mariozechner/pi-ai";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import {
-  piAiHarness,
-  type PiAiAgentTool,
-  type PiAiRuntime,
-  type PiAiToolset,
-} from "./index";
+import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
-type DemoCase = {
-  input: string;
-};
+type DemoMetadata = Record<string, never>;
 
 const createAgent = vi.fn(() => ({
   id: "refund-agent",
-  run: runAgent,
 }));
 
 const tools = {
@@ -32,9 +17,9 @@ const tools = {
       refundable: true,
     }),
   },
-} satisfies PiAiToolset<string, DemoCase>;
+} satisfies PiAiToolset<string, DemoMetadata>;
 
-type DemoRuntime = PiAiRuntime<typeof tools, string, DemoCase>;
+type DemoRuntime = PiAiRuntime<typeof tools, string, DemoMetadata>;
 
 let replayDir: string | undefined;
 
@@ -46,181 +31,202 @@ afterEach(() => {
   }
 });
 
-const runAgent = vi.fn(async (input: string, runtime: DemoRuntime) => {
-  expect(input).toBe("Refund invoice inv_123");
-  await runtime.tools.lookupInvoice({
-    invoiceId: "inv_123",
-  });
-  runtime.events.assistant("approved");
-
-  return {
-    decision: {
-      status: "approved",
-    },
-    metrics: {
-      provider: "pi-ai",
-      model: "pi-refund",
-      totalTokens: 12,
-    },
-  };
-});
-
-describeEval("pi-ai harness adapter", {
-  data: async () => [
-    {
-      input: "Refund invoice inv_123",
-    },
-  ],
-  harness: piAiHarness({
-    agent: createAgent,
-    tools,
-  }),
-  test: async ({ run, session }) => {
-    expect(createAgent).toHaveBeenCalledTimes(1);
-    expect(runAgent).toHaveBeenCalledTimes(1);
-    expect(run.output).toEqual({
-      status: "approved",
-    });
-    expect(run.artifacts).toBeUndefined();
-    expect(toolCalls(session)).toMatchObject([
-      {
-        name: "lookupInvoice",
-        arguments: {
-          invoiceId: "inv_123",
-        },
-        result: {
-          invoiceId: "inv_123",
-          refundable: true,
-        },
-      },
-    ]);
-    expect(session.outputText).toBeUndefined();
-    expect(run.usage.totalTokens).toBe(12);
-  },
-});
-
-test("runs native pi-agent-core agents with instrumented AgentTool instances", async () => {
-  const provider = registerFauxProvider();
-  const executeLookupInvoice = vi.fn(
-    async (_toolCallId: string, args: unknown) => {
-      expect(args).toEqual({
-        invoiceId: "inv_123",
-      });
-
-      const details = {
-        invoiceId: "inv_123",
-        refundable: true,
-      };
-
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(details) }],
-        details,
-      };
-    },
-  );
-  const nativeTools = [
-    {
-      name: "lookupInvoice",
-      label: "Lookup Invoice",
-      description: "Look up an invoice.",
-      parameters: Type.Object({
-        invoiceId: Type.String(),
-      }),
-      execute: executeLookupInvoice,
-    },
-  ] satisfies PiAiAgentTool[];
-
-  provider.setResponses([
-    (context) => {
-      expect(context.tools?.map((tool) => tool.name)).toEqual([
-        "lookupInvoice",
-      ]);
-      return fauxAssistantMessage(
-        fauxToolCall("lookupInvoice", { invoiceId: "inv_123" }, { id: "tc_1" }),
-        {
-          stopReason: "toolUse",
-        },
-      );
-    },
-    (context) => {
-      expect(context.messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            role: "toolResult",
-            toolName: "lookupInvoice",
-          }),
-        ]),
-      );
-      return fauxAssistantMessage(
-        '{"status":"approved","invoiceId":"inv_123"}',
-      );
-    },
-  ]);
-
-  try {
-    const harness = piAiHarness(
-      () =>
-        new Agent({
-          initialState: {
-            systemPrompt: "You approve refunds.",
-            model: provider.getModel(),
-            tools: nativeTools,
-          },
-        }),
-      {
-        output: ({ outputText }) => JSON.parse(outputText ?? "{}"),
-      },
-    );
-
-    const run = await harness.run("Refund invoice inv_123", {
-      caseData: {
-        input: "Refund invoice inv_123",
-      },
-      task: {
-        meta: {},
-      },
-      artifacts: {},
-      setArtifact: vi.fn(),
-    });
-
-    expect(run.output).toEqual({
-      status: "approved",
+const runAgent = vi.fn(
+  async ({
+    agent,
+    input,
+    context,
+    runtime,
+  }: {
+    agent: { id: string };
+    input: string;
+    context: { setArtifact: (name: string, value: string) => void };
+    runtime: DemoRuntime;
+  }) => {
+    context.setArtifact("agentId", agent.id);
+    await runtime.tools.lookupInvoice({
       invoiceId: "inv_123",
     });
-    expect(run.usage.provider).toBe("faux");
-    expect(run.usage.toolCalls).toBe(1);
-    expect(toolCalls(run.session)).toMatchObject([
-      {
-        id: "tc_1",
-        name: "lookupInvoice",
-        arguments: {
-          invoiceId: "inv_123",
-        },
-        result: {
-          invoiceId: "inv_123",
-          refundable: true,
-        },
+    runtime.events.assistant("approved");
+
+    return {
+      decision: {
+        status: "approved",
       },
-    ]);
-    expect(run.session.outputText).toBe(
-      '{"status":"approved","invoiceId":"inv_123"}',
-    );
-    expect(provider.state.callCount).toBe(2);
-  } finally {
-    provider.unregister();
-  }
+      metrics: {
+        provider: "pi-ai",
+        model: "pi-refund",
+        totalTokens: 12,
+      },
+    };
+  },
+);
+
+describeEval(
+  "pi-ai harness adapter",
+  {
+    harness: piAiHarness({
+      createAgent,
+      run: runAgent,
+      tools,
+    }),
+  },
+  (it) => {
+    it("runs the harness explicitly", async ({ run }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(createAgent).toHaveBeenCalledTimes(1);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+      expect(result.output).toEqual({
+        status: "approved",
+      });
+      expect(result.artifacts).toEqual({
+        agentId: "refund-agent",
+      });
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+      expect(result.session.outputText).toBeUndefined();
+      expect(result.usage.totalTokens).toBe(12);
+    });
+  },
+);
+
+describeEval(
+  "pi-ai harness wraps native agent tools",
+  {
+    harness: piAiHarness({
+      createAgent: () => {
+        const nativeTools = [
+          {
+            name: "lookupInvoice",
+            execute: async (
+              _toolCallId: string,
+              args: { invoiceId: string },
+            ) => ({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    invoiceId: args.invoiceId,
+                    refundable: true,
+                  }),
+                },
+              ],
+              details: {
+                invoiceId: args.invoiceId,
+                refundable: true,
+              },
+            }),
+          },
+        ];
+
+        return {
+          agent: {
+            state: {
+              tools: nativeTools,
+            },
+          },
+          async run(
+            _input: string,
+            runtime: { events: DemoRuntime["events"] },
+          ) {
+            await nativeTools[0].execute("lookupInvoice", {
+              invoiceId: "inv_123",
+            });
+            runtime.events.assistant("approved");
+
+            return {
+              decision: {
+                status: "approved",
+              },
+              metrics: {
+                provider: "pi-ai",
+                model: "pi-refund",
+                totalTokens: 12,
+              },
+            };
+          },
+        };
+      },
+    }),
+  },
+  (it) => {
+    it("records tool calls without a separate tools option", async ({
+      run,
+    }) => {
+      const result = await run("Refund invoice inv_123");
+
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+          result: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+      ]);
+    });
+  },
+);
+
+test("supports normalize.output as a low-level escape hatch", async () => {
+  const normalizedHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
+    run: async () => ({
+      customDecision: {
+        status: "approved",
+      },
+    }),
+    normalize: {
+      output: ({ result }) =>
+        (result as { customDecision: { status: string } }).customDecision,
+    },
+  });
+
+  const result = await normalizedHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(result.session.messages).toContainEqual({
+    role: "assistant",
+    content: {
+      status: "approved",
+    },
+  });
 });
 
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute: async ({ invoiceId }: { invoiceId: string }) => {
           throw new Error(`Invoice ${invoiceId} not found`);
         },
       },
-    } satisfies PiAiToolset<string, DemoCase>,
-    task: async ({ runtime }) => {
+    } satisfies PiAiToolset<string, DemoMetadata>,
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_missing",
       });
@@ -235,9 +241,7 @@ test("attaches a partial run when the harness errors", async () => {
 
   const error = await erroringHarness
     .run("Refund invoice inv_missing", {
-      caseData: {
-        input: "Refund invoice inv_missing",
-      },
+      metadata: {},
       task: {
         meta: {},
       },
@@ -272,229 +276,6 @@ test("attaches a partial run when the harness errors", async () => {
   ]);
 });
 
-test("task can own agent creation while receiving wrapped runtime tools", async () => {
-  const taskHarness = piAiHarness({
-    tools,
-    task: async ({ input, runtime }) => {
-      expect(input).toBe("Refund invoice inv_123");
-      await runtime.tools.lookupInvoice({
-        invoiceId: "inv_123",
-      });
-
-      return {
-        decision: {
-          status: "approved",
-        },
-      };
-    },
-  });
-
-  const run = await taskHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
-
-  expect(run.output).toEqual({
-    status: "approved",
-  });
-  expect(toolCalls(run.session)).toMatchObject([
-    {
-      name: "lookupInvoice",
-      arguments: {
-        invoiceId: "inv_123",
-      },
-    },
-  ]);
-});
-
-test("promptModel exposes a harness prompt helper", async () => {
-  const provider = registerFauxProvider();
-  provider.setResponses([
-    (context) => {
-      expect(context.systemPrompt).toBe("Grade refund behavior.");
-      expect(context.messages).toMatchObject([
-        {
-          role: "user",
-          content: "Judge this run",
-        },
-      ]);
-      return fauxAssistantMessage(
-        '{"score":1,"rationale":"The refund behavior is correct."}',
-      );
-    },
-  ]);
-
-  try {
-    const harness = piAiHarness(createAgent, {
-      promptModel: provider.getModel(),
-    });
-
-    await expect(
-      harness.prompt?.("Judge this run", {
-        system: "Grade refund behavior.",
-      }),
-    ).resolves.toBe(
-      '{"score":1,"rationale":"The refund behavior is correct."}',
-    );
-    expect(provider.state.callCount).toBe(1);
-  } finally {
-    provider.unregister();
-  }
-});
-
-test("direct run and setup use the same execution lifecycle", async () => {
-  const run = vi.fn(async () => ({
-    decision: {
-      status: "approved",
-    },
-  }));
-  const createAgent = vi.fn(() => ({
-    run,
-  }));
-  const harness = piAiHarness({
-    agent: createAgent,
-  });
-  const context = {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  };
-
-  await harness.run("Refund invoice inv_123", context);
-  const execution = await harness.setup?.();
-  await execution?.run("Refund invoice inv_123", context);
-
-  expect(createAgent).toHaveBeenCalledTimes(2);
-  expect(run).toHaveBeenCalledTimes(2);
-});
-
-test("normalizes domain results that resemble harness runs", async () => {
-  const output = vi.fn(
-    ({ result }: { result: { decision: { status: string } } }) =>
-      result.decision,
-  );
-  const session = vi.fn(
-    ({
-      input,
-      result,
-    }: {
-      input: string;
-      result: { decision: { status: string } };
-    }) => ({
-      messages: [
-        {
-          role: "user" as const,
-          content: input,
-        },
-        {
-          role: "assistant" as const,
-          content: result.decision,
-        },
-      ],
-    }),
-  );
-  const harness = piAiHarness({
-    task: async () => ({
-      session: {
-        messages: [],
-      },
-      usage: {
-        totalTokens: 7,
-      },
-      errors: [],
-      decision: {
-        status: "approved",
-      },
-    }),
-    output,
-    session,
-  });
-
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
-
-  expect(run.output).toEqual({
-    status: "approved",
-  });
-  expect(output).toHaveBeenCalledTimes(1);
-  expect(session).toHaveBeenCalledTimes(1);
-  expect(run.session.messages).toEqual([
-    {
-      role: "user",
-      content: "Refund invoice inv_123",
-    },
-    {
-      role: "assistant",
-      content: {
-        status: "approved",
-      },
-    },
-  ]);
-  expect(run.usage.totalTokens).toBe(7);
-});
-
-test("normalizes undefined object properties without dropping array positions", async () => {
-  const harness = piAiHarness({
-    task: async () => ({
-      decision: {
-        status: "approved",
-        reason: undefined,
-        nested: {
-          skipped: undefined,
-        },
-        values: [1, undefined, 3],
-        empty: {},
-      },
-    }),
-  });
-
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
-
-  expect(run.output).toEqual({
-    status: "approved",
-    nested: {},
-    values: [1, null, 3],
-    empty: {},
-  });
-  expect(run.session.messages[run.session.messages.length - 1]).toEqual({
-    role: "assistant",
-    content: {
-      status: "approved",
-      nested: {},
-      values: [1, null, 3],
-      empty: {},
-    },
-  });
-});
-
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -506,13 +287,14 @@ test("records and replays opt-in tools in auto mode", async () => {
   }));
 
   const replayHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
         execute,
       },
-    } satisfies PiAiToolset<string, DemoCase>,
-    task: async ({ runtime }) => {
+    } satisfies PiAiToolset<string, DemoMetadata>,
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_123",
       });
@@ -526,9 +308,7 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
+    metadata: {},
     task: {
       meta: {},
     },
@@ -565,9 +345,7 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
+    metadata: {},
     task: {
       meta: {},
     },
@@ -592,13 +370,14 @@ test("errors when strict mode is missing a recording", async () => {
   }));
 
   const replayHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
         execute,
       },
-    } satisfies PiAiToolset<string, DemoCase>,
-    task: async ({ runtime }) => {
+    } satisfies PiAiToolset<string, DemoMetadata>,
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice({
         invoiceId: "inv_123",
       });
@@ -613,9 +392,7 @@ test("errors when strict mode is missing a recording", async () => {
 
   const error = await replayHarness
     .run("Refund invoice inv_123", {
-      caseData: {
-        input: "Refund invoice inv_123",
-      },
+      metadata: {},
       task: {
         meta: {},
       },

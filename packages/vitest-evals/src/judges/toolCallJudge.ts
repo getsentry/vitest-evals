@@ -4,6 +4,7 @@ import {
   type ToolCallScorerConfig,
   type ToolCallScorerOptions,
 } from "../legacy/scorers/toolCallScorer";
+import type { HarnessMetadata } from "../harness";
 
 type ExpectedTool =
   | string
@@ -14,9 +15,14 @@ type ExpectedTool =
 
 export interface ToolCallJudgeConfig extends ToolCallScorerConfig {}
 
+type ToolCallJudgeMetadata = HarnessMetadata & {
+  expectedTools?: ExpectedTool[];
+};
+
 export interface ToolCallJudgeOptions
   extends Omit<ToolCallScorerOptions, "expectedTools"> {
   expectedTools?: ExpectedTool[];
+  metadata?: ToolCallJudgeMetadata;
 }
 
 export function ToolCallJudge(
@@ -26,7 +32,9 @@ export function ToolCallJudge(
   const judge = ((opts: ToolCallJudgeOptions) =>
     scorer({
       ...opts,
-      expectedTools: normalizeExpectedTools(opts.expectedTools),
+      expectedTools: normalizeExpectedTools(
+        opts.expectedTools ?? opts.metadata?.expectedTools,
+      ),
     })) as JudgeFn<ToolCallJudgeOptions>;
 
   Object.defineProperty(judge, "name", {
