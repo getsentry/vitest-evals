@@ -1,6 +1,5 @@
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentTool } from "@mariozechner/pi-agent-core";
 import { Type, getModel, type Static } from "@mariozechner/pi-ai";
-import type { PiAiAgentTool } from "@vitest-evals/harness-pi-ai";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -114,8 +113,11 @@ const createRefundParameters = Type.Object({
 
 type LookupInvoiceArgs = Static<typeof lookupInvoiceParameters>;
 type CreateRefundArgs = Static<typeof createRefundParameters>;
+type ReplayableAgentTool = AgentTool<any, any> & {
+  replay?: boolean;
+};
 
-export const foobarTools: PiAiAgentTool<any, string, RefundCase>[] = [
+export const foobarTools: ReplayableAgentTool[] = [
   {
     name: "lookupInvoice",
     label: "Lookup Invoice",

@@ -22,9 +22,12 @@ agent's existing `state.tools` for normalized tool-call records and replay,
 then restores the agent's tool state after each run.
 
 ```ts
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentTool } from "@mariozechner/pi-agent-core";
 import { Type, getModel } from "@mariozechner/pi-ai";
-import type { PiAiAgentTool } from "@vitest-evals/harness-pi-ai";
+
+type ReplayableAgentTool = AgentTool<any, any> & {
+  replay?: boolean;
+};
 
 export const refundTools = [
   {
@@ -43,7 +46,7 @@ export const refundTools = [
       };
     },
   },
-] satisfies PiAiAgentTool[];
+] satisfies ReplayableAgentTool[];
 
 export function createRefundAgent() {
   return new Agent({

@@ -16,8 +16,7 @@
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "0.67.68",
-    "@mariozechner/pi-ai": "0.67.68",
-    "@vitest-evals/harness-pi-ai": "workspace:*"
+    "@mariozechner/pi-ai": "0.67.68"
   },
   "scripts": {
     "build": "tsup --config ./tsup.config.ts"

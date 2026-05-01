@@ -98,9 +98,6 @@ importers:
       '@mariozechner/pi-ai':
         specifier: 0.67.68
         version: 0.67.68(ws@8.20.0)(zod@4.3.6)
-      '@vitest-evals/harness-pi-ai':
-        specifier: workspace:*
-        version: link:../harness-pi-ai
 
   packages/harness-ai-sdk:
     devDependencies:
