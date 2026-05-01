@@ -140,8 +140,12 @@ describeEval(
             _input: string,
             runtime: { events: DemoRuntime["events"] },
           ) {
-            await nativeTools[0].execute("lookupInvoice", {
+            const toolResult = await nativeTools[0].execute("lookupInvoice", {
               invoiceId: "inv_123",
+            });
+            runtime.events.tool("lookupInvoice", {
+              content: toolResult.content,
+              details: toolResult.details,
             });
             runtime.events.assistant("approved");
 
@@ -161,11 +165,32 @@ describeEval(
     }),
   },
   (it) => {
-    it("records tool calls without a separate tools option", async ({
+    it("preserves the native tool protocol while recording traces", async ({
       run,
     }) => {
       const result = await run("Refund invoice inv_123");
 
+      expect(result.session.messages).toContainEqual({
+        role: "tool",
+        content: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                invoiceId: "inv_123",
+                refundable: true,
+              }),
+            },
+          ],
+          details: {
+            invoiceId: "inv_123",
+            refundable: true,
+          },
+        },
+        metadata: {
+          name: "lookupInvoice",
+        },
+      });
       expect(toolCalls(result.session)).toMatchObject([
         {
           name: "lookupInvoice",
@@ -324,6 +349,119 @@ test("attaches a partial run when the harness errors", async () => {
       error: {
         type: "Error",
         message: "Invoice inv_missing not found",
+      },
+    },
+  ]);
+});
+
+test("replays native agent tools without breaking the agent-facing result", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-native-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(
+    async (_toolCallId: string, args: { invoiceId: string }) => ({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            invoiceId: args.invoiceId,
+            refundable: true,
+          }),
+        },
+      ],
+      details: {
+        invoiceId: args.invoiceId,
+        refundable: true,
+      },
+    }),
+  );
+
+  const replayHarness = piAiHarness({
+    createAgent: () => {
+      const nativeTools = [
+        {
+          name: "lookupInvoice",
+          replay: true,
+          execute,
+        },
+      ];
+
+      return {
+        agent: {
+          state: {
+            tools: nativeTools,
+          },
+        },
+        async run(_input: string, runtime: { events: DemoRuntime["events"] }) {
+          const toolResult = await nativeTools[0].execute("lookupInvoice", {
+            invoiceId: "inv_123",
+          });
+
+          runtime.events.assistant(toolResult.content[0].text);
+
+          return {
+            decision: toolResult.details.refundable
+              ? { status: "approved" as const }
+              : { status: "denied" as const, reason: "not refundable" },
+          };
+        },
+      };
+    },
+  });
+
+  const firstRun = await replayHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(firstRun.output).toEqual({
+    status: "approved",
+  });
+  expect(toolCalls(firstRun.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+      metadata: {
+        replay: {
+          status: "recorded",
+        },
+      },
+    },
+  ]);
+
+  const secondRun = await replayHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(secondRun.output).toEqual({
+    status: "approved",
+  });
+  expect(toolCalls(secondRun.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+      metadata: {
+        replay: {
+          status: "replayed",
+        },
       },
     },
   ]);

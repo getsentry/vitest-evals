@@ -702,21 +702,19 @@ async function withInstrumentedAgentTools<
       } satisfies PiAiToolContext<TInput, TMetadata>;
 
       try {
-        const execution = await executeWithReplay({
+        const execution = await executeNativeToolWithReplay({
           toolName: tool.name,
+          toolCallId,
+          execute: originalExecute,
+          replay: tool.replay,
           args: rawArgs,
           context: toolContext,
-          execute: async (toolArgs) =>
-            normalizeReplayToolResult(
-              await originalExecute(toolCallId, toolArgs),
-            ),
-          replay: tool.replay,
         });
         const finishedAt = new Date();
         const call = {
           name: tool.name,
           arguments: rawArgs,
-          result: normalizeToolResult(execution.result),
+          result: execution.normalizedResult,
           startedAt: startedAt.toISOString(),
           finishedAt: finishedAt.toISOString(),
           durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -729,7 +727,7 @@ async function withInstrumentedAgentTools<
         });
         args.messages.push({
           role: "tool",
-          content: normalizeToolResult(execution.result),
+          content: execution.normalizedResult,
           metadata: {
             name: tool.name,
           },
@@ -763,6 +761,53 @@ async function withInstrumentedAgentTools<
       tool.execute = originalExecutions[index];
     }
   }
+}
+
+async function executeNativeToolWithReplay<
+  TInput,
+  TMetadata extends HarnessMetadata,
+>({
+  toolName,
+  toolCallId,
+  execute,
+  replay,
+  args,
+  context,
+}: {
+  toolName: string;
+  toolCallId: string;
+  execute: PiAgentToolLike<TInput, TMetadata>["execute"];
+  replay: PiAgentToolLike<TInput, TMetadata>["replay"];
+  args: Record<string, JsonValue>;
+  context: PiAiToolContext<TInput, TMetadata>;
+}) {
+  let didExecute = false;
+  let liveResult: unknown;
+
+  const execution = await executeWithReplay({
+    toolName,
+    args,
+    context,
+    execute: async (toolArgs) => {
+      didExecute = true;
+      liveResult = await execute(toolCallId, toolArgs);
+      return createNativeToolReplayEnvelope(liveResult);
+    },
+    replay,
+  });
+
+  if (didExecute) {
+    return {
+      result: liveResult,
+      normalizedResult: normalizeReplayToolResult(liveResult),
+      replay: execution.replay,
+    };
+  }
+
+  return {
+    ...resolveNativeToolReplayResult(execution.result),
+    replay: execution.replay,
+  };
 }
 
 function createRuntime<
@@ -933,6 +978,71 @@ function normalizeToolResult(result: unknown): JsonValue | undefined {
 
 function normalizeReplayToolResult(result: unknown): JsonValue {
   return normalizeToolResult(result) ?? null;
+}
+
+type NativeToolReplayEnvelope = {
+  __vitestEvals: {
+    kind: "pi-ai-native-tool-result";
+    version: 1;
+  };
+  normalizedResult: JsonValue;
+  agentResult?: JsonValue;
+};
+
+function createNativeToolReplayEnvelope(
+  result: unknown,
+): NativeToolReplayEnvelope {
+  const agentResult = toJsonValue(result);
+
+  return {
+    __vitestEvals: {
+      kind: "pi-ai-native-tool-result",
+      version: 1,
+    },
+    normalizedResult: normalizeReplayToolResult(result),
+    ...(agentResult === undefined ? {} : { agentResult }),
+  };
+}
+
+function resolveNativeToolReplayResult(result: JsonValue) {
+  if (isNativeToolReplayEnvelope(result)) {
+    return {
+      result: result.agentResult ?? result.normalizedResult,
+      normalizedResult: result.normalizedResult,
+    };
+  }
+
+  return {
+    result,
+    normalizedResult: normalizeReplayToolResult(result),
+  };
+}
+
+function isNativeToolReplayEnvelope(
+  value: unknown,
+): value is NativeToolReplayEnvelope {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "__vitestEvals" in value &&
+      isNativeToolReplayMarker(
+        (value as { __vitestEvals?: unknown }).__vitestEvals,
+      ) &&
+      "normalizedResult" in value,
+  );
+}
+
+function isNativeToolReplayMarker(
+  value: unknown,
+): value is NativeToolReplayEnvelope["__vitestEvals"] {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "kind" in value &&
+      (value as { kind?: unknown }).kind === "pi-ai-native-tool-result" &&
+      "version" in value &&
+      (value as { version?: unknown }).version === 1,
+  );
 }
 
 function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {
