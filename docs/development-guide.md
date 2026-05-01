@@ -100,7 +100,7 @@ Prefer judges when:
 
 - the logic should work with normalized harness data
 - the result should compose with automatic suite-level judges
-- the logic should work with `toBeJudged(...)` and `toSatisfyJudge(...)`
+- the logic should work with `toSatisfyJudge(...)` or suite-level `judges`
 
 ## Adding a New Harness Adapter
 

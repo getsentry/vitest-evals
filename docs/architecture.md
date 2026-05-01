@@ -55,8 +55,7 @@ serialization logic.
 Defines the harness-first public API:
 
 - `describeEval(...)`
-- `expect(...).toBeJudged(...)`
-- `expect(...).toSatisfyJudge(...)` for lower-level value assertions
+- `expect(...).toSatisfyJudge(...)`
 - harness/judge types
 - exports for built-in judges and harness helpers
 
@@ -110,7 +109,7 @@ For each eval test in a harness-backed suite:
    `usage`, `timings`, `artifacts`, and `errors`.
 6. Core stores that run on `task.meta.harness` for the reporter.
 7. Automatic suite-level judges run against the normalized run/session pair.
-8. The eval test asserts on the same returned result, session, and agent.
+8. The eval test asserts on the same returned result and session.
 9. The reporter renders the recorded metadata without re-executing the harness.
 
 ## First-Party Harness Packages

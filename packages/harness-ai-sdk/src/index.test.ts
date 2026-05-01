@@ -6,8 +6,8 @@ import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
-type DemoCase = {
-  input: string;
+type DemoMetadata = {
+  scenario?: string;
 };
 
 let replayDir: string | undefined;
@@ -19,6 +19,19 @@ afterEach(() => {
     replayDir = undefined;
   }
 });
+
+function createHarnessContext<TMetadata extends Record<string, unknown>>(
+  metadata: TMetadata,
+) {
+  return {
+    metadata,
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+}
 
 const generateTextLikeResult = {
   text: '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
@@ -302,7 +315,7 @@ test("default agent run receives wrapped runtime tools", async () => {
         tools: {
           lookupInvoice: {
             execute: NonNullable<
-              AiSdkToolset<string, DemoCase>["lookupInvoice"]["execute"]
+              AiSdkToolset<string, DemoMetadata>["lookupInvoice"]["execute"]
             >;
           };
         };
@@ -391,19 +404,13 @@ test("default agent run receives wrapped runtime tools", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoCase>,
+    } satisfies AiSdkToolset<string, DemoMetadata>,
   });
 
-  const result = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(run).toHaveBeenCalledTimes(1);
   expect(execute).toHaveBeenCalledTimes(1);
@@ -437,7 +444,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoCase>,
+    } satisfies AiSdkToolset<string, DemoMetadata>,
     task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -454,16 +461,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
   });
 
   const error = await harness
-    .run("Refund invoice inv_123", {
-      caseData: {
-        input: "Refund invoice inv_123",
-      },
-      task: {
-        meta: {},
-      },
-      artifacts: {},
-      setArtifact: vi.fn(),
-    })
+    .run("Refund invoice inv_123", createHarnessContext({}))
     .catch((caughtError) => caughtError);
   const run = getHarnessRunFromError(error);
 
@@ -512,7 +510,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
   ]);
 });
 
-test("direct run and setup use the same execution lifecycle", async () => {
+test("creates a fresh agent for each explicit run", async () => {
   const run = vi.fn(async () => ({
     object: {
       status: "approved",
@@ -524,20 +522,10 @@ test("direct run and setup use the same execution lifecycle", async () => {
   const harness = aiSdkHarness({
     agent: createAgent,
   });
-  const context = {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  };
+  const context = createHarnessContext({});
 
   await harness.run("Refund invoice inv_123", context);
-  const execution = await harness.setup?.();
-  await execution?.run("Refund invoice inv_123", context);
+  await harness.run("Refund invoice inv_123", context);
 
   expect(createAgent).toHaveBeenCalledTimes(2);
   expect(run).toHaveBeenCalledTimes(2);
@@ -545,7 +533,16 @@ test("direct run and setup use the same execution lifecycle", async () => {
 
 test("normalizes domain results that resemble harness runs", async () => {
   const output = vi.fn(
-    ({ result }: { result: { object: { status: string } } }) => result.object,
+    ({
+      context,
+      result,
+    }: {
+      context: { metadata: DemoMetadata };
+      result: { object: { status: string } };
+    }) => {
+      expect(context.metadata.scenario).toBe("refund");
+      return result.object;
+    },
   );
   const session = vi.fn(
     ({
@@ -584,16 +581,10 @@ test("normalizes domain results that resemble harness runs", async () => {
     session,
   });
 
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({ scenario: "refund" }),
+  );
 
   expect(run.output).toEqual({
     status: "approved",
@@ -680,16 +671,10 @@ test("aggregates per-step usage when total usage is missing", async () => {
     }),
   });
 
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(run.usage).toMatchObject({
     provider: "openai",
@@ -766,16 +751,10 @@ test("normalizes arrays and empty objects without dropping positions", async () 
     }),
   });
 
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(run.output).toEqual({
     values: [1, null, {}, 3],
@@ -857,16 +836,10 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
     }),
   });
 
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(run.usage.toolCalls).toBe(1);
   expect(toolCalls(run.session)[0].arguments).toEqual({});
@@ -895,16 +868,10 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
     }),
   });
 
-  const noToolRun = await noToolHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const noToolRun = await noToolHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(noToolRun.usage.toolCalls).toBeUndefined();
 });
@@ -947,16 +914,10 @@ test("uses invalid tool call details as the normalized error", async () => {
     }),
   });
 
-  const run = await harness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(toolCalls(run.session)[0]).toMatchObject({
     id: "call_invalid",
@@ -993,7 +954,7 @@ test("records and replays opt-in tools in auto mode", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoCase>,
+    } satisfies AiSdkToolset<string, DemoMetadata>,
     task: async ({ runtime }) => {
       const lookupInvoice = runtime.tools.lookupInvoice;
       const toolInput = {
@@ -1075,16 +1036,10 @@ test("records and replays opt-in tools in auto mode", async () => {
     },
   });
 
-  const firstRun = await replayHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const firstRun = await replayHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(execute).toHaveBeenCalledTimes(1);
   const firstCall = toolCalls(firstRun.session)[0];
@@ -1114,16 +1069,10 @@ test("records and replays opt-in tools in auto mode", async () => {
     throw new Error("tool should not execute after the recording exists");
   });
 
-  const secondRun = await replayHarness.run("Refund invoice inv_123", {
-    caseData: {
-      input: "Refund invoice inv_123",
-    },
-    task: {
-      meta: {},
-    },
-    artifacts: {},
-    setArtifact: vi.fn(),
-  });
+  const secondRun = await replayHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(execute).toHaveBeenCalledTimes(1);
   expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
@@ -1149,7 +1098,7 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
         }),
         execute: vi.fn(async () => streamOutput()),
       },
-    } as unknown as AiSdkToolset<string, DemoCase>,
+    } as unknown as AiSdkToolset<string, DemoMetadata>,
     task: async ({ runtime }) => {
       await runtime.tools.streamRefund.execute?.(
         {
@@ -1168,16 +1117,7 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
   });
 
   const error = await replayHarness
-    .run("Refund invoice inv_123", {
-      caseData: {
-        input: "Refund invoice inv_123",
-      },
-      task: {
-        meta: {},
-      },
-      artifacts: {},
-      setArtifact: vi.fn(),
-    })
+    .run("Refund invoice inv_123", createHarnessContext({}))
     .catch((caughtError) => caughtError);
 
   expect(error).toBeInstanceOf(Error);
@@ -1203,7 +1143,7 @@ test("errors when strict mode is missing a recording", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoCase>,
+    } satisfies AiSdkToolset<string, DemoMetadata>,
     task: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -1222,16 +1162,7 @@ test("errors when strict mode is missing a recording", async () => {
   });
 
   const error = await replayHarness
-    .run("Refund invoice inv_123", {
-      caseData: {
-        input: "Refund invoice inv_123",
-      },
-      task: {
-        meta: {},
-      },
-      artifacts: {},
-      setArtifact: vi.fn(),
-    })
+    .run("Refund invoice inv_123", createHarnessContext({}))
     .catch((caughtError) => caughtError);
 
   expect(execute).not.toHaveBeenCalled();

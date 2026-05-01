@@ -49,7 +49,7 @@ export interface PiAiToolContext<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > {
   input: TInput;
-  metadata: TMetadata;
+  metadata: HarnessContext<TMetadata>["metadata"];
   signal?: AbortSignal;
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 }
@@ -337,7 +337,7 @@ function resolveToolset<
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
   agent: TAgent,
-) {
+): TTools | undefined {
   if (options.tools) {
     return options.tools;
   }
@@ -353,7 +353,9 @@ function resolveToolset<
         ? (agent as { toolset?: unknown }).toolset
         : undefined;
 
-  return isPiAiToolset(candidate) ? candidate : undefined;
+  return isPiAiToolset(candidate)
+    ? (candidate as unknown as TTools)
+    : undefined;
 }
 
 function resolveAgentTools(agent: unknown) {
@@ -568,7 +570,10 @@ async function withInstrumentedAgentTools<
           toolName: tool.name,
           args: rawArgs,
           context: toolContext,
-          execute: (toolArgs) => originalExecute(toolCallId, toolArgs),
+          execute: async (toolArgs) =>
+            normalizeReplayToolResult(
+              await originalExecute(toolCallId, toolArgs),
+            ),
           replay: tool.replay,
         });
         const finishedAt = new Date();
@@ -638,7 +643,9 @@ function createRuntime<
   context: HarnessContext<TMetadata>;
   tools: TTools | undefined;
   messages: NormalizedMessage[];
-}) {
+}): PiAiRuntime<TTools, TInput, TMetadata> & {
+  toolCalls: ToolCallRecord[];
+} {
   const toolCalls: ToolCallRecord[] = [];
   const eventSink: PiAiEventSink = {
     message: (message) => {
@@ -788,6 +795,10 @@ function normalizeToolResult(result: unknown): JsonValue | undefined {
   }
 
   return result === undefined ? undefined : String(result);
+}
+
+function normalizeReplayToolResult(result: unknown): JsonValue {
+  return normalizeToolResult(result) ?? null;
 }
 
 function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {

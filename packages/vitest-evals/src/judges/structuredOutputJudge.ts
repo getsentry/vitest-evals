@@ -15,6 +15,7 @@ type StructuredOutputJudgeMetadata = HarnessMetadata & {
 
 export interface StructuredOutputJudgeOptions
   extends Omit<StructuredOutputScorerOptions, "output"> {
+  output: string;
   run: HarnessRun;
   metadata?: StructuredOutputJudgeMetadata;
 }

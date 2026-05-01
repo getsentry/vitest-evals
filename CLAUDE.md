@@ -11,6 +11,8 @@ Required docs:
 - `docs/development-guide.md`
 - `docs/testing.md`
 - `docs/scorer-examples.md`
+- `policies/README.md`
+- `policies/code-comments.md`
 
 ## Product Shape
 
@@ -113,3 +115,8 @@ When behavior or product shape changes, update:
 - example apps or packages if the authoring model changed
 
 Keep this file in sync too.
+
+## Policies
+
+- `policies/README.md` explains when a short repo policy doc should exist.
+- `policies/code-comments.md` is the repo default for comments, docstrings, and exported-function JSDoc.

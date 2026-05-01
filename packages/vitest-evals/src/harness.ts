@@ -81,15 +81,14 @@ export type HarnessRunError = Error & {
   vitestEvalsRun: HarnessRun;
 };
 
-export type HarnessCase<TInput = unknown> = {
-  input: TInput;
-  name?: string;
-} & Record<string, any>;
+export type HarnessMetadata = Record<string, unknown>;
 
-export type HarnessContext<TCase extends HarnessCase = HarnessCase> = {
-  caseData: TCase;
+export type HarnessContext<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = {
+  metadata: Readonly<TMetadata>;
   task: {
-    meta: Record<string, any>;
+    meta: Record<string, unknown>;
   };
   signal?: AbortSignal;
   artifacts: Record<string, JsonValue>;
@@ -98,22 +97,14 @@ export type HarnessContext<TCase extends HarnessCase = HarnessCase> = {
 
 export type Harness<
   TInput = unknown,
-  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
-  TAgent = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
   prompt?: HarnessPrompt;
-  run: (input: TInput, context: HarnessContext<TCase>) => Promise<HarnessRun>;
-  setup?: () => Promise<HarnessExecution<TInput, TCase, TAgent>>;
-};
-
-export type HarnessExecution<
-  TInput = unknown,
-  TCase extends HarnessCase<TInput> = HarnessCase<TInput>,
-  TAgent = unknown,
-> = {
-  agent?: TAgent;
-  run: (input: TInput, context: HarnessContext<TCase>) => Promise<HarnessRun>;
+  run: (
+    input: TInput,
+    context: HarnessContext<TMetadata>,
+  ) => Promise<HarnessRun>;
 };
 
 export function hasCallableMethod(value: unknown, methodName: string) {

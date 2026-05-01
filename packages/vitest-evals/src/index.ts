@@ -228,7 +228,7 @@ expect.extend({
     }
 
     const score = result.score ?? 0;
-    const pass = score >= threshold;
+    const pass = threshold === null ? true : score >= threshold;
     const scoredJudge = {
       ...result,
       name: judge.name || "AnonymousJudge",
@@ -247,7 +247,9 @@ expect.extend({
       pass,
       message: () =>
         [
-          `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
+          threshold === null
+            ? `Score: ${score.toFixed(2)} recorded without a failure threshold`
+            : `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
           `Output: ${wrapText(judgeOptions.output)}`,
           formatScores([scoredJudge]),
         ].join("\n\n"),
