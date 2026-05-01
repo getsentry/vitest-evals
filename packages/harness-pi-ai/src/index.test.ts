@@ -423,6 +423,59 @@ test("replays native agent tools without breaking the agent-facing result", asyn
   expect(firstRun.output).toEqual({
     status: "approved",
   });
+  const [firstCall] = toolCalls(firstRun.session);
+  expect(firstCall).toMatchObject({
+    name: "lookupInvoice",
+    result: {
+      invoiceId: "inv_123",
+      refundable: true,
+    },
+    metadata: {
+      replay: {
+        status: "recorded",
+      },
+    },
+  });
+  const recordingPath = (
+    firstCall.metadata?.replay as { recordingPath: string }
+  ).recordingPath;
+  const recording = JSON.parse(
+    readFileSync(join(process.cwd(), recordingPath), "utf8"),
+  ) as {
+    output: {
+      __vitestEvals: { kind: string; version: number };
+      agentResult: {
+        content: Array<{ text: string; type: string }>;
+        details: { invoiceId: string; refundable: boolean };
+      };
+      normalizedResult: { invoiceId: string; refundable: boolean };
+    };
+  };
+  expect(recording.output).toEqual({
+    __vitestEvals: {
+      kind: "pi-ai-native-tool-result",
+      version: 2,
+    },
+    agentResult: {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            invoiceId: "inv_123",
+            refundable: true,
+          }),
+        },
+      ],
+      details: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+    normalizedResult: {
+      invoiceId: "inv_123",
+      refundable: true,
+    },
+  });
   expect(toolCalls(firstRun.session)).toMatchObject([
     {
       name: "lookupInvoice",

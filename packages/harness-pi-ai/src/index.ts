@@ -983,6 +983,15 @@ function normalizeReplayToolResult(result: unknown): JsonValue {
 type NativeToolReplayEnvelope = {
   __vitestEvals: {
     kind: "pi-ai-native-tool-result";
+    version: 2;
+  };
+  agentResult: JsonValue;
+  normalizedResult: JsonValue;
+};
+
+type LegacyNativeToolReplayEnvelope = {
+  __vitestEvals: {
+    kind: "pi-ai-native-tool-result";
     version: 1;
   };
   normalizedResult: JsonValue;
@@ -992,20 +1001,27 @@ type NativeToolReplayEnvelope = {
 function createNativeToolReplayEnvelope(
   result: unknown,
 ): NativeToolReplayEnvelope {
-  const agentResult = toJsonValue(result);
+  const normalizedResult = normalizeReplayToolResult(result);
 
   return {
     __vitestEvals: {
       kind: "pi-ai-native-tool-result",
-      version: 1,
+      version: 2,
     },
-    normalizedResult: normalizeReplayToolResult(result),
-    ...(agentResult === undefined ? {} : { agentResult }),
+    agentResult: toJsonValue(result) ?? normalizedResult,
+    normalizedResult,
   };
 }
 
 function resolveNativeToolReplayResult(result: JsonValue) {
   if (isNativeToolReplayEnvelope(result)) {
+    return {
+      result: result.agentResult,
+      normalizedResult: result.normalizedResult,
+    };
+  }
+
+  if (isLegacyNativeToolReplayEnvelope(result)) {
     return {
       result: result.agentResult ?? result.normalizedResult,
       normalizedResult: result.normalizedResult,
@@ -1028,6 +1044,7 @@ function isNativeToolReplayEnvelope(
       isNativeToolReplayMarker(
         (value as { __vitestEvals?: unknown }).__vitestEvals,
       ) &&
+      "agentResult" in value &&
       "normalizedResult" in value,
   );
 }
@@ -1035,6 +1052,33 @@ function isNativeToolReplayEnvelope(
 function isNativeToolReplayMarker(
   value: unknown,
 ): value is NativeToolReplayEnvelope["__vitestEvals"] {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "kind" in value &&
+      (value as { kind?: unknown }).kind === "pi-ai-native-tool-result" &&
+      "version" in value &&
+      (value as { version?: unknown }).version === 2,
+  );
+}
+
+function isLegacyNativeToolReplayEnvelope(
+  value: unknown,
+): value is LegacyNativeToolReplayEnvelope {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "__vitestEvals" in value &&
+      isLegacyNativeToolReplayMarker(
+        (value as { __vitestEvals?: unknown }).__vitestEvals,
+      ) &&
+      "normalizedResult" in value,
+  );
+}
+
+function isLegacyNativeToolReplayMarker(
+  value: unknown,
+): value is LegacyNativeToolReplayEnvelope["__vitestEvals"] {
   return Boolean(
     value &&
       typeof value === "object" &&
