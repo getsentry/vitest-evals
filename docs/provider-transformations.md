@@ -1,178 +1,115 @@
-# Provider Tool Call Transformations
+# Harness Normalization Patterns
 
-This document shows how to transform tool call formats from different LLM providers to the vitest-evals format.
+This document describes the internal normalization target for harness packages.
+Application authors should not need to manually transform provider responses in
+every test file. First-party harness packages should do that work once and
+return a normalized `HarnessRun`.
 
-## ToolCall Type
+## Normalized Targets
 
-```typescript
-type ToolCall = {
-  // Required fields
-  name: string;
-  arguments: Record<string, any>;
-  
-  // Common optional fields
+The important normalized types are:
+
+```ts
+type ToolCallRecord = {
   id?: string;
-  result?: any;
-  error?: { message: string; code?: string; details?: any };
-  status?: 'pending' | 'executing' | 'completed' | 'failed' | 'cancelled';
-  type?: 'function' | 'retrieval' | 'code_interpreter' | 'web_search' | string;
-  timestamp?: number;
-  duration_ms?: number;
-  parent_id?: string;
-  
-  // Provider-specific fields allowed
-  [key: string]: any;
-}
+  name: string;
+  arguments?: Record<string, JsonValue>;
+  result?: JsonValue;
+  error?: {
+    message: string;
+    type?: string;
+  };
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  metadata?: Record<string, JsonValue>;
+};
+
+type NormalizedSession = {
+  messages: NormalizedMessage[];
+  outputText?: string;
+  provider?: string;
+  model?: string;
+  metadata?: Record<string, JsonValue>;
+};
+
+type HarnessRun = {
+  session: NormalizedSession;
+  output?: JsonValue;
+  usage: UsageSummary;
+  timings?: TimingSummary;
+  artifacts?: Record<string, JsonValue>;
+  errors: Array<Record<string, JsonValue>>;
+};
 ```
 
-## OpenAI
+## Design Rules
 
-```javascript
-function transformOpenAITools(response) {
-  const toolCalls = response.choices[0].message.tool_calls?.map(call => ({
+Harness adapters should:
+
+- keep the stored session JSON-serializable
+- normalize tool calls into `ToolCallRecord`
+- preserve the application-facing result separately in `run.output`
+- attach provider/model and usage data when available
+- attach replay/cache metadata in the tool record metadata rather than in
+  provider-specific side channels
+
+Harness adapters should not require end users to manually flatten provider
+events just to write assertions.
+
+## Minimal Adapter Example
+
+```ts
+function normalizeProviderStep(step: ProviderStep): ToolCallRecord[] {
+  return (step.toolCalls ?? []).map((call) => ({
     id: call.id,
-    name: call.function.name,
-    arguments: JSON.parse(call.function.arguments),
-    type: 'function',
-    status: 'completed',
-  })) || [];
-  
-  return {
-    result: response.choices[0].message.content,
-    toolCalls,
-  };
-}
-```
-
-## Anthropic Claude
-
-```javascript
-function transformClaudeTools(response) {
-  const toolCalls = response.content
-    .filter(block => block.type === 'tool_use')
-    .map(block => ({
-      id: block.id,
-      name: block.name,
-      arguments: block.input,
-      type: 'function',
-      status: 'completed',
-    }));
-  
-  const textContent = response.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('\n');
-  
-  return {
-    result: textContent,
-    toolCalls,
-  };
-}
-```
-
-## Vercel AI SDK
-
-```javascript
-function transformAISDKTools(response) {
-  const toolCalls = response.toolCalls?.map((call, i) => {
-    const toolResult = response.toolResults?.[i];
-    const hasError = toolResult?.error !== undefined;
-    
-    return {
-      id: call.toolCallId,
-      name: call.toolName,
-      arguments: call.args,
-      result: toolResult?.result,
-      error: hasError ? {
-        message: toolResult.error.message || 'Tool execution failed',
-        details: toolResult.error
-      } : undefined,
-      status: hasError ? 'failed' : 'completed',
-      type: 'function',
-    };
-  }) || [];
-  
-  return {
-    result: response.text,
-    toolCalls,
-  };
-}
-```
-
-## Streaming Tool Calls
-
-```javascript
-async function handleStreamingTools(stream) {
-  const toolCalls = new Map();
-  
-  for await (const chunk of stream) {
-    if (chunk.toolCall) {
-      const existing = toolCalls.get(chunk.toolCall.id) || {
-        id: chunk.toolCall.id,
-        name: chunk.toolCall.toolName,
-        arguments: {},
-        status: 'executing',
-        timestamp: Date.now()
-      };
-      
-      // Merge partial arguments
-      Object.assign(existing.arguments, chunk.toolCall.args);
-      toolCalls.set(chunk.toolCall.id, existing);
-    }
-    
-    if (chunk.toolResult) {
-      const call = toolCalls.get(chunk.toolResult.toolCallId);
-      if (call) {
-        call.result = chunk.toolResult.result;
-        call.status = 'completed';
-        call.duration_ms = Date.now() - call.timestamp;
-      }
-    }
-  }
-  
-  return Array.from(toolCalls.values());
-}
-```
-
-## Google Gemini
-
-```javascript
-function transformGeminiTools(response) {
-  const toolCalls = response.candidates[0].content.parts
-    .filter(part => part.functionCall)
-    .map(part => ({
-      name: part.functionCall.name,
-      arguments: part.functionCall.args,
-      type: 'function',
-      status: 'completed',
-    }));
-  
-  const textParts = response.candidates[0].content.parts
-    .filter(part => part.text)
-    .map(part => part.text)
-    .join('');
-  
-  return {
-    result: textParts,
-    toolCalls,
-  };
-}
-```
-
-## Cohere
-
-```javascript
-function transformCohereTools(response) {
-  const toolCalls = response.tool_calls?.map(call => ({
     name: call.name,
-    arguments: call.parameters,
-    type: 'function',
-    status: 'completed',
-  })) || [];
-  
+    arguments: toJsonRecord(call.arguments),
+    result: toJsonValue(call.result),
+    error: call.error
+      ? {
+          message: String(call.error.message),
+          type: call.error.name,
+        }
+      : undefined,
+    durationMs: call.durationMs,
+  }));
+}
+
+function normalizeSession(input: string, result: ProviderResult): NormalizedSession {
   return {
-    result: response.text,
-    toolCalls,
+    messages: [
+      { role: "user", content: input },
+      ...result.steps.map((step) => ({
+        role: "assistant",
+        content: step.text,
+        toolCalls: normalizeProviderStep(step),
+      })),
+    ],
+    outputText: result.text,
+    provider: result.provider,
+    model: result.model,
   };
 }
 ```
+
+## First-Party Harness Responsibilities
+
+### `@vitest-evals/harness-ai-sdk`
+
+Normalizes AI SDK style `steps`, `toolCalls`, `toolResults`, and usage records
+into the root session and run model.
+
+### `@vitest-evals/harness-pi-ai`
+
+Normalizes `pi-ai` style message and tool activity and wraps tools so replay
+policy can be applied consistently.
+
+## User-Facing Guidance
+
+If you are writing a suite, prefer:
+
+- `aiSdkHarness(...)`
+- `piAiHarness(...)`
+
+If you are building a new harness package, follow this normalization contract.

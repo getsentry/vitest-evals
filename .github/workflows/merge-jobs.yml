@@ -30,7 +30,7 @@ jobs:
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
         name: Install pnpm
         with:
-          version: 8
+          version: 10.33.0
           run_install: false
 
       - name: Get pnpm store directory
@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Check release config
+        run: pnpm release:check
+
       - name: Run linter
         run: pnpm lint
 
@@ -58,16 +61,17 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Pack NPM Tarball
+      - name: Pack NPM Tarballs
         run: |
-          pnpm install
-          pnpm build
-          pnpm pack --pack-destination dist
+          mkdir -p artifacts
+          pnpm --filter vitest-evals pack --pack-destination artifacts
+          pnpm --filter @vitest-evals/harness-ai-sdk pack --pack-destination artifacts
+          pnpm --filter @vitest-evals/harness-pi-ai pack --pack-destination artifacts
+          ls -la artifacts
 
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.sha }}
-          path: |
-            ${{ github.workspace }}/dist/**
-            ${{ github.workspace }}/**/dist/*.tgz
+          path: artifacts/*.tgz
+          if-no-files-found: error

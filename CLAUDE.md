@@ -1,205 +1,122 @@
 # vitest-evals Development Guidelines
 
-## 🔴 CRITICAL: Pre-Development Requirements
+## Read First
 
-**MANDATORY READING before ANY code changes:**
-- Read existing code structure in `src/` to understand patterns
-- Check `src/index.ts` for core framework architecture
-- Review test files for testing patterns
-- All scorer implementations MUST follow established patterns
+Before changing code, read the relevant package and its nearby tests.
+The current product shape is harness-first.
 
-### Required Documentation Review
-- **Architecture**: MUST read `docs/architecture.md` for system design
-- **Testing**: MUST read `docs/testing.md` for test requirements
-- **Development**: MUST read `docs/development-guide.md` for workflow
-- **Examples**: Check `docs/scorer-examples.md` for implementation patterns
+Required docs:
 
-## Repository Overview
+- `docs/architecture.md`
+- `docs/development-guide.md`
+- `docs/testing.md`
+- `docs/scorer-examples.md`
+- `policies/README.md`
+- `policies/code-comments.md`
 
-vitest-evals is a Vitest-based evaluation framework for testing language model outputs with flexible scoring functions. It provides a structured way to evaluate AI model outputs against expected results.
+## Product Shape
+
+The root package is now:
+
+- harness-first
+- judge-first
+- reporter-driven from normalized run metadata
+
+Legacy scorer-first support still exists, but it is intentionally isolated
+under `vitest-evals/legacy` and `packages/vitest-evals/src/legacy/...`.
+
+Do not reintroduce scorer-first guidance into root APIs, examples, or docs.
 
 ## Repository Structure
 
-```
-vitest-evals/
-├── src/
-│   ├── index.ts                     # Main entry point, types, and core framework
-│   ├── reporter.ts                  # Custom Vitest reporter
-│   ├── scorers/                     # Scorer implementations
-│   │   ├── index.ts                 # Scorers export file
-│   │   ├── toolCallScorer.ts        # Tool call evaluation scorer
-│   │   └── toolCallScorer.test.ts   # Tool call scorer tests
-│   ├── ai-sdk-integration.test.ts   # AI SDK integration example
-│   ├── autoevals-compatibility.test.ts # Autoevals compatibility tests
-│   ├── formatScores.test.ts         # Format scores tests
-│   └── wrapText.test.ts             # Wrap text tests
-├── docs/                           # Project documentation
-│   ├── architecture.md             # System architecture overview
-│   ├── testing.md                  # Testing standards and requirements
-│   ├── development-guide.md        # Development workflow and tips
-│   ├── scorer-examples.md          # Example scorer implementations
-│   ├── custom-scorers.md           # Custom scorer examples
-│   └── provider-transformations.md # Provider tool call transformations
-├── scripts/
-│   └── craft-pre-release.sh        # Release preparation script
-├── tsup.config.ts                  # Build configuration
-├── tsconfig.json                   # TypeScript configuration
-├── biome.json                      # Code formatter/linter config
-└── package.json                    # Project dependencies and scripts
+```text
+packages/
+  vitest-evals/
+    src/
+      harness.ts
+      index.ts
+      reporter.ts
+      judges/
+      legacy/
+  harness-ai-sdk/
+  harness-pi-ai/
+  foobar/
+apps/
+  demo-pi/
+docs/
 ```
 
-## Core Components Impact Analysis
+## Package Boundaries
 
-When making changes, consider these areas:
+### `packages/vitest-evals`
 
-### Framework Core (`src/index.ts`)
-- **describeEval()** function: Main evaluation entry point for test suites
-- **toEval** matcher: Vitest matcher for individual evaluations
-- **TaskResult** handling: Supports string or {result, toolCalls}
-- **ScoreFn** interface: All scorers must implement this
-- **Async/sync support**: Both scorer types supported
-- **Type definitions**: All TypeScript interfaces defined here
+Owns:
 
-### Custom Reporter (`src/reporter.ts`)
-- **Score display**: Shows evaluation results
-- **Error reporting**: Handles test failures
-- **Progress tracking**: Visual feedback during tests
+- normalized session/run types
+- root `describeEval(...)`
+- judge helpers and matcher APIs
+- reporter integration
+- legacy compatibility entrypoint
 
-### Scorer System (`src/scorers/`)
-- **ToolCallScorer**: Evaluates tool/function call accuracy (only built-in scorer)
-- **Flexible parameters**: Support various parameter names
-- **Type safety**: Full TypeScript support
-- **Autoevals compatibility**: Works with existing scorers
+### `packages/harness-ai-sdk`
 
-## 🔴 CRITICAL: Code Standards
+Owns the AI SDK adapter into `HarnessRun`.
 
-### TypeScript Requirements
-- **Strict mode**: All code must pass strict TypeScript checks
-- **Explicit types**: No implicit any types
-- **Interface-driven**: Define interfaces before implementation
+### `packages/harness-pi-ai`
 
-### Testing Requirements
-- **All scorers MUST have tests**: No exceptions
-- **Test edge cases**: Error conditions, async behavior
-- **Integration tests**: Test with actual AI outputs
-- **Run tests**: `pnpm test` must pass before completion
+Owns the `pi-ai` adapter, wrapped tool runtime, and tool replay behavior.
 
-### Code Quality
-- **Lint check**: `pnpm run lint` must pass
-- **Type check**: `pnpm run typecheck` must pass
-- **Format**: `pnpm run format` for consistent style
+### `packages/foobar` and `apps/demo-pi`
 
-## Key Commands
+Own the example runtime seam and live demos. Keep them realistic and aligned
+with the public story.
+
+## Core Rules
+
+- Root work should be harness-first and judge-first.
+- Legacy changes should stay under `src/legacy/...`.
+- New examples should show the actual runtime seam, not placeholders.
+- Normalized session data must remain JSON-serializable.
+- Reporter changes require reporter tests.
+- Harness changes require harness package tests.
+- Legacy scorer changes require legacy tests.
+
+## Commands
+
+Use `pnpm`, not `npm`.
+
+Common verification:
 
 ```bash
-# Development
-pnpm test          # Run all tests
-pnpm run build     # Build the package
-pnpm run lint      # Check code style
-pnpm run format    # Auto-format code
-pnpm run typecheck # Verify TypeScript types
-
-# Before completing ANY task
-pnpm run lint && pnpm run typecheck && pnpm test
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm evals
 ```
 
-## Architecture Patterns
+Prefer targeted verification when possible.
 
-### Scorer Implementation
-- Implement the `Scorer` interface
-- Support both sync and async evaluation
-- Handle errors gracefully
-- Return normalized scores (0-1 range typical)
+## Testing Expectations
 
-### TaskResult Handling
-```typescript
-type TaskResult = string | { result: string; toolCalls?: any[] }
-```
-- Always handle both formats
-- Extract result string appropriately
-- Pass tool calls to specialized scorers
+- Root API changes: test `packages/vitest-evals/src/*.test.ts`
+- Reporter changes: test `packages/vitest-evals/src/reporter.test.ts`
+- AI SDK harness changes: test `packages/harness-ai-sdk/src/index.test.ts`
+- `pi-ai` harness changes: test `packages/harness-pi-ai/src/index.test.ts`
+- Legacy changes: test `packages/vitest-evals/src/legacy/...`
+- Demo behavior changes: run `pnpm evals` or a filtered demo command
 
-### Parameter Flexibility
-- Support multiple parameter names (e.g., `expected` or `expectedTools`)
-- Use TypeScript generics for type safety
-- Document parameter requirements
+## Documentation Expectations
 
-## Documentation Requirements
+When behavior or product shape changes, update:
 
-### Code Documentation
-- Document all public APIs with JSDoc
-- Include usage examples in comments
-- Explain complex logic inline
+- `README.md`
+- `packages/vitest-evals/README.md`
+- relevant files in `docs/`
+- example apps or packages if the authoring model changed
 
-### README Updates
-- Keep examples current with API changes
-- Document new scorers when added
-- Update compatibility notes
+Keep this file in sync too.
 
-## Current Features
+## Policies
 
-### Implemented
-- Core evaluation framework
-- Custom Vitest reporter
-- ToolCallScorer for function evaluation
-- Autoevals library compatibility
-- Flexible parameter naming
-
-### In Progress
-- Additional scorer implementations
-- Enhanced error handling
-- Performance optimizations
-
-## Documentation Maintenance
-
-**CRITICAL**: Documentation must be kept up-to-date with code changes
-- Update relevant docs when modifying code
-- Add examples when creating new scorers
-- Document breaking changes prominently
-- Keep CLAUDE.md synchronized with project state
-
-## Development Process
-
-1. **Review existing code** to understand patterns
-2. **Write tests first** for new features
-3. **Implement** following established patterns
-4. **Verify** with lint, typecheck, and tests
-5. **Document** changes in code and README
-
-## Common Patterns
-
-### Creating a New Scorer
-1. Define the scorer interface extending `BaseScorerOptions` in `src/index.ts`
-2. Implement in `src/scorers/[name].ts` following camelCase naming
-3. Write comprehensive tests in `src/scorers/[name].test.ts`
-4. Export from `src/scorers/index.ts` and main index
-5. Document usage in README
-
-### Testing Scorers
-```typescript
-import { describe, test, expect } from 'vitest'
-import { YourScorer } from '../src/scorers/yourScorer'
-
-test('scorer evaluates correctly', async () => {
-  expect('test input').toEval(
-    'expected output',
-    async (input) => 'test output',
-    YourScorer,
-    1.0
-  )
-})
-```
-
-## Package Manager
-
-This project uses **pnpm** (not npm). Always use pnpm commands.
-
-## Validation Checklist
-
-Before marking ANY task complete:
-- [ ] Code passes `pnpm run lint`
-- [ ] Code passes `pnpm run typecheck`  
-- [ ] All tests pass with `pnpm test`
-- [ ] New features have tests
-- [ ] Documentation is updated
-- [ ] Examples work correctly
+- `policies/README.md` explains when a short repo policy doc should exist.
+- `policies/code-comments.md` is the repo default for comments, docstrings, and exported-function JSDoc.

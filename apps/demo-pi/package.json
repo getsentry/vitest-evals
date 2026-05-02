@@ -1,0 +1,15 @@
+{
+  "name": "@demo/demo-pi",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "evals": "node ./scripts/run-evals.mjs",
+    "evals:verbose": "node ./scripts/run-evals.mjs -v",
+    "evals:fail": "node ./scripts/run-evals.mjs --fail"
+  },
+  "dependencies": {
+    "@demo/foobar": "workspace:*",
+    "@vitest-evals/harness-pi-ai": "workspace:*",
+    "vitest-evals": "workspace:*"
+  }
+}

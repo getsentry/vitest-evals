@@ -1,0 +1,18 @@
+{
+  "name": "@demo/demo-ai-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "evals": "node ./scripts/run-evals.mjs",
+    "evals:verbose": "node ./scripts/run-evals.mjs -v",
+    "evals:fail": "node ./scripts/run-evals.mjs --fail"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@demo/foobar": "workspace:*",
+    "@vitest-evals/harness-ai-sdk": "workspace:*",
+    "ai": "^6.0.141",
+    "vitest-evals": "workspace:*",
+    "zod": "^4.3.6"
+  }
+}

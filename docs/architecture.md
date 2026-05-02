@@ -2,125 +2,173 @@
 
 ## Overview
 
-vitest-evals is built on top of Vitest to provide a specialized testing framework for evaluating AI/LLM outputs. It extends Vitest's capabilities with custom scoring functions and reporting.
+`vitest-evals` is organized around a harness-first execution model.
+Vitest still runs the suite, but the primary contract is no longer
+`input -> task -> scorer`. The primary contract is:
 
-## Core Components
+- one explicit `harness` per suite
+- named eval tests that call the instrumented `run(input)` fixture
+- one normalized `HarnessRun` per eval test
+- optional automatic `judges`
+- optional explicit Vitest assertions over the returned result and session
 
-### 1. Evaluation Framework (`src/index.ts`)
+Legacy scorer-first support still exists, but it lives under
+`vitest-evals/legacy` and under `packages/vitest-evals/src/legacy/...`.
 
-The heart of the system provides two main APIs:
+## Monorepo Layout
 
-**describeEval()** - Creates test suites for batch evaluation:
-- Accepts data function, task function, and scorers
-- Runs multiple test cases automatically
-- Integrates with Vitest's test runner
-
-**toEval matcher** - Individual evaluation within tests:
-- Extends Vitest's expect API
-- Evaluates single input/output pairs
-- Returns pass/fail based on score threshold
-
-```typescript
-export function describeEval(
-  name: string,
-  options: {
-    data: () => Promise<Array<{ input: string } & Record<string, any>>>;
-    task: TaskFn;
-    scorers: ScoreFn<any>[];
-    threshold?: number;
-  }
-)
+```text
+packages/
+  vitest-evals/
+    src/
+      harness.ts
+      index.ts
+      reporter.ts
+      judges/
+      legacy/
+  harness-ai-sdk/
+  harness-pi-ai/
+  foobar/
+apps/
+  demo-pi/
 ```
 
-### 2. Scorer System
+## Core Package
 
-Scorers are the pluggable evaluation functions that determine output quality.
+### `packages/vitest-evals/src/harness.ts`
 
-#### Scorer Interface
+Defines the normalized runtime model:
 
-```typescript
-type ScoreFn<TOptions extends BaseScorerOptions = BaseScorerOptions> = (
-  opts: TOptions,
-) => Promise<Score> | Score;
+- `Harness`
+- `HarnessRun`
+- `NormalizedSession`
+- `ToolCallRecord`
+- `UsageSummary`
+- helper accessors such as `toolCalls(session)` and `assistantMessages(session)`
 
-interface BaseScorerOptions {
-  input: string;
-  output: string;
-  toolCalls?: ToolCall[];
-}
+The normalized session is intentionally JSON-serializable so it can be
+persisted, attached to errors, and emitted by reporters without custom
+serialization logic.
 
-type Score = {
-  score: number | null;
-  metadata?: {
-    rationale?: string;
-    output?: string;
-  };
-};
-```
+### `packages/vitest-evals/src/index.ts`
 
-#### Built-in Scorers
-- **ToolCallScorer** (`src/scorers/toolCallScorer.ts`): Evaluates function/tool call accuracy
-- More scorers can be added by implementing the ScoreFn interface
+Defines the harness-first public API:
 
-### 3. Type System (`src/index.ts`)
+- `describeEval(...)`
+- `expect(...).toSatisfyJudge(...)`
+- harness/judge types
+- exports for built-in judges and harness helpers
 
-Defines the core types:
-- `TaskResult`: Flexible output format supporting plain strings or structured results
-- `ScoreFn`: Function signature for evaluation logic
-- `Score`: Standardized scoring output
-- `ToolCall`: Comprehensive tool call structure supporting multiple providers
+The root `describeEval(...)` executes the harness exactly once per eval test.
+Automatic judges and the per-test assertion callback reuse the same normalized
+run.
 
-### 4. Custom Reporter (`src/reporter.ts`)
+### `packages/vitest-evals/src/judges/*`
 
-A Vitest reporter that:
-- Displays evaluation scores alongside test results
-- Provides visual feedback for score ranges
-- Integrates seamlessly with Vitest's output
+Contains root judge helpers such as:
 
-## Data Flow
+- `ToolCallJudge`
+- `StructuredOutputJudge`
 
-1. **Test Execution**: Vitest runs evaluation tests via `describeEval()` or `toEval` matcher
-2. **Task Execution**: Task function processes input and returns output (string or TaskResult)
-3. **Scorer Application**: Each scorer evaluates the output against test data
-4. **Score Aggregation**: Multiple scorer results are averaged
-5. **Threshold Check**: Average score compared against threshold
-6. **Reporting**: Custom reporter displays results with scores and metadata
+These are judge-shaped adapters over the legacy comparison logic so new suites
+can stay on the harness-first surface while older matching behavior remains
+available.
+
+### `packages/vitest-evals/src/legacy/*`
+
+Contains the compatibility layer for scorer-first suites:
+
+- legacy `describeEval(...)`
+- `toEval(...)`
+- `evaluate(...)`
+- scorer implementations and their tests
+
+This keeps the root package surface clean without deleting older workflows.
+
+### `packages/vitest-evals/src/reporter.ts`
+
+Provides the custom Vitest reporter that reads normalized run metadata from
+`task.meta` and renders:
+
+- per-test pass/fail status
+- duration
+- usage summaries
+- tool activity
+- judge sub-results
+- richer failure diagnostics
+
+## Harness Lifecycle
+
+For each eval test in a harness-backed suite:
+
+1. `describeEval(...)` configures one instrumented harness for the suite.
+2. The suite callback registers named eval tests.
+3. The eval test calls `run(input)` at the point execution should happen.
+4. The configured harness runs the system under test exactly once.
+5. The harness returns a `HarnessRun` with `run.output`, `run.session`,
+   `usage`, `timings`, `artifacts`, and `errors`.
+6. Core stores that run on `task.meta.harness` for the reporter.
+7. Automatic suite-level judges run against the normalized run/session pair.
+8. The eval test asserts on the same returned result and session.
+9. The reporter renders the recorded metadata without re-executing the harness.
+
+## First-Party Harness Packages
+
+### `@vitest-evals/harness-ai-sdk`
+
+Adapts `ai-sdk`-style results into the normalized run/session shape. It can
+derive output, usage, messages, tool calls, and errors from common AI SDK
+result objects, while still allowing custom `run`, `session`, `output`, and
+`usage` overrides.
+
+### `@vitest-evals/harness-pi-ai`
+
+Adapts `pi-ai` style agents into the same normalized shape. It also owns the
+standard tool replay/VCR behavior for opt-in tools, including:
+
+- `auto`
+- `strict`
+- `record`
+- `off`
+
+Replay metadata becomes part of the normalized tool record so the reporter can
+surface it.
 
 ## Extension Points
 
-### Adding New Scorers
+### New Harnesses
 
-1. Create scorer file in `src/scorers/` using camelCase naming
-2. Implement the `ScoreFn` interface
-3. Export from `src/scorers/index.ts` and main index
-4. Write comprehensive tests in `src/scorers/[name].test.ts`
+New runtime integrations should be implemented as thin adapter packages that:
 
-### Integration with AI SDKs
+- execute the target runtime through its normal seam
+- capture messages, tool calls, usage, timings, and errors
+- normalize them into `HarnessRun`
+- avoid inventing harness-specific assertion or reporter behavior in userland
 
-The framework is designed to work with various AI SDKs:
-- Vercel AI SDK (see `ai-sdk-integration.test.ts`)
-- OpenAI SDK
-- Anthropic SDK
-- Any system producing text/structured output
+### New Judges
 
-## Design Principles
+Root-level custom evaluation logic should generally be written as judges over
+normalized run/session data:
 
-1. **Flexibility**: Support multiple output formats and scoring approaches
-2. **Type Safety**: Full TypeScript support with strict typing
-3. **Testability**: Scorers themselves are easily testable
-4. **Compatibility**: Works with existing Vitest ecosystem
-5. **Extensibility**: Easy to add new scorers and integrations
+```ts
+import type { JudgeFn } from "vitest-evals";
 
-## Performance Considerations
+export const RefundToolJudge: JudgeFn<{ expectedTools: string[] }> = async ({
+  expectedTools,
+  toolCalls,
+}) => ({
+  score: expectedTools.every(
+    (name, index) => toolCalls[index]?.name === name,
+  )
+    ? 1
+    : 0,
+  metadata: {
+    rationale: `Expected ${expectedTools.join(" -> ")}`,
+  },
+});
+```
 
-- Scorers can be sync or async to handle API calls
-- Batch evaluation support for efficiency
-- Minimal overhead on top of Vitest
-- Lazy loading of scorers when needed
+### Legacy Support
 
-## Error Handling
-
-- Graceful degradation when scorers fail
-- Clear error messages for debugging
-- Type-safe error boundaries
-- Preserves Vitest error reporting
+If you need the older scorer-first model, keep changes isolated to
+`packages/vitest-evals/src/legacy/...` and document them as legacy behavior.

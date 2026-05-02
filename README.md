@@ -1,281 +1,161 @@
 # vitest-evals
 
-End-to-end evaluation framework for AI agents, built on Vitest.
+Monorepo for the explicit-run `vitest-evals` shape:
 
-## Installation
+- `packages/vitest-evals`: core suite API, judges, normalized harness/session
+  types, reporter, and legacy compatibility exports
+- `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
+- `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
+- `packages/foobar`: example package with a small refund agent
+- `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace
+  packages
+- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace
+  packages
 
-```shell
-npm install -D vitest-evals
-```
+## Workspace Layout
 
-## Quick Start
-
-```javascript
-import { describeEval } from "vitest-evals";
-
-describeEval("deploy agent", {
-  data: async () => [
-    { input: "Deploy the latest release to production", expected: "deployed" },
-    { input: "Roll back the last deploy", expected: "rolled back" },
-  ],
-  task: async (input) => {
-    const response = await myAgent.run(input);
-    return response;
-  },
-  scorers: [
-    async ({ output, expected }) => ({
-      score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
-    }),
-  ],
-  threshold: 0.8,
-});
-```
-
-## Tasks
-
-Tasks process inputs and return outputs. Two formats are supported:
-
-```javascript
-// Simple: just return a string
-const task = async (input) => "response";
-
-// With tool tracking: return a TaskResult
-const task = async (input) => ({
-  result: "response",
-  toolCalls: [
-    { name: "search", arguments: { query: "..." }, result: {...} }
-  ]
-});
-```
-
-## Test Data
-
-Each test case requires an `input` field. Use `name` to give tests a descriptive label:
-
-```javascript
-data: async () => [
-  { name: "simple deploy", input: "Deploy to staging" },
-  { name: "deploy with rollback", input: "Deploy to prod, roll back if errors" },
-],
-```
-
-Additional fields (like `expected`, `expectedTools`) are passed through to scorers.
-
-## Lifecycle Hooks
-
-Use `beforeEach` and `afterEach` for setup and teardown:
-
-```javascript
-describeEval("agent with database", {
-  beforeEach: async () => {
-    await db.seed();
-  },
-  afterEach: async () => {
-    await db.clean();
-  },
-  data: async () => [{ input: "Find recent errors" }],
-  task: myAgentTask,
-  scorers: [async ({ output }) => ({ score: output.includes("error") ? 1.0 : 0.0 })],
-});
-```
-
-## Scorers
-
-Scorers evaluate outputs and return a score (0-1). Use built-in scorers or create your own.
-
-### ToolCallScorer
-
-Evaluates if the expected tools were called with correct arguments.
-
-```javascript
-import { ToolCallScorer } from "vitest-evals";
-
-describeEval("tool usage", {
-  data: async () => [
-    {
-      input: "Find Italian restaurants",
-      expectedTools: [
-        { name: "search", arguments: { type: "restaurant" } },
-        { name: "filter", arguments: { cuisine: "italian" } },
-      ],
-    },
-  ],
-  task: myTask,
-  scorers: [ToolCallScorer()],
-});
-
-// Strict order and parameters
-scorers: [ToolCallScorer({ ordered: true, params: "strict" })];
-
-// Flexible evaluation
-scorers: [ToolCallScorer({ requireAll: false, allowExtras: false })];
-```
-
-**Default behavior:**
-
-- Strict parameter matching (exact equality required)
-- Any order allowed
-- Extra tools allowed
-- All expected tools required
-
-### StructuredOutputScorer
-
-Evaluates if the output matches expected structured data (JSON).
-
-```javascript
-import { StructuredOutputScorer } from "vitest-evals";
-
-describeEval("query generation", {
-  data: async () => [
-    {
-      input: "Show me errors from today",
-      expected: {
-        dataset: "errors",
-        query: "",
-        sort: "-timestamp",
-        timeRange: { statsPeriod: "24h" },
-      },
-    },
-  ],
-  task: myTask,
-  scorers: [StructuredOutputScorer()],
-});
-
-// Fuzzy matching
-scorers: [StructuredOutputScorer({ match: "fuzzy" })];
-
-// Custom validation
-scorers: [
-  StructuredOutputScorer({
-    match: (expected, actual, key) => {
-      if (key === "age") return actual >= 18 && actual <= 100;
-      return expected === actual;
-    },
-  }),
-];
-```
-
-### Custom Scorers
-
-```javascript
-// Inline scorer
-const LengthScorer = async ({ output }) => ({
-  score: output.length > 50 ? 1.0 : 0.0,
-});
-
-// TypeScript scorer with custom options
-import { type ScoreFn, type BaseScorerOptions } from "vitest-evals";
-
-interface CustomOptions extends BaseScorerOptions {
-  minLength: number;
-}
-
-const TypedScorer: ScoreFn<CustomOptions> = async (opts) => ({
-  score: opts.output.length >= opts.minLength ? 1.0 : 0.0,
-});
-```
-
-## AI SDK Integration
-
-See [`src/ai-sdk-integration.test.ts`](src/ai-sdk-integration.test.ts) for a complete example with the Vercel AI SDK.
-
-Transform provider responses to our format:
-
-```javascript
-const { text, steps } = await generateText({
-  model: openai("gpt-4o"),
-  prompt: input,
-  tools: { myTool: myToolDefinition },
-});
-
-return {
-  result: text,
-  toolCalls: steps
-    .flatMap((step) => step.toolCalls)
-    .map((call) => ({
-      name: call.toolName,
-      arguments: call.args,
-    })),
-};
-```
-
-## Advanced Usage
-
-### Using autoevals
-
-For evaluation using the autoevals library:
-
-```javascript
-import { Factuality, ClosedQA } from "autoevals";
-
-scorers: [
-  Factuality,
-  ClosedQA.partial({
-    criteria: "Does the answer mention Paris?",
-  }),
-];
-```
-
-### Skip Tests Conditionally
-
-```javascript
-describeEval("gpt-4 tests", {
-  skipIf: () => !process.env.OPENAI_API_KEY,
-  // ...
-});
-```
-
-### Existing Test Suites
-
-For integration with existing Vitest test suites, you can use the `.toEval()` matcher:
-
-> **Deprecated**: The `.toEval()` helper is deprecated. Use `describeEval()` instead for better test organization and multiple scorers support.
-
-```javascript
-import "vitest-evals";
-
-test("capital check", () => {
-  const simpleFactuality = async ({ output, expected }) => ({
-    score: output.toLowerCase().includes(expected.toLowerCase()) ? 1.0 : 0.0,
-  });
-
-  expect("What is the capital of France?").toEval(
-    "Paris",
-    answerQuestion,
-    simpleFactuality,
-    0.8
-  );
-});
-```
-
-## Configuration
-
-### Separate Eval Configuration
-
-Create `vitest.evals.config.ts`:
-
-```javascript
-import { defineConfig } from "vitest/config";
-import defaultConfig from "./vitest.config";
-
-export default defineConfig({
-  ...defaultConfig,
-  test: {
-    ...defaultConfig.test,
-    include: ["src/**/*.eval.{js,ts}"],
-  },
-});
-```
-
-Run evals separately:
-
-```shell
-vitest --config=vitest.evals.config.ts
+```text
+packages/
+  vitest-evals/
+  harness-ai-sdk/
+  harness-pi-ai/
+  foobar/
+apps/
+  demo-ai-sdk/
+  demo-pi/
 ```
 
 ## Development
 
-```shell
+```sh
 pnpm install
+pnpm typecheck
 pnpm test
+pnpm evals
+pnpm evals -- -v
+pnpm evals -- -vv
+pnpm evals -- -vvv
+pnpm evals -- -vvvv
+pnpm evals:verbose
+pnpm build
 ```
+
+Verbosity tiers for eval output:
+
+- `-v` or `-vv`: tool summary lines
+- `-vvv`: tool headers include summarized arguments
+- `-vvvv`: adds raw tool payload lines (`raw in`, `raw out`, `raw err`)
+
+The root Vitest config is intentionally small. Package name resolution comes
+from the workspace `tsconfig` paths via `vite-tsconfig-paths`, and package
+boundaries are expressed in package manifests rather than hard-coded alias
+tables.
+
+## Example
+
+The `apps/demo-pi` app shows the intended explicit-run flow:
+
+```ts
+import { createRefundAgent } from "@demo/foobar";
+import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import {
+  describeEval,
+  ToolCallJudge,
+  namedJudge,
+  toolCalls,
+} from "vitest-evals";
+
+const FactualityJudge = namedJudge(
+  "FactualityJudge",
+  async ({ output }) => {
+    const answer = output;
+    const verdict = await judgeFactuality(answer);
+
+    return {
+      score: verdict.score,
+      metadata: {
+        rationale: verdict.rationale,
+      },
+    };
+  },
+);
+
+describeEval(
+  "demo pi refund agent",
+  {
+    harness: piAiHarness({
+      createAgent: () => createRefundAgent(),
+    }),
+    judges: [ToolCallJudge()],
+  },
+  (it) => {
+    it.for([
+      {
+        name: "approves refundable invoice",
+        input: "Refund invoice inv_123",
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
+      },
+    ])("$name", async ({ input, ...metadata }, { run }) => {
+      const result = await run(input, {
+        metadata,
+      });
+
+      expect(result.output).toMatchObject({
+        status: metadata.expectedStatus,
+      });
+      await expect(result).toSatisfyJudge(FactualityJudge);
+      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+        metadata.expectedTools,
+      );
+    });
+  },
+);
+```
+
+Harness-backed suites stay close to plain Vitest:
+
+- `describeEval(...)` binds a suite-level harness
+- tests call `run(...)` explicitly
+- ordinary `expect(...)` assertions stay first-class
+- judges layer in through `expect(...).toSatisfyJudge(...)`
+- per-run judge parameters should usually live under `metadata`
+- reporter output, replay, usage, and tool traces come from the normalized run
+
+Built-in judges like `StructuredOutputJudge()` are still available for
+deterministic contract checks, but the more realistic explicit-judge path is a
+custom factuality or rubric judge over `output`, with `JudgeContext` available
+when the judge needs richer run/session data.
+
+Tool replay is available for opt-in tools in the first-party harnesses.
+Configure it globally in Vitest and then mark individual tools with
+`replay: true`:
+
+```ts
+import tsconfigPaths from "vite-tsconfig-paths";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  plugins: [tsconfigPaths()],
+  test: {
+    include: [
+      "packages/**/*.test.ts",
+      "packages/**/*.eval.ts",
+      "apps/**/*.test.ts",
+      "apps/**/*.eval.ts",
+    ],
+    env: {
+      VITEST_EVALS_REPLAY_MODE: "auto",
+      VITEST_EVALS_REPLAY_DIR: ".vitest-evals/recordings",
+    },
+  },
+});
+```
+
+`auto` replays when a recording exists and writes a new one otherwise. `strict`
+errors on missing recordings. Recordings are stored under
+`.vitest-evals/recordings/<tool-name>/`.
+
+`pnpm evals` fans out to each workspace package or app that exposes an `evals`
+script. The demo apps expect provider keys in `.env` or `.env.local`. The
+intentional failing examples remain under the `evals:fail` scripts.
