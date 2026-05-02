@@ -11,6 +11,7 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "prepare": "simple-git-hooks",
+    "release:check": "node ./scripts/check-release-config.mjs",
     "typecheck": "tsc --noEmit",
     "test": "dotenv -e .env -e .env.local -- vitest run packages --config=./vitest.config.ts --reporter=./packages/vitest-evals/src/reporter.ts",
     "test:watch": "dotenv -e .env -e .env.local -- vitest packages --config=./vitest.config.ts --reporter=./packages/vitest-evals/src/reporter.ts",

@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Check release config
+        run: pnpm release:check
+
       - name: Run linter
         run: pnpm lint
 

@@ -3,3 +3,11 @@ changelogPolicy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
 targets:
   - name: npm
+    id: "vitest-evals"
+    includeNames: /^vitest-evals-\d.*\.tgz$/
+  - name: npm
+    id: "@vitest-evals/harness-ai-sdk"
+    includeNames: /^vitest-evals-harness-ai-sdk-\d.*\.tgz$/
+  - name: npm
+    id: "@vitest-evals/harness-pi-ai"
+    includeNames: /^vitest-evals-harness-pi-ai-\d.*\.tgz$/
