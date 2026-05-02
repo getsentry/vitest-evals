@@ -165,7 +165,7 @@ export class FoobarRefundAgent {
   }
 
   async run(input: string, runtime: FoobarRuntime) {
-    this.agent.reset();
+    await this.agent.reset();
     this.agent.state.systemPrompt = REFUND_SYSTEM_PROMPT;
     this.agent.state.model = getModel("anthropic", this.model);
     this.agent.state.thinkingLevel = "off";
