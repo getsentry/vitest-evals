@@ -651,6 +651,226 @@ test("preserves explicit null runtime tool results", async () => {
   ]);
 });
 
+test("marks step-derived tool messages as errors when the tool call failed", async () => {
+  const harness = aiSdkHarness({
+    task: async () => ({
+      text: "done",
+      steps: [
+        {
+          stepNumber: 0,
+          model: {
+            provider: "openai",
+            modelId: "gpt-4o-mini",
+          },
+          text: "",
+          content: [],
+          reasoningText: undefined,
+          finishReason: "stop",
+          rawFinishReason: "stop",
+          toolCalls: [
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+              invalid: true,
+              error: "missing invoice context",
+            },
+          ],
+          toolResults: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+              output: {
+                message: "missing invoice context",
+              },
+            },
+          ],
+          usage: {
+            inputTokens: 5,
+            inputTokenDetails: {
+              noCacheTokens: 5,
+            },
+            outputTokens: 2,
+            outputTokenDetails: {
+              textTokens: 2,
+            },
+            totalTokens: 7,
+          },
+          response: {
+            messages: [],
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(toolCalls(run.session)).toMatchObject([
+    {
+      id: "call_lookup",
+      name: "lookupInvoice",
+      error: {
+        message: "missing invoice context",
+      },
+    },
+  ]);
+  expect(run.session.messages).toHaveLength(4);
+  expect(run.session.messages).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: {
+        message: "missing invoice context",
+      },
+      metadata: {
+        name: "lookupInvoice",
+        toolCallId: "call_lookup",
+        isError: true,
+      },
+    },
+    {
+      role: "assistant",
+      content: "done",
+    },
+  ]);
+});
+
+test("keeps runtime-only tool calls when SDK steps are also present", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string, DemoMetadata>,
+    task: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_prefetch",
+        },
+        {
+          toolCallId: "call_prefetch",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        text: "approved",
+        steps: [
+          {
+            stepNumber: 0,
+            model: {
+              provider: "openai",
+              modelId: "gpt-4o-mini",
+            },
+            text: "approved",
+            content: [],
+            reasoningText: undefined,
+            finishReason: "stop",
+            rawFinishReason: "stop",
+            toolCalls: [],
+            toolResults: [],
+            usage: {
+              inputTokens: 5,
+              inputTokenDetails: {
+                noCacheTokens: 5,
+              },
+              outputTokens: 2,
+              outputTokenDetails: {
+                textTokens: 2,
+              },
+              totalTokens: 7,
+            },
+            response: {
+              messages: [],
+            },
+          },
+        ],
+      };
+    },
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(run.session)).toMatchObject([
+    {
+      id: "call_prefetch",
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_prefetch",
+      },
+      result: {
+        invoiceId: "inv_prefetch",
+        refundable: true,
+      },
+    },
+  ]);
+  expect(run.session.messages).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      content: "approved",
+    },
+    {
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "call_prefetch",
+          name: "lookupInvoice",
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: {
+        invoiceId: "inv_prefetch",
+        refundable: true,
+      },
+      metadata: {
+        name: "lookupInvoice",
+        toolCallId: "call_prefetch",
+        isError: false,
+      },
+    },
+  ]);
+});
+
 test("creates a fresh agent for each explicit run", async () => {
   const run = vi.fn(async () => ({
     object: {

@@ -851,13 +851,21 @@ function resolveSession(
       content: normalizeContent(input),
     },
   ];
+  const stepToolCallIds = new Set<string>();
 
   for (const step of steps) {
+    for (const toolCall of step.toolCalls ?? []) {
+      stepToolCallIds.add(toolCall.toolCallId);
+    }
     messages.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
-  if (steps.length === 0 && runtimeToolCalls.length > 0) {
-    messages.push(...normalizeRuntimeToolCalls(runtimeToolCalls));
+  const unmatchedRuntimeToolCalls = runtimeToolCalls.filter(
+    (call) => !stepToolCallIds.has(call.id),
+  );
+
+  if (unmatchedRuntimeToolCalls.length > 0) {
+    messages.push(...normalizeRuntimeToolCalls(unmatchedRuntimeToolCalls));
   }
 
   if (
@@ -975,6 +983,9 @@ function normalizeStep(
   const normalizedCalls = (step.toolCalls ?? []).map((toolCall) =>
     normalizeToolCall(toolCall, toolResultsById, replayMetadataByToolCallId),
   );
+  const normalizedCallsById = new Map(
+    normalizedCalls.map((toolCall) => [toolCall.id, toolCall]),
+  );
   const assistantMetadata = normalizeMetadata({
     stepNumber: step.stepNumber,
     finishReason: step.finishReason,
@@ -1004,6 +1015,7 @@ function normalizeStep(
       metadata: normalizeMetadata({
         name: toolResult.toolName,
         toolCallId: toolResult.toolCallId,
+        isError: Boolean(normalizedCallsById.get(toolResult.toolCallId)?.error),
         preliminary: toolResult.preliminary,
         providerExecuted: toolResult.providerExecuted,
         title: toolResult.title,
