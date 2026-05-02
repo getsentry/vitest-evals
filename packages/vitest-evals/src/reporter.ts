@@ -542,6 +542,10 @@ export default class DefaultEvalReporter extends VerboseReporter {
       return 2;
     }
 
+    if (toolDetails === false) {
+      return DEFAULT_TOOL_DETAIL_LEVEL;
+    }
+
     const levelFromEnv = Number.parseInt(
       process.env[TOOL_DETAIL_LEVEL_ENV] ?? "",
       10,

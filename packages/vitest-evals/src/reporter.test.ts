@@ -327,6 +327,58 @@ describe("DefaultEvalReporter", () => {
     );
   });
 
+  test("respects explicit toolDetails=false over environment flags", () => {
+    vi.stubEnv("VITEST_EVALS_TOOL_DETAILS", "1");
+    vi.stubEnv("VITEST_EVALS_TOOL_DETAILS_LEVEL", "3");
+
+    try {
+      const { reporter, logger } = createDetailedReporter(false);
+
+      reporter.onTestCaseResult(
+        createTestCase({
+          harness: {
+            name: "pi-ai",
+            run: {
+              output: {
+                status: "approved",
+                refundId: "rf_inv_123",
+              },
+              session: {
+                messages: [
+                  {
+                    role: "assistant",
+                    content: "approved",
+                    toolCalls: [
+                      {
+                        name: "lookupInvoice",
+                        durationMs: 6,
+                        result: {
+                          invoiceId: "inv_123",
+                          refundable: true,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              usage: {
+                totalTokens: 12,
+              },
+              errors: [],
+            },
+          },
+        }) as any,
+      );
+
+      expect(logger.log).toHaveBeenCalledTimes(1);
+      expect(
+        stripVTControlCharacters(logger.log.mock.calls[0][0]),
+      ).not.toContain("tool    lookupInvoice");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("prefers token counts over response size when tool usage exists", () => {
     const { reporter, logger } = createDetailedReporter(2);
 
