@@ -780,7 +780,7 @@ async function withInstrumentedAgentTools<
         const call = {
           name: tool.name,
           arguments: rawArgs,
-          error: serializeToolError(error),
+          error: serializeError(error),
           startedAt: startedAt.toISOString(),
           finishedAt: finishedAt.toISOString(),
           durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -1033,7 +1033,7 @@ function createRuntime<
           const call = {
             name: toolName,
             arguments: args,
-            error: serializeToolError(error),
+            error: serializeError(error),
             startedAt: startedAt.toISOString(),
             finishedAt: finishedAt.toISOString(),
             durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -1306,18 +1306,4 @@ async function executeToolWithReplay<
     execute: tool.execute,
     replay: tool.replay,
   });
-}
-
-function serializeToolError(error: unknown) {
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      type: error.name,
-    };
-  }
-
-  return {
-    message: String(error),
-    type: "Error",
-  };
 }
