@@ -614,6 +614,68 @@ test("supports normalize.output as a low-level escape hatch", async () => {
   });
 });
 
+test("applies normalize overrides to HarnessRun-shaped results", async () => {
+  const normalizedHarness = piAiHarness({
+    createAgent: () => ({ id: "refund-agent" }),
+    run: async () => ({
+      session: {
+        messages: [
+          {
+            role: "assistant" as const,
+            content: {
+              status: "denied",
+            },
+          },
+        ],
+      },
+      output: {
+        status: "denied",
+      },
+      usage: {
+        totalTokens: 7,
+      },
+      errors: [],
+    }),
+    normalize: {
+      output: () => ({
+        status: "approved",
+      }),
+      session: () => ({
+        messages: [
+          {
+            role: "assistant",
+            content: {
+              status: "approved",
+            },
+          },
+        ],
+      }),
+    },
+  });
+
+  const result = await normalizedHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(result.session.messages).toEqual([
+    {
+      role: "assistant",
+      content: {
+        status: "approved",
+      },
+    },
+  ]);
+  expect(result.usage.totalTokens).toBe(7);
+});
+
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
     createAgent: () => ({ id: "refund-agent" }),

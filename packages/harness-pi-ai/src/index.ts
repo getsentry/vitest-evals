@@ -419,7 +419,7 @@ async function executePiHarnessRun<
         }),
     );
 
-    if (isHarnessRun(result)) {
+    if (isHarnessRun(result) && !hasResultOverrides(options)) {
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
@@ -499,6 +499,22 @@ async function resolveAgent<
 
   throw new Error(
     "piAiHarness requires either an agent instance or a createAgent() function.",
+  );
+}
+
+function hasResultOverrides<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends PiAiToolset<TInput, TMetadata>,
+>(options: PiAiHarnessRunOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
+  return Boolean(
+    options.normalize?.output ??
+      options.normalize?.session ??
+      options.normalize?.usage ??
+      options.normalize?.timings ??
+      options.normalize?.errors,
   );
 }
 
