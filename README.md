@@ -51,6 +51,18 @@ tables.
 Pull request CI runs the same core safety checks: release config validation,
 lint, typecheck, the CI test suite, and the workspace build.
 
+## Releases
+
+Use the manual Release workflow for stable releases. Select `patch`, `minor`,
+or `major` for the normal version bump.
+
+For a preview release that should not become the main stable version, set
+`prerelease` to `true` and leave `prerelease_id` as `beta` unless you want an
+`rc` or `alpha` line. From `0.8.0`, `bump=minor` produces `0.9.0-beta.0` and
+`bump=major` produces `1.0.0-beta.0`; running prerelease again from
+`1.0.0-beta.0` produces `1.0.0-beta.1`. Craft publishes npm prereleases under a
+prerelease dist-tag so the stable `latest` line is not moved.
+
 ## Example
 
 The `apps/demo-pi` app shows the intended explicit-run flow:
