@@ -6,6 +6,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "source": "./src/index.ts",
