@@ -63,19 +63,17 @@ export type HarnessRun = {
   errors: Array<Record<string, JsonValue>>;
 };
 
+/** Optional provider-facing hints for harness prompt calls. */
 export type HarnessPromptOptions = {
   system?: string;
   metadata?: Record<string, JsonValue>;
 };
 
+/** Provider-agnostic prompt seam that judges can reuse from a harness. */
 export type HarnessPrompt = (
   input: string,
   options?: HarnessPromptOptions,
 ) => Promise<string>;
-
-export type HarnessRuntime = {
-  prompt: HarnessPrompt;
-};
 
 export type HarnessRunError = Error & {
   vitestEvalsRun: HarnessRun;
@@ -100,7 +98,8 @@ export type Harness<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
-  prompt?: HarnessPrompt;
+  /** Prompt seam reused by LLM-backed judges. */
+  prompt: HarnessPrompt;
   run: (
     input: TInput,
     context: HarnessContext<TMetadata>,

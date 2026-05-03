@@ -67,9 +67,18 @@ const runSpy = vi.fn(
   },
 );
 
+const promptSpy = vi.fn(async (input: string) => `judge prompt: ${input}`);
+const customJudgePromptSpy = vi.fn(async (_input: string) => ({ score: 1 }));
+
 const harness: Harness<string, RefundEvalMetadata> = {
   name: "pi-ai",
+  prompt: promptSpy,
   run: runSpy,
+};
+
+const customHarness = {
+  ...harness,
+  judgePrompt: customJudgePromptSpy,
 };
 
 const judgeSpy = vi.fn(
@@ -86,6 +95,8 @@ const thresholdJudgeSpy = vi.fn(
 
 beforeEach(() => {
   runSpy.mockClear();
+  promptSpy.mockClear();
+  customJudgePromptSpy.mockClear();
   judgeSpy.mockClear();
   thresholdJudgeSpy.mockClear();
 });
@@ -181,6 +192,78 @@ describeEval(
 );
 
 describeEval(
+  "harness mode with automatic judge prompt",
+  {
+    harness,
+    judges: [
+      async ({
+        harness: configuredHarness,
+        metadata,
+      }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
+        const promptOutput = await configuredHarness.prompt("score refund", {
+          system: "grade the refund decision",
+        });
+
+        return {
+          score:
+            configuredHarness === harness &&
+            metadata.expectedStatus === "approved" &&
+            promptOutput === "judge prompt: score refund"
+              ? 1
+              : 0,
+        };
+      },
+    ],
+  },
+  (it) => {
+    it("passes the configured harness prompt to automatic judges", async ({
+      run,
+    }) => {
+      await run("Refund invoice inv_123", {
+        metadata: {
+          name: "refund request with prompt judge",
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(promptSpy).toHaveBeenCalledWith("score refund", {
+        system: "grade the refund decision",
+      });
+    });
+  },
+);
+
+describeEval(
+  "harness mode with custom harness judge helpers",
+  {
+    harness: customHarness,
+    judges: [
+      async ({ harness: configuredHarness }) => {
+        const verdict = await configuredHarness.judgePrompt("score refund");
+
+        return {
+          score: verdict.score,
+        };
+      },
+    ],
+  },
+  (it) => {
+    it("preserves the configured harness subtype for judges", async ({
+      run,
+    }) => {
+      await run("Refund invoice inv_123", {
+        metadata: {
+          name: "refund request with typed harness helper",
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(customJudgePromptSpy).toHaveBeenCalledWith("score refund");
+    });
+  },
+);
+
+describeEval(
   "harness mode with explicit suite judge threshold",
   {
     harness,
@@ -270,6 +353,156 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
       ],
     });
   });
+
+  it("reuses the suite harness and metadata for explicit judges", async ({
+    run,
+  }) => {
+    const result = await run("Refund invoice inv_123", {
+      metadata: {
+        name: "refund request with explicit prompt judge",
+        expectedStatus: "approved",
+      },
+    });
+    const explicitJudge = vi.fn(
+      async ({
+        harness: configuredHarness,
+        metadata,
+      }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
+        const promptOutput = await configuredHarness.prompt(
+          "score explicit refund",
+        );
+
+        return {
+          score:
+            configuredHarness === harness &&
+            metadata.expectedStatus === "approved" &&
+            promptOutput === "judge prompt: score explicit refund"
+              ? 1
+              : 0,
+        };
+      },
+    );
+
+    await expect(result).toSatisfyJudge(explicitJudge);
+
+    expect(explicitJudge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        harness,
+        metadata: {
+          expectedStatus: "approved",
+          name: "refund request with explicit prompt judge",
+        },
+      }),
+    );
+    expect(promptSpy).toHaveBeenCalledWith("score explicit refund");
+  });
+
+  it("uses the current test run context for raw explicit judge values", async ({
+    run,
+  }) => {
+    const result = await run("Refund invoice inv_123", {
+      metadata: {
+        name: "refund request with contextual raw judge",
+        expectedStatus: "approved",
+      },
+    });
+    const explicitJudge = vi.fn(
+      async ({
+        harness: configuredHarness,
+        inputValue,
+        metadata,
+        output,
+        run: judgeRun,
+        session,
+        toolCalls: judgeToolCalls,
+      }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
+        const promptOutput = await configuredHarness.prompt(inputValue);
+
+        return {
+          score:
+            configuredHarness === harness &&
+            output === JSON.stringify(result.output) &&
+            judgeRun === result &&
+            session === result.session &&
+            judgeToolCalls[0]?.name === "lookupInvoice" &&
+            metadata.expectedStatus === "approved" &&
+            promptOutput === "judge prompt: Refund invoice inv_123"
+              ? 1
+              : 0,
+        };
+      },
+    );
+
+    await expect(result.output).toSatisfyJudge(explicitJudge);
+
+    expect(explicitJudge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        harness,
+        inputValue: "Refund invoice inv_123",
+        output: JSON.stringify(result.output),
+        run: result,
+        session: result.session,
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+            arguments: {
+              invoiceId: "inv_123",
+            },
+          },
+        ],
+        metadata: {
+          expectedStatus: "approved",
+          name: "refund request with contextual raw judge",
+        },
+      }),
+    );
+  });
+
+  it("prefers exact output object context over the latest run fallback", async ({
+    run,
+  }) => {
+    const first = await run("Refund invoice inv_123", {
+      metadata: {
+        name: "first raw judge context",
+        expectedStatus: "approved",
+      },
+    });
+
+    await run("Refund invoice inv_456", {
+      metadata: {
+        name: "second raw judge context",
+        expectedStatus: "rejected",
+      },
+    });
+
+    const explicitJudge = vi.fn(
+      async ({
+        inputValue,
+        metadata,
+        run: judgeRun,
+      }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => ({
+        score:
+          inputValue === "Refund invoice inv_123" &&
+          metadata.name === "first raw judge context" &&
+          judgeRun === first
+            ? 1
+            : 0,
+      }),
+    );
+
+    await expect(first.output).toSatisfyJudge(explicitJudge);
+
+    expect(explicitJudge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputValue: "Refund invoice inv_123",
+        metadata: {
+          expectedStatus: "approved",
+          name: "first raw judge context",
+        },
+        run: first,
+      }),
+    );
+  });
 });
 
 describeEval(
@@ -277,6 +510,7 @@ describeEval(
   {
     harness: {
       name: "flaky-harness",
+      prompt: promptSpy,
       run: vi
         .fn<(input: string, context: HarnessContext) => Promise<HarnessRun>>()
         .mockResolvedValueOnce({
@@ -327,7 +561,13 @@ test("toSatisfyJudge reuses normalized harness run data", async () => {
     }),
   );
 
-  await expect(run).toSatisfyJudge(explicitJudge);
+  await expect(run).toSatisfyJudge(explicitJudge, {
+    inputValue: "Refund invoice inv_123",
+    metadata: {
+      expectedStatus: "approved",
+      name: "explicit judge",
+    },
+  });
 
   expect(explicitJudge).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -348,7 +588,10 @@ test("toSatisfyJudge reuses normalized harness run data", async () => {
           },
         },
       ],
-      metadata: {},
+      metadata: {
+        expectedStatus: "approved",
+        name: "explicit judge",
+      },
     }),
   );
 });
@@ -373,6 +616,7 @@ test("automatic judges read per-run params from metadata", async () => {
   });
 
   await expect(run).toSatisfyJudge(metadataJudge, {
+    inputValue: "Refund invoice inv_123",
     metadata: {
       expectedStatus: "approved",
       name: "compatibility judge",
@@ -384,6 +628,49 @@ test("automatic judges read per-run params from metadata", async () => {
       metadata: {
         expectedStatus: "approved",
         name: "compatibility judge",
+      },
+    }),
+  );
+});
+
+test("toSatisfyJudge accepts explicit harness context for raw values", async () => {
+  const explicitJudge = vi.fn(
+    async ({
+      harness: configuredHarness,
+      inputValue,
+      metadata,
+    }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
+      const promptOutput = await configuredHarness.prompt(inputValue);
+
+      return {
+        score:
+          configuredHarness === harness &&
+          metadata.expectedStatus === "approved" &&
+          promptOutput === "judge prompt: Refund invoice inv_123"
+            ? 1
+            : 0,
+      };
+    },
+  );
+
+  await expect({
+    status: "approved",
+  }).toSatisfyJudge(explicitJudge, {
+    inputValue: "Refund invoice inv_123",
+    metadata: {
+      expectedStatus: "approved",
+      name: "raw value with explicit harness context",
+    },
+    harness,
+  });
+
+  expect(explicitJudge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      harness,
+      inputValue: "Refund invoice inv_123",
+      metadata: {
+        expectedStatus: "approved",
+        name: "raw value with explicit harness context",
       },
     }),
   );
@@ -585,6 +872,7 @@ test("ToolCallJudge accepts string expected tools", async () => {
 
   const result = await judge({
     input: "Refund invoice inv_123",
+    inputValue: "Refund invoice inv_123",
     output: '{"status":"approved"}',
     expectedTools: ["lookupInvoice", "createRefund"],
     toolCalls: [
@@ -595,6 +883,18 @@ test("ToolCallJudge accepts string expected tools", async () => {
         name: "createRefund",
       },
     ],
+    metadata: {},
+    run: {
+      session: {
+        messages: [],
+      },
+      usage: {},
+      errors: [],
+    },
+    session: {
+      messages: [],
+    },
+    harness: undefined,
   });
 
   expect(result.score).toBe(1);
@@ -605,7 +905,9 @@ test("StructuredOutputJudge reads expected fields from metadata", async () => {
 
   const result = await judge({
     input: "Refund invoice inv_123",
+    inputValue: "Refund invoice inv_123",
     output: '{"status":"approved","reason":"invoice refunded"}',
+    toolCalls: [],
     run: {
       session: {
         messages: [],
@@ -617,11 +919,15 @@ test("StructuredOutputJudge reads expected fields from metadata", async () => {
       usage: {},
       errors: [],
     },
+    session: {
+      messages: [],
+    },
     metadata: {
       expected: {
         status: "approved",
       },
     },
+    harness: undefined,
   });
 
   expect(result.score).toBe(1);

@@ -84,12 +84,11 @@ product story, not just smoke tests. `packages/` is for real package surfaces.
 Root-level evaluation logic should usually be implemented as a `JudgeFn`:
 
 ```ts
-import type { JudgeFn } from "vitest-evals";
+import type { JudgeFn, JudgeOptions } from "vitest-evals";
 
-export const DomainJudge: JudgeFn<{ expectedTool: string }> = async ({
-  toolCalls,
-  expectedTool,
-}) => ({
+export const DomainJudge: JudgeFn<
+  JudgeOptions<{ expectedTool: string }>
+> = async ({ toolCalls, expectedTool }) => ({
   score: toolCalls.some((call) => call.name === expectedTool) ? 1 : 0,
   metadata: {
     rationale: `Expected tool ${expectedTool}`,

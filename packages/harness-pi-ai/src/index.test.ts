@@ -23,6 +23,8 @@ type DemoRuntime = PiAiRuntime<typeof tools, string, DemoMetadata>;
 
 let replayDir: string | undefined;
 
+const judgePrompt = async (input: string) => input;
+
 afterEach(() => {
   vi.unstubAllEnvs();
   if (replayDir) {
@@ -62,10 +64,28 @@ const runAgent = vi.fn(
   },
 );
 
+test("exposes the configured prompt on the harness", async () => {
+  const prompt = vi.fn(async (input: string) => `judge: ${input}`);
+  const harness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    prompt,
+    run: runAgent,
+    tools,
+  });
+
+  await expect(harness.prompt("score refund")).resolves.toBe(
+    "judge: score refund",
+  );
+  expect(prompt).toHaveBeenCalledWith("score refund");
+});
+
 describeEval(
   "pi-ai harness adapter",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent,
       run: runAgent,
       tools,
@@ -105,6 +125,7 @@ describeEval(
   "pi-ai harness wraps native agent tools",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent: () => {
         const nativeTools = [
           {
@@ -211,6 +232,7 @@ describeEval(
   "pi-ai harness wraps native tools even with an explicit tool override",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent: () => {
         const nativeTools = [
           {
@@ -292,6 +314,7 @@ describeEval(
   "pi-ai harness reapplies native tool instrumentation after reset",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent: () => {
         const createNativeTool = () => ({
           name: "lookupInvoice",
@@ -384,6 +407,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets and native tools together",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent: () => {
         const toolset = {
           lookupInvoice: {
@@ -474,6 +498,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets from existing agents",
   {
     harness: piAiHarness({
+      prompt: judgePrompt,
       createAgent: () => {
         const toolset = {
           lookupInvoice: {
@@ -529,6 +554,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
     refundable: true,
   }));
   const harness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => {
       const toolset = {
         lookupInvoice: {
@@ -582,6 +608,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
 
 test("supports normalize.output as a low-level escape hatch", async () => {
   const normalizedHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => ({ id: "refund-agent" }),
     run: async () => ({
       customDecision: {
@@ -616,6 +643,7 @@ test("supports normalize.output as a low-level escape hatch", async () => {
 
 test("applies normalize overrides to HarnessRun-shaped results", async () => {
   const normalizedHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => ({ id: "refund-agent" }),
     run: async () => ({
       session: {
@@ -678,6 +706,7 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
 
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
@@ -760,6 +789,7 @@ test("replays native agent tools without breaking the agent-facing result", asyn
   );
 
   const replayHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => {
       const nativeTools = [
         {
@@ -913,6 +943,7 @@ test("records and replays opt-in tools in auto mode", async () => {
   }));
 
   const replayHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
@@ -996,6 +1027,7 @@ test("errors when strict mode is missing a recording", async () => {
   }));
 
   const replayHarness = piAiHarness({
+    prompt: judgePrompt,
     createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {

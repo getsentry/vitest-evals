@@ -12,6 +12,8 @@ type DemoMetadata = {
 
 let replayDir: string | undefined;
 
+const judgePrompt = async (input: string) => input;
+
 afterEach(() => {
   vi.unstubAllEnvs();
   if (replayDir) {
@@ -163,6 +165,7 @@ describeEval(
   "ai-sdk harness adapter",
   {
     harness: aiSdkHarness({
+      prompt: judgePrompt,
       task: async () => ({
         ...generateTextLikeResult,
         object: {
@@ -226,6 +229,7 @@ describeEval(
   "ai-sdk harness adapter custom entrypoint",
   {
     harness: aiSdkHarness({
+      prompt: judgePrompt,
       agent: () => {
         const generate = vi.fn(
           async (
@@ -393,6 +397,7 @@ test("default agent run receives wrapped runtime tools", async () => {
   );
 
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     agent: () => ({
       run,
     }),
@@ -437,6 +442,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
     refundable: true,
   }));
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
@@ -512,6 +518,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
 
 test("omits empty runtime tool error content when a task errors", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
@@ -582,6 +589,7 @@ test("omits empty runtime tool error content when a task errors", async () => {
 
 test("preserves explicit null runtime tool results", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
@@ -656,6 +664,7 @@ test("preserves explicit null runtime tool results", async () => {
 
 test("marks step-derived tool messages as errors when the tool call failed", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       text: "done",
       steps: [
@@ -767,6 +776,7 @@ test("keeps runtime-only tool calls when SDK steps are also present", async () =
     refundable: true,
   }));
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
@@ -884,6 +894,7 @@ test("creates a fresh agent for each explicit run", async () => {
     run,
   }));
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     agent: createAgent,
   });
   const context = createHarnessContext({});
@@ -929,6 +940,7 @@ test("normalizes domain results that resemble harness runs", async () => {
     }),
   );
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       session: {
         messages: [],
@@ -972,6 +984,7 @@ test("normalizes domain results that resemble harness runs", async () => {
 
 test("aggregates per-step usage when total usage is missing", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       text: "approved",
       steps: [
@@ -1055,6 +1068,7 @@ test("aggregates per-step usage when total usage is missing", async () => {
 
 test("normalizes arrays and empty objects without dropping positions", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       object: {
         values: [1, undefined, { skipped: undefined }, 3],
@@ -1143,6 +1157,7 @@ test("normalizes arrays and empty objects without dropping positions", async () 
 
 test("preserves empty root tool arguments and omits zero tool usage", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       steps: [
         {
@@ -1209,6 +1224,7 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
   expect(toolCalls(run.session)[0].arguments).toEqual({});
 
   const noToolHarness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       steps: [
         {
@@ -1242,6 +1258,7 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
 
 test("uses invalid tool call details as the normalized error", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       steps: [
         {
@@ -1301,6 +1318,7 @@ test("uses invalid tool call details as the normalized error", async () => {
 
 test("omits undefined step-normalized arguments and results", async () => {
   const harness = aiSdkHarness({
+    prompt: judgePrompt,
     task: async () => ({
       steps: [
         {
@@ -1368,6 +1386,7 @@ test("records and replays opt-in tools in auto mode", async () => {
   }));
 
   const replayHarness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         replay: true,
@@ -1512,6 +1531,7 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
   }
 
   const replayHarness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       streamRefund: {
         replay: true,
@@ -1557,6 +1577,7 @@ test("errors when strict mode is missing a recording", async () => {
   }));
 
   const replayHarness = aiSdkHarness({
+    prompt: judgePrompt,
     tools: {
       lookupInvoice: {
         replay: true,

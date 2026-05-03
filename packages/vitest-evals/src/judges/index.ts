@@ -10,4 +10,9 @@ export {
   type ToolCallJudgeOptions,
 } from "./toolCallJudge";
 
-export type { BaseJudgeOptions, JudgeFn, JudgeResult } from "./types";
+export type {
+  JudgeContext,
+  JudgeFn,
+  JudgeOptions,
+  JudgeResult,
+} from "./types";

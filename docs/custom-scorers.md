@@ -35,6 +35,7 @@ describeEval(
   {
     harness: piAiHarness({
       createAgent: () => createRefundAgent(),
+      prompt: judgePrompt,
     }),
     judges: [FactualityJudge],
   },
@@ -52,9 +53,22 @@ Or run it explicitly inside a test:
 await expect(result).toSatisfyJudge(FactualityJudge);
 ```
 
-For simple response-level checks, a judge can just score `output`. When a
-judge needs richer context, type it with `JudgeContext` and read `metadata`,
-`toolCalls`, or `session` from there.
+For simple response-level checks, a judge can just score `output`. When a judge
+needs normalized run context, type it with `JudgeContext` and read `metadata`,
+`toolCalls`, `session`, or `harness` from there. `harness.prompt(...)` gives
+LLM-backed rubric judges a shared provider/model seam without duplicating
+app-level model setup. Calling `harness.run(...)`
+inside a judge executes the app again, so reserve that for judges that
+intentionally need a second run.
+
+Explicit matcher calls on the branded result returned by fixture `run(...)`
+use the run's canonical text output and reuse registered input, metadata,
+harness, and harness prompt. Inside an eval test, matcher calls on registered
+raw output or session objects reuse that exact run context; raw output values
+are serialized as the judge `output`, and other raw values fall back to the
+current test's most recent `run(...)` context. Matcher calls outside that
+context, or on manually-created runs, should pass the context required by the
+judge in `toSatisfyJudge(...)` options.
 
 ## Built-In Root Judges
 

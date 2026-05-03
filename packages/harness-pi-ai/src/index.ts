@@ -2,6 +2,7 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
+  HarnessPrompt,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
@@ -196,6 +197,7 @@ interface PiAiHarnessBaseOptions<
     TResult,
     TTools
   >;
+  prompt: HarnessPrompt;
   name?: string;
 }
 
@@ -348,6 +350,7 @@ export function piAiHarness<
 ): Harness<TInput, TMetadata> {
   return {
     name: options.name ?? "pi-ai",
+    prompt: options.prompt,
     run: async (input, context) => {
       const agent = await resolveAgent(options);
       const messages: NormalizedMessage[] = [

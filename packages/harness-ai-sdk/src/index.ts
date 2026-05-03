@@ -214,7 +214,7 @@ interface AiSdkHarnessBaseOptions<
   errors?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
-  prompt?: HarnessPrompt;
+  prompt: HarnessPrompt;
   name?: string;
 }
 

@@ -1,5 +1,4 @@
-import type { HarnessRun } from "../harness";
-import type { JudgeFn } from "./types";
+import type { JudgeContext, JudgeFn } from "./types";
 import {
   StructuredOutputScorer,
   type StructuredOutputScorerConfig,
@@ -14,10 +13,9 @@ type StructuredOutputJudgeMetadata = HarnessMetadata & {
 };
 
 export interface StructuredOutputJudgeOptions
-  extends Omit<StructuredOutputScorerOptions, "output"> {
-  output: string;
-  run: HarnessRun;
-  metadata?: StructuredOutputJudgeMetadata;
+  extends JudgeContext<any, HarnessMetadata, any>,
+    Omit<StructuredOutputScorerOptions, "input" | "output" | "toolCalls"> {
+  expected?: StructuredOutputJudgeExpected;
 }
 
 export interface StructuredOutputJudgeConfig
@@ -27,12 +25,15 @@ export function StructuredOutputJudge(
   config: StructuredOutputJudgeConfig = {},
 ): JudgeFn<StructuredOutputJudgeOptions> {
   const scorer = StructuredOutputScorer(config);
-  const judge = ((opts: StructuredOutputJudgeOptions) =>
-    scorer({
+  const judge = ((opts: StructuredOutputJudgeOptions) => {
+    const metadata = opts.metadata as StructuredOutputJudgeMetadata;
+
+    return scorer({
       ...opts,
-      expected: opts.expected ?? opts.metadata?.expected,
+      expected: opts.expected ?? metadata.expected,
       output: formatStructuredOutput(opts.run.output),
-    })) as JudgeFn<StructuredOutputJudgeOptions>;
+    });
+  }) as JudgeFn<StructuredOutputJudgeOptions>;
 
   Object.defineProperty(judge, "name", {
     value: "StructuredOutputJudge",
@@ -41,7 +42,9 @@ export function StructuredOutputJudge(
   return judge;
 }
 
-function formatStructuredOutput(output: HarnessRun["output"]) {
+function formatStructuredOutput(
+  output: StructuredOutputJudgeOptions["run"]["output"],
+) {
   if (typeof output === "string") {
     return output;
   }

@@ -15,8 +15,12 @@ import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
+  prompt: sharedJudgePrompt,
 });
 ```
+
+`prompt` gives rubric or factuality judges the same provider/model setup
+through `JudgeContext.harness.prompt`.
 
 If the agent already exposes its own tools, the adapter will infer them from
 the agent by default. If your existing Pi Mono agent already exposes its own
@@ -26,6 +30,7 @@ seam:
 ```ts
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
+  prompt: sharedJudgePrompt,
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
 });
 ```
@@ -44,6 +49,7 @@ override:
 ```ts
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
+  prompt: sharedJudgePrompt,
   tools: hiddenAgentTools,
 });
 ```
@@ -54,6 +60,7 @@ normalization hooks still exist under `normalize`:
 ```ts
 const harness = piAiHarness({
   createAgent: () => createWrappedRefundAgent(),
+  prompt: sharedJudgePrompt,
   run: ({ agent, input, runtime }) => agent.run(input, runtime),
   normalize: {
     output: ({ result }) => result.customDecision,
@@ -64,6 +71,7 @@ const harness = piAiHarness({
 The adapter provides:
 
 - a runtime/tool injection seam for an existing agent
+- a required prompt seam for LLM-backed judges
 - normalized session capture from emitted events and wrapped tool calls
 - usage/output inference for common `pi-ai`-style result objects
 - opt-in tool replay/recording when the tool definition sets `replay: true`

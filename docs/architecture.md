@@ -74,6 +74,10 @@ These are judge-shaped adapters over the legacy comparison logic so new suites
 can stay on the harness-first surface while older matching behavior remains
 available.
 
+All judges receive `JudgeContext`, which carries normalized run/session data
+plus the configured `harness` and its required `prompt(...)` method. That keeps
+rubric and factuality judges on the same API as deterministic judges.
+
 ### `packages/vitest-evals/src/legacy/*`
 
 Contains the compatibility layer for scorer-first suites:
@@ -112,6 +116,15 @@ For each eval test in a harness-backed suite:
 8. The eval test asserts on the same returned result and session.
 9. The reporter renders the recorded metadata without re-executing the harness.
 
+Explicit `expect(result).toSatisfyJudge(...)` calls use the run's canonical
+text output and reuse registered input, metadata, and harness prompt
+when `result` came from the fixture-backed `run(...)`. Inside an eval test,
+calls on registered raw output or session objects reuse that exact run context;
+raw output values are serialized as the judge `output`, and other raw values
+fall back to the current test's most recent `run(...)` context. Calls outside
+that context, or on manually-created runs, must pass the context required by
+the judge in matcher options.
+
 ## First-Party Harness Packages
 
 ### `@vitest-evals/harness-ai-sdk`
@@ -149,6 +162,8 @@ New runtime integrations should be implemented as thin adapter packages that:
 - execute the target runtime through its normal seam
 - capture messages, tool calls, usage, timings, and errors
 - normalize them into `HarnessRun`
+- expose `prompt` so the same provider/model configuration can be reused by
+  LLM-backed judges
 - avoid inventing harness-specific assertion or reporter behavior in userland
 
 ### New Judges
@@ -157,12 +172,11 @@ Root-level custom evaluation logic should generally be written as judges over
 normalized run/session data:
 
 ```ts
-import type { JudgeFn } from "vitest-evals";
+import type { JudgeFn, JudgeOptions } from "vitest-evals";
 
-export const RefundToolJudge: JudgeFn<{ expectedTools: string[] }> = async ({
-  expectedTools,
-  toolCalls,
-}) => ({
+export const RefundToolJudge: JudgeFn<
+  JudgeOptions<{ expectedTools: string[] }>
+> = async ({ expectedTools, toolCalls }) => ({
   score: expectedTools.every(
     (name, index) => toolCalls[index]?.name === name,
   )
