@@ -6,6 +6,7 @@ import {
   type Static,
 } from "@mariozechner/pi-ai";
 import type { PiAiRuntime, PiAiToolset } from "@vitest-evals/harness-pi-ai";
+import type { HarnessPromptOptions } from "vitest-evals";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -213,6 +214,31 @@ export class RefundAgent {
 /** Creates a fresh demo refund agent for one eval run. */
 export function createRefundAgent(options?: { model?: RefundAgentModel }) {
   return new RefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
+}
+
+export async function promptRefundModel(
+  input: string,
+  options?: HarnessPromptOptions,
+) {
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: options?.system ?? "",
+      model: getModel("anthropic", DEFAULT_REFUND_MODEL),
+      thinkingLevel: "off",
+      tools: [],
+    },
+    toolExecution: "sequential",
+  });
+
+  await agent.prompt(input);
+
+  const assistant = getFinalAssistantMessage(agent.state.messages);
+  const outputText = assistant ? getAssistantText(assistant) : "";
+  if (!outputText) {
+    throw new Error("Prompt model returned an empty response.");
+  }
+
+  return outputText;
 }
 
 function createAgentTools(

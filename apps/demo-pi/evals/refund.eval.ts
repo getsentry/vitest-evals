@@ -6,7 +6,11 @@ import {
   ToolCallJudge,
   toolCalls,
 } from "vitest-evals";
-import { createRefundAgent, type RefundCase } from "../src/refundAgent";
+import {
+  createRefundAgent,
+  promptRefundModel,
+  type RefundCase,
+} from "../src/refundAgent";
 
 const outputJudge = StructuredOutputJudge();
 
@@ -16,6 +20,7 @@ describeEval(
     skipIf: () => !process.env.ANTHROPIC_API_KEY,
     harness: piAiHarness({
       createAgent: () => createRefundAgent(),
+      prompt: promptRefundModel,
     }),
     judges: [ToolCallJudge()],
   },

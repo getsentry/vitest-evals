@@ -28,6 +28,8 @@ npm install -D @vitest-evals/harness-ai-sdk
 - per-run judge inputs should usually live under `metadata`
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
+- every judge receives `JudgeContext`, including the configured `harness` with
+  its required `prompt` function
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
@@ -42,7 +44,7 @@ import {
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
-import { createRefundAgent } from "../src/refundAgent";
+import { createRefundAgent, judgePrompt } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";
@@ -76,6 +78,7 @@ describeEval(
   {
     harness: piAiHarness({
       createAgent: () => createRefundAgent(),
+      prompt: judgePrompt,
     }),
     judges: [FactualityJudge],
   },
@@ -186,12 +189,24 @@ const FactualityJudge = namedJudge(
 );
 ```
 
-For a `HarnessRun`, `toSatisfyJudge(...)` passes `result.output` as `output`.
-For raw values or normalized sessions, the matcher infers the best available
-output from the received value. Structured or programmatic result checks should
-usually assert on `result.output` directly. When a judge needs richer context,
-type it with `JudgeContext` and read `inputValue`, `metadata`, `toolCalls`, or
-`session` from there.
+LLM-backed judges can reuse the suite harness prompt by calling
+`harness.prompt(...)`. `vitest-evals` does not prescribe a rubric schema,
+scoring scale, model provider, or parser; those stay in the judge. Calling
+`harness.run(...)` from a judge executes the application again, so use that
+only when a second run is intentional.
+
+For an `EvalHarnessRun` returned by fixture `run(...)`,
+`toSatisfyJudge(...)` uses the run's canonical text output and reuses the
+registered input, metadata, and harness prompt. Inside an eval test,
+matcher calls on registered raw output or session objects reuse that exact run
+context; raw output values are serialized as the judge `output`, so
+`expect(result.output).toSatisfyJudge(judge)` stays concise. Other raw values
+fall back to the current test's most recent `run(...)` context. For
+manually-created runs or values outside an eval context, pass any required
+`inputValue`, `metadata`, or `harness` in matcher options. Structured or
+programmatic result checks should usually assert on `result.output` directly.
+When a judge needs richer normalized context or the configured suite harness,
+type it with `JudgeContext`.
 
 When you only need deterministic contract checks, built-ins such as
 `StructuredOutputJudge()` and `ToolCallJudge()` are still available. The primary

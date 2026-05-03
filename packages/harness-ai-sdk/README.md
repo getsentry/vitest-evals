@@ -25,6 +25,12 @@ const tools = {
 
 const harness = aiSdkHarness({
   tools,
+  prompt: (input, options) =>
+    generateText({
+      model: openai("gpt-4o-mini"),
+      system: options?.system,
+      prompt: input,
+    }).then((result) => result.text),
   task: ({ input, runtime }) =>
     generateText({
       model: openai("gpt-4o-mini"),
@@ -40,9 +46,14 @@ If your existing AI SDK app exposes its own entrypoint, wire that in directly:
 ```ts
 const harness = aiSdkHarness({
   tools,
+  prompt: sharedJudgePrompt,
   task: ({ input, runtime }) => createRefundAgent().run(input, runtime),
 });
 ```
+
+The required `prompt` callback is passed to harness-backed judges as
+`JudgeContext.harness.prompt`, which lets rubric or factuality judges share the
+same provider/model configuration as the suite harness.
 
 The adapter infers:
 

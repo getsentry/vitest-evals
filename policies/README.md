@@ -7,6 +7,7 @@ without turning it into a full architecture document or feature spec.
 
 Good policy topics:
 
+- API design and migration shape
 - code comments and docstrings
 - testing expectations
 - naming conventions
@@ -18,4 +19,3 @@ Keep policy docs small:
 - explain the intent briefly
 - state the default rule clearly
 - call out only the meaningful exceptions
-
