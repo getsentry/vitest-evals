@@ -49,8 +49,14 @@ jobs:
       - name: Run linter
         run: pnpm lint
 
+      - name: Run typecheck
+        run: pnpm typecheck
+
       - name: Run tests
         run: pnpm test:ci
+
+      - name: Build
+        run: pnpm build
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
