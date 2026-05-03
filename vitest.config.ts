@@ -7,6 +7,8 @@ export default defineConfig({
     include: [
       "packages/**/*.test.ts",
       "packages/**/*.eval.ts",
+      "examples/**/*.test.ts",
+      "examples/**/*.eval.ts",
       "apps/**/*.test.ts",
       "apps/**/*.eval.ts",
     ],

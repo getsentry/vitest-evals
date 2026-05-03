@@ -64,7 +64,7 @@ importers:
         version: 3.0.71(zod@4.3.6)
       '@demo/foobar':
         specifier: workspace:*
-        version: link:../../packages/foobar
+        version: link:../../examples/foobar
       '@vitest-evals/harness-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/harness-ai-sdk
@@ -82,7 +82,7 @@ importers:
     dependencies:
       '@demo/foobar':
         specifier: workspace:*
-        version: link:../../packages/foobar
+        version: link:../../examples/foobar
       '@vitest-evals/harness-pi-ai':
         specifier: workspace:*
         version: link:../../packages/harness-pi-ai
@@ -90,7 +90,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vitest-evals
 
-  packages/foobar:
+  examples/foobar:
     dependencies:
       '@mariozechner/pi-agent-core':
         specifier: 0.67.68

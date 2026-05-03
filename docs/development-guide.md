@@ -73,10 +73,14 @@ Owns:
 - wrapped tool runtime injection
 - tool replay/VCR behavior
 
-### `packages/foobar` and `apps/demo-pi`
+## Demo Runtime And Apps
 
-Own the example runtime seam and live demo eval coverage. Keep them realistic.
-They are part of the product story, not just smoke tests.
+`examples/foobar` owns the private refund-domain runtime shared by the demo
+apps. It intentionally lives outside `packages/`, because `packages/` is for
+real package surfaces.
+
+`apps/demo-pi` and `apps/demo-ai-sdk` own live demo eval coverage. Keep them
+realistic; they are part of the product story, not just smoke tests.
 
 ## Adding a New Judge
 

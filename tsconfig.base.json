@@ -12,8 +12,8 @@
       "vitest-evals/*": ["packages/vitest-evals/src/*"],
       "@vitest-evals/harness-ai-sdk": ["packages/harness-ai-sdk/src/index.ts"],
       "@vitest-evals/harness-pi-ai": ["packages/harness-pi-ai/src/index.ts"],
-      "@demo/foobar": ["packages/foobar/src/index.ts"],
-      "@demo/foobar/testing": ["packages/foobar/src/testing.ts"]
+      "@demo/foobar": ["examples/foobar/src/index.ts"],
+      "@demo/foobar/testing": ["examples/foobar/src/testing.ts"]
     }
   }
 }

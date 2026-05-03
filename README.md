@@ -6,11 +6,11 @@ Monorepo for the explicit-run `vitest-evals` shape:
   types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
-- `packages/foobar`: example package with a small refund agent
+- `examples/foobar`: private demo runtime with a small refund agent
 - `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace
-  packages
+  runtime
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace
-  packages
+  runtime
 
 ## Workspace Layout
 
@@ -19,6 +19,7 @@ packages/
   vitest-evals/
   harness-ai-sdk/
   harness-pi-ai/
+examples/
   foobar/
 apps/
   demo-ai-sdk/
@@ -29,15 +30,16 @@ apps/
 
 ```sh
 pnpm install
+pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 pnpm evals
 pnpm evals -- -v
 pnpm evals -- -vv
 pnpm evals -- -vvv
 pnpm evals -- -vvvv
 pnpm evals:verbose
-pnpm build
 ```
 
 Verbosity tiers for eval output:
@@ -51,25 +53,41 @@ from the workspace `tsconfig` paths via `vite-tsconfig-paths`, and package
 boundaries are expressed in package manifests rather than hard-coded alias
 tables.
 
+Pull request CI runs the same core safety checks: release config validation,
+lint, typecheck, the CI test suite, and the workspace build.
+
 ## Example
 
 The `apps/demo-pi` app shows the intended explicit-run flow:
 
 ```ts
+import { expect } from "vitest";
 import { createRefundAgent } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
-  ToolCallJudge,
   namedJudge,
   toolCalls,
+  type JudgeContext,
 } from "vitest-evals";
+
+type RefundEvalMetadata = {
+  expectedStatus: "approved" | "denied";
+  expectedTools: string[];
+};
 
 const FactualityJudge = namedJudge(
   "FactualityJudge",
-  async ({ output }) => {
-    const answer = output;
-    const verdict = await judgeFactuality(answer);
+  async ({
+    input,
+    output,
+    metadata,
+  }: JudgeContext<string, RefundEvalMetadata>) => {
+    const verdict = await judgeFactuality({
+      question: input,
+      answer: output,
+      expectedStatus: metadata.expectedStatus,
+    });
 
     return {
       score: verdict.score,
@@ -86,7 +104,7 @@ describeEval(
     harness: piAiHarness({
       createAgent: () => createRefundAgent(),
     }),
-    judges: [ToolCallJudge()],
+    judges: [FactualityJudge],
   },
   (it) => {
     it.for([
@@ -104,7 +122,6 @@ describeEval(
       expect(result.output).toMatchObject({
         status: metadata.expectedStatus,
       });
-      await expect(result).toSatisfyJudge(FactualityJudge);
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
         metadata.expectedTools,
       );
@@ -141,6 +158,8 @@ export default defineConfig({
     include: [
       "packages/**/*.test.ts",
       "packages/**/*.eval.ts",
+      "examples/**/*.test.ts",
+      "examples/**/*.eval.ts",
       "apps/**/*.test.ts",
       "apps/**/*.eval.ts",
     ],

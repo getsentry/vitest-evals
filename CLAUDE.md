@@ -40,8 +40,10 @@ packages/
       legacy/
   harness-ai-sdk/
   harness-pi-ai/
+examples/
   foobar/
 apps/
+  demo-ai-sdk/
   demo-pi/
 docs/
 ```
@@ -66,10 +68,11 @@ Owns the AI SDK adapter into `HarnessRun`.
 
 Owns the `pi-ai` adapter, wrapped tool runtime, and tool replay behavior.
 
-### `packages/foobar` and `apps/demo-pi`
+### `examples/foobar` and demo apps
 
-Own the example runtime seam and live demos. Keep them realistic and aligned
-with the public story.
+Own the private example runtime seam and live demos. Keep them realistic and
+aligned with the public story. `packages/` is reserved for real package
+surfaces.
 
 ## Core Rules
 
