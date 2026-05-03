@@ -75,7 +75,7 @@ Owns:
 
 ## Demo Runtime And Apps
 
-`examples/foobar` owns the private refund-domain runtime shared by the demo
+`examples/refund-agent` owns the private refund-domain runtime shared by the demo
 apps. It intentionally lives outside `packages/`, because `packages/` is for
 real package surfaces.
 

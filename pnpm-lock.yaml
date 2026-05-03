@@ -62,9 +62,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.71
         version: 3.0.71(zod@4.3.6)
-      '@demo/foobar':
+      '@demo/refund-agent':
         specifier: workspace:*
-        version: link:../../examples/foobar
+        version: link:../../examples/refund-agent
       '@vitest-evals/harness-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/harness-ai-sdk
@@ -80,9 +80,9 @@ importers:
 
   apps/demo-pi:
     dependencies:
-      '@demo/foobar':
+      '@demo/refund-agent':
         specifier: workspace:*
-        version: link:../../examples/foobar
+        version: link:../../examples/refund-agent
       '@vitest-evals/harness-pi-ai':
         specifier: workspace:*
         version: link:../../packages/harness-pi-ai
@@ -90,7 +90,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vitest-evals
 
-  examples/foobar:
+  examples/refund-agent:
     dependencies:
       '@mariozechner/pi-agent-core':
         specifier: 0.67.68

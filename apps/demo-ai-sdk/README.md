@@ -5,7 +5,7 @@ through the workspace packages:
 
 - `vitest-evals`
 - `@vitest-evals/harness-ai-sdk`
-- `@demo/foobar`
+- `@demo/refund-agent`
 
 The passing live eval lives in `evals/refund.eval.ts`.
 It demonstrates an automatic harness-backed tool judge plus explicit Vitest

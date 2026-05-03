@@ -7,7 +7,7 @@ import {
   lookupInvoice,
   parseRefundDecision,
   type RefundCase,
-} from "@demo/foobar";
+} from "@demo/refund-agent";
 import { aiSdkHarness, type AiSdkToolset } from "@vitest-evals/harness-ai-sdk";
 import { generateText, stepCountIs } from "ai";
 import { z } from "zod";

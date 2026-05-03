@@ -41,7 +41,7 @@ packages/
   harness-ai-sdk/
   harness-pi-ai/
 examples/
-  foobar/
+  refund-agent/
 apps/
   demo-ai-sdk/
   demo-pi/
@@ -68,7 +68,7 @@ Owns the AI SDK adapter into `HarnessRun`.
 
 Owns the `pi-ai` adapter, wrapped tool runtime, and tool replay behavior.
 
-### `examples/foobar` and demo apps
+### `examples/refund-agent` and demo apps
 
 Own the private example runtime seam and live demos. Keep them realistic and
 aligned with the public story. `packages/` is reserved for real package

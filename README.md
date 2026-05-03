@@ -6,7 +6,7 @@ Monorepo for the explicit-run `vitest-evals` shape:
   types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
-- `examples/foobar`: private demo runtime with a small refund agent
+- `examples/refund-agent`: private demo runtime with a small refund agent
 - `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace
   runtime
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace
@@ -20,7 +20,7 @@ packages/
   harness-ai-sdk/
   harness-pi-ai/
 examples/
-  foobar/
+  refund-agent/
 apps/
   demo-ai-sdk/
   demo-pi/
@@ -62,7 +62,7 @@ The `apps/demo-pi` app shows the intended explicit-run flow:
 
 ```ts
 import { expect } from "vitest";
-import { createRefundAgent } from "@demo/foobar";
+import { createRefundAgent } from "@demo/refund-agent";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,

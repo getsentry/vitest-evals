@@ -29,7 +29,7 @@ packages/
   harness-ai-sdk/
   harness-pi-ai/
 examples/
-  foobar/
+  refund-agent/
 apps/
   demo-ai-sdk/
   demo-pi/
@@ -138,9 +138,10 @@ surface it.
 
 ## Demo Runtime
 
-`examples/foobar` contains the private refund-domain runtime used by the demo
-apps and tests. It stays outside `packages/` because `packages/` is reserved
-for real package surfaces that can be published or consumed independently.
+`examples/refund-agent` contains the private refund-domain runtime used by the
+demo apps and tests. It stays outside `packages/` because `packages/` is
+reserved for real package surfaces that can be published or consumed
+independently.
 
 ## Extension Points
 

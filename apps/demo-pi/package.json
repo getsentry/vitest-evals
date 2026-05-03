@@ -8,7 +8,7 @@
     "evals:fail": "node ./scripts/run-evals.mjs --fail"
   },
   "dependencies": {
-    "@demo/foobar": "workspace:*",
+    "@demo/refund-agent": "workspace:*",
     "@vitest-evals/harness-pi-ai": "workspace:*",
     "vitest-evals": "workspace:*"
   }

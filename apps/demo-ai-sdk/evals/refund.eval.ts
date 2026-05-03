@@ -1,4 +1,4 @@
-import { assertRefundCase } from "@demo/foobar/testing";
+import { assertRefundCase } from "@demo/refund-agent/testing";
 import { describeEval } from "vitest-evals";
 import { refundHarness } from "./shared";
 

@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
-    "@demo/foobar": "workspace:*",
+    "@demo/refund-agent": "workspace:*",
     "@vitest-evals/harness-ai-sdk": "workspace:*",
     "ai": "^6.0.141",
     "vitest-evals": "workspace:*",
