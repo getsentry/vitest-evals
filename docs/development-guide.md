@@ -73,10 +73,11 @@ Owns:
 - wrapped tool runtime injection
 - tool replay/VCR behavior
 
-### `packages/foobar` and `apps/demo-pi`
+## Demo Apps
 
-Own the example runtime seam and live demo eval coverage. Keep them realistic.
-They are part of the product story, not just smoke tests.
+`apps/demo-pi` and `apps/demo-ai-sdk` own live demo eval coverage and any
+app-local refund fixtures they need. Keep them realistic; they are part of the
+product story, not just smoke tests. `packages/` is for real package surfaces.
 
 ## Adding a New Judge
 
@@ -144,7 +145,7 @@ For targeted work, prefer narrow verification:
 
 - reporter changes: run reporter tests
 - harness changes: run the relevant harness package tests
-- demo/runtime changes: run `pnpm evals` or a filtered app/package eval command
+- demo app changes: run `pnpm evals` or a filtered app eval command
 - legacy changes: run the moved tests under `packages/vitest-evals/src/legacy`
 
 ## Documentation Expectations

@@ -51,38 +51,11 @@ export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
 await expect(result).toSatisfyJudge(FactualityJudge);
 ```
 
-## Built-In Judge Helpers
+## Deterministic Helper Note
 
-```ts
-import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
-
-describeEval(
-  "refund agent",
-  {
-    harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
-    }),
-    judges: [ToolCallJudge()],
-  },
-  (it) => {
-    it("approves a refund", async ({ run }) => {
-      const result = await run("Refund invoice inv_123", {
-        metadata: {
-          expected: { status: "approved" },
-          expectedTools: [
-            { name: "lookupInvoice" },
-            { name: "createRefund" },
-          ],
-        },
-      });
-
-      await expect(result).toSatisfyJudge(StructuredOutputJudge(), {
-        expected: { status: "approved" },
-      });
-    });
-  },
-);
-```
+Built-ins such as `StructuredOutputJudge()` and `ToolCallJudge()` still exist
+for deterministic contract checks. New docs should use factuality or rubric
+judges as the primary examples.
 
 ## Legacy Scorer Example
 

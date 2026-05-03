@@ -12,6 +12,8 @@ Install a first-party harness package for the runtime you want to test:
 
 ```sh
 npm install -D @vitest-evals/harness-pi-ai
+# or
+npm install -D @vitest-evals/harness-ai-sdk
 ```
 
 ## Core Model
@@ -20,9 +22,9 @@ npm install -D @vitest-evals/harness-pi-ai
 - the suite callback receives a fixture-backed Vitest `it`
 - `run(input, { metadata? })` executes the harness explicitly and returns a
   normalized `HarnessRun`
-- `run.output` is the app-facing value you assert on directly
-- `run.session` is the canonical JSON-serializable trace for reporting, replay,
-  tool assertions, and judges
+- the returned `result.output` is the app-facing value you assert on directly
+- the returned `result.session` is the canonical JSON-serializable trace for
+  reporting, replay, tool assertions, and judges
 - per-run judge inputs should usually live under `metadata`
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
@@ -32,20 +34,33 @@ npm install -D @vitest-evals/harness-pi-ai
 ## Explicit Run Example
 
 ```ts
-import { createRefundAgent } from "@demo/foobar";
+import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
-  ToolCallJudge,
   namedJudge,
   toolCalls,
+  type JudgeContext,
 } from "vitest-evals";
+import { createRefundAgent } from "../src/refundAgent";
+
+type RefundEvalMetadata = {
+  expectedStatus: "approved" | "denied";
+  expectedTools: string[];
+};
 
 const FactualityJudge = namedJudge(
   "FactualityJudge",
-  async ({ output }) => {
-    const answer = output;
-    const verdict = await judgeFactuality(answer);
+  async ({
+    input,
+    output,
+    metadata,
+  }: JudgeContext<string, RefundEvalMetadata>) => {
+    const verdict = await judgeFactuality({
+      question: input,
+      answer: output,
+      expectedStatus: metadata.expectedStatus,
+    });
 
     return {
       score: verdict.score,
@@ -62,12 +77,13 @@ describeEval(
     harness: piAiHarness({
       createAgent: () => createRefundAgent(),
     }),
-    judges: [ToolCallJudge()],
+    judges: [FactualityJudge],
   },
   (it) => {
     it("approves a refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123", {
         metadata: {
+          expectedStatus: "approved",
           expectedTools: ["lookupInvoice", "createRefund"],
         },
       });
@@ -77,7 +93,6 @@ describeEval(
         "lookupInvoice",
         "createRefund",
       ]);
-      await expect(result).toSatisfyJudge(FactualityJudge);
     });
   },
 );
@@ -171,22 +186,17 @@ const FactualityJudge = namedJudge(
 );
 ```
 
-A simple factuality judge can just score `output`, which is the normalized
-response text that `toSatisfyJudge(...)` passes automatically. Structured or
-programmatic result checks should usually read `run.output` instead. When a
-judge needs richer context, type it with `JudgeContext` and read `inputValue`,
-`metadata`, `toolCalls`, or `session` from there.
+For a `HarnessRun`, `toSatisfyJudge(...)` passes `result.output` as `output`.
+For raw values or normalized sessions, the matcher infers the best available
+output from the received value. Structured or programmatic result checks should
+usually assert on `result.output` directly. When a judge needs richer context,
+type it with `JudgeContext` and read `inputValue`, `metadata`, `toolCalls`, or
+`session` from there.
 
-When you only need deterministic contract checks, the built-ins are still
-useful:
-
-```ts
-import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
-
-await expect(result).toSatisfyJudge(StructuredOutputJudge(), {
-  expected: { status: "approved" },
-});
-```
+When you only need deterministic contract checks, built-ins such as
+`StructuredOutputJudge()` and `ToolCallJudge()` are still available. The primary
+documentation examples intentionally use factuality/rubric judges because those
+match the product's LLM-as-a-judge direction.
 
 ## Legacy Compatibility
 

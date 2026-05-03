@@ -53,7 +53,8 @@ normalization hooks still exist under `normalize`:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  createAgent: () => createWrappedRefundAgent(),
+  run: ({ agent, input, runtime }) => agent.run(input, runtime),
   normalize: {
     output: ({ result }) => result.customDecision,
   },

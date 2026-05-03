@@ -28,8 +28,8 @@ packages/
       legacy/
   harness-ai-sdk/
   harness-pi-ai/
-  foobar/
 apps/
+  demo-ai-sdk/
   demo-pi/
 ```
 
@@ -105,7 +105,7 @@ For each eval test in a harness-backed suite:
 2. The suite callback registers named eval tests.
 3. The eval test calls `run(input)` at the point execution should happen.
 4. The configured harness runs the system under test exactly once.
-5. The harness returns a `HarnessRun` with `run.output`, `run.session`,
+5. The harness returns a `HarnessRun` with `result.output`, `result.session`,
    `usage`, `timings`, `artifacts`, and `errors`.
 6. Core stores that run on `task.meta.harness` for the reporter.
 7. Automatic suite-level judges run against the normalized run/session pair.
@@ -133,6 +133,12 @@ standard tool replay/VCR behavior for opt-in tools, including:
 
 Replay metadata becomes part of the normalized tool record so the reporter can
 surface it.
+
+## Demo Apps
+
+`apps/demo-pi` and `apps/demo-ai-sdk` own their demo fixtures locally. They stay
+under `apps/` because they are product demos, while `packages/` is reserved for
+real package surfaces that can be published or consumed independently.
 
 ## Extension Points
 

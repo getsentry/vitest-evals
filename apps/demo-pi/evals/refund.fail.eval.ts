@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import { createRefundAgent, type RefundCase } from "@demo/foobar";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
+import { createRefundAgent, type RefundCase } from "../src/refundAgent";
 
 type AssertionRefundCase = RefundCase;
 type ScoredRefundCase = RefundCase & {

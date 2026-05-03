@@ -58,13 +58,10 @@ judge needs richer context, type it with `JudgeContext` and read `metadata`,
 
 ## Built-In Root Judges
 
-The root package ships judge-shaped helpers for common cases:
-
-```ts
-import { StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
-```
-
-These operate on normalized harness data instead of raw scorer inputs.
+The root package still ships deterministic judge-shaped helpers such as
+`StructuredOutputJudge()` and `ToolCallJudge()`. They operate on normalized
+harness data instead of raw scorer inputs, but new docs should keep factuality
+or rubric judges as the primary examples.
 
 ## Legacy Scorer Example
 

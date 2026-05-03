@@ -5,11 +5,10 @@ through the workspace packages:
 
 - `vitest-evals`
 - `@vitest-evals/harness-ai-sdk`
-- `@demo/foobar`
 
 The passing live eval lives in `evals/refund.eval.ts`.
-It demonstrates an automatic harness-backed tool judge plus explicit Vitest
-assertions on `run.output` and the normalized session trace.
+It demonstrates app-local refund tools and explicit Vitest assertions on
+`run.output` and the normalized session trace.
 
 The intentionally failing examples live in `evals/refund.fail.eval.ts`.
 One fails an automatic harness-backed judge, and one fails explicit assertions

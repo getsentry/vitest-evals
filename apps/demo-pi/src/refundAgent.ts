@@ -47,13 +47,13 @@ export type CreateRefundInput = {
 };
 
 export const LOOKUP_INVOICE_DESCRIPTION =
-  "Look up invoice details inside Foobar billing.";
+  "Look up invoice details inside demo billing.";
 export const CREATE_REFUND_DESCRIPTION =
   "Create a refund for a refundable invoice.";
-type FoobarRefundModel = "claude-sonnet-4-5";
-const DEFAULT_REFUND_MODEL: FoobarRefundModel = "claude-sonnet-4-5";
+type RefundAgentModel = "claude-sonnet-4-5";
+const DEFAULT_REFUND_MODEL: RefundAgentModel = "claude-sonnet-4-5";
 export const REFUND_SYSTEM_PROMPT = [
-  "You are Foobar's refund operations agent.",
+  "You are the demo refund operations agent.",
   "You must decide whether a refund should be approved for the invoice in the user's request.",
   "Always call lookupInvoice before making a decision.",
   "If the invoice is refundable, call createRefund with the full invoice amount.",
@@ -104,7 +104,7 @@ export async function createRefund({
   };
 }
 
-const foobarTools = {
+const refundAgentTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
     replay: true,
@@ -116,14 +116,14 @@ const foobarTools = {
   },
 } satisfies PiAiToolset<string, RefundEvalMetadata>;
 
-type FoobarRuntime = PiAiRuntime<
-  typeof foobarTools,
+type RefundAgentRuntime = PiAiRuntime<
+  typeof refundAgentTools,
   string,
   RefundEvalMetadata
 >;
-type FoobarRuntimeTools = FoobarRuntime["tools"];
+type RefundAgentRuntimeTools = RefundAgentRuntime["tools"];
 
-const fallbackRuntimeTools: FoobarRuntimeTools = {
+const fallbackRuntimeTools: RefundAgentRuntimeTools = {
   lookupInvoice,
   createRefund,
 };
@@ -146,13 +146,11 @@ const createRefundParameters = Type.Object({
 type LookupInvoiceArgs = Static<typeof lookupInvoiceParameters>;
 type CreateRefundArgs = Static<typeof createRefundParameters>;
 
-export class FoobarRefundAgent {
+export class RefundAgent {
   private readonly agent: Agent;
-  readonly toolset = foobarTools;
+  readonly toolset = refundAgentTools;
 
-  constructor(
-    private readonly model: FoobarRefundModel = DEFAULT_REFUND_MODEL,
-  ) {
+  constructor(private readonly model: RefundAgentModel = DEFAULT_REFUND_MODEL) {
     this.agent = new Agent({
       initialState: {
         systemPrompt: REFUND_SYSTEM_PROMPT,
@@ -164,7 +162,7 @@ export class FoobarRefundAgent {
     });
   }
 
-  async run(input: string, runtime: FoobarRuntime) {
+  async run(input: string, runtime: RefundAgentRuntime) {
     await this.agent.reset();
     this.agent.state.systemPrompt = REFUND_SYSTEM_PROMPT;
     this.agent.state.model = getModel("anthropic", this.model);
@@ -213,12 +211,12 @@ export class FoobarRefundAgent {
 }
 
 /** Creates a fresh demo refund agent for one eval run. */
-export function createRefundAgent(options?: { model?: FoobarRefundModel }) {
-  return new FoobarRefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
+export function createRefundAgent(options?: { model?: RefundAgentModel }) {
+  return new RefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
 }
 
 function createAgentTools(
-  runtimeTools: FoobarRuntimeTools = fallbackRuntimeTools,
+  runtimeTools: RefundAgentRuntimeTools = fallbackRuntimeTools,
 ): Array<AgentTool<any, any>> {
   const lookupInvoiceTool: AgentTool<
     typeof lookupInvoiceParameters,

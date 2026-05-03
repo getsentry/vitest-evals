@@ -861,7 +861,7 @@ function resolveSession(
   }
 
   const unmatchedRuntimeToolCalls = runtimeToolCalls.filter(
-    (call) => !stepToolCallIds.has(call.id),
+    (call) => call.id === undefined || !stepToolCallIds.has(call.id),
   );
 
   if (unmatchedRuntimeToolCalls.length > 0) {

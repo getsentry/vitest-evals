@@ -12,6 +12,7 @@ import {
   type Harness,
   type HarnessContext,
   type HarnessRun,
+  type NormalizedSession,
 } from "./index";
 
 type RefundEvalMetadata = {
