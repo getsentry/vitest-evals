@@ -61,6 +61,13 @@ type PiAgentToolLike<
 
 const ORIGINAL_NATIVE_EXECUTE = Symbol("vitest-evals.originalNativeExecute");
 
+type NativeToolExecute<
+  TInput,
+  TMetadata extends HarnessMetadata,
+> = PiAgentToolLike<TInput, TMetadata>["execute"] & {
+  [ORIGINAL_NATIVE_EXECUTE]?: PiAgentToolLike<TInput, TMetadata>["execute"];
+};
+
 export type PiAiReplayMode = ReplayMode;
 
 export interface PiAiEventSink {
@@ -426,12 +433,13 @@ async function executePiHarnessRun<
       return result;
     }
 
+    const normalizeResult = result as TResult;
     const resultArgs = {
       agent,
       input,
       context,
       runtime,
-      result,
+      result: normalizeResult,
     } satisfies PiAiHarnessResultArgs<
       TAgent,
       TInput,
@@ -442,13 +450,13 @@ async function executePiHarnessRun<
 
     const output = options.normalize?.output
       ? await options.normalize.output(resultArgs)
-      : resolveOutput(result);
+      : resolveOutput(normalizeResult);
     const usage = options.normalize?.usage
       ? await options.normalize.usage(resultArgs)
-      : resolveUsage(result, runtime.toolCalls.length);
+      : resolveUsage(normalizeResult, runtime.toolCalls.length);
     const session = options.normalize?.session
       ? await options.normalize.session(resultArgs)
-      : resolveSession(result, messages, output, usage);
+      : resolveSession(normalizeResult, messages, output, usage);
 
     return {
       session,
@@ -463,7 +471,7 @@ async function executePiHarnessRun<
           : undefined,
       errors: options.normalize?.errors
         ? await options.normalize.errors(resultArgs)
-        : resolveErrors(result),
+        : resolveErrors(normalizeResult),
     };
   } catch (error) {
     const usage = resolveUsage(undefined, runtime.toolCalls.length);
@@ -734,7 +742,10 @@ async function withInstrumentedAgentTools<
 
     const originalExecute = getNativeToolExecuteOrigin(tool.execute);
     originalExecutions.set(tool, originalExecute);
-    const instrumentedExecute = async (toolCallId, rawArgs) => {
+    const instrumentedExecute: NativeToolExecute<TInput, TMetadata> = async (
+      toolCallId: string,
+      rawArgs: Record<string, JsonValue>,
+    ) => {
       const startedAt = new Date();
       const toolContext = {
         input: args.input,
@@ -780,7 +791,7 @@ async function withInstrumentedAgentTools<
         const call = {
           name: tool.name,
           arguments: rawArgs,
-          error: serializeError(error),
+          error: serializeToolCallError(error),
           startedAt: startedAt.toISOString(),
           finishedAt: finishedAt.toISOString(),
           durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -878,10 +889,24 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
   );
 }
 
+function serializeToolCallError(
+  error: unknown,
+): NonNullable<ToolCallRecord["error"]> {
+  const serialized = serializeError(error);
+  const { message, type, ...details } = serialized;
+
+  return {
+    ...details,
+    message: typeof message === "string" ? message : String(message),
+    ...(typeof type === "string" ? { type } : {}),
+  };
+}
+
 function getNativeToolExecuteOrigin<TInput, TMetadata extends HarnessMetadata>(
   execute: PiAgentToolLike<TInput, TMetadata>["execute"],
 ) {
-  return execute[ORIGINAL_NATIVE_EXECUTE] ?? execute;
+  const nativeExecute = execute as NativeToolExecute<TInput, TMetadata>;
+  return nativeExecute[ORIGINAL_NATIVE_EXECUTE] ?? nativeExecute;
 }
 
 async function executeNativeToolWithReplay<
@@ -1033,7 +1058,7 @@ function createRuntime<
           const call = {
             name: toolName,
             arguments: args,
-            error: serializeError(error),
+            error: serializeToolCallError(error),
             startedAt: startedAt.toISOString(),
             finishedAt: finishedAt.toISOString(),
             durationMs: finishedAt.getTime() - startedAt.getTime(),

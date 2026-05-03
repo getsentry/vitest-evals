@@ -517,7 +517,10 @@ test("omits empty runtime tool error content when a task errors", async () => {
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
-        execute: async () => {
+        execute: async (
+          _input: { invoiceId: string },
+          _execution: ToolExecutionOptions,
+        ) => {
           throw new Error("");
         },
       },
