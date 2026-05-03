@@ -62,9 +62,6 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.71
         version: 3.0.71(zod@4.3.6)
-      '@demo/refund-agent':
-        specifier: workspace:*
-        version: link:../../examples/refund-agent
       '@vitest-evals/harness-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/harness-ai-sdk
@@ -80,31 +77,18 @@ importers:
 
   apps/demo-pi:
     dependencies:
-      '@demo/refund-agent':
-        specifier: workspace:*
-        version: link:../../examples/refund-agent
-      '@vitest-evals/harness-pi-ai':
-        specifier: workspace:*
-        version: link:../../packages/harness-pi-ai
-      vitest-evals:
-        specifier: workspace:*
-        version: link:../../packages/vitest-evals
-
-  examples/refund-agent:
-    dependencies:
       '@mariozechner/pi-agent-core':
         specifier: 0.67.68
         version: 0.67.68(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-ai':
         specifier: 0.67.68
         version: 0.67.68(ws@8.20.0)(zod@4.3.6)
-    devDependencies:
-      vitest:
-        specifier: ^4.1.2
-        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(vite@7.0.6(@types/node@25.5.0)(yaml@2.8.0))
+      '@vitest-evals/harness-pi-ai':
+        specifier: workspace:*
+        version: link:../../packages/harness-pi-ai
       vitest-evals:
         specifier: workspace:*
-        version: link:../vitest-evals
+        version: link:../../packages/vitest-evals
 
   packages/harness-ai-sdk:
     devDependencies:

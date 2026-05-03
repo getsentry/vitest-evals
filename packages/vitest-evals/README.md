@@ -35,7 +35,6 @@ npm install -D @vitest-evals/harness-ai-sdk
 
 ```ts
 import { expect } from "vitest";
-import { createRefundAgent } from "@demo/refund-agent";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
@@ -43,6 +42,7 @@ import {
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
+import { createRefundAgent } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";

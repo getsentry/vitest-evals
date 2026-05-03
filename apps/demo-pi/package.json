@@ -8,7 +8,8 @@
     "evals:fail": "node ./scripts/run-evals.mjs --fail"
   },
   "dependencies": {
-    "@demo/refund-agent": "workspace:*",
+    "@mariozechner/pi-agent-core": "0.67.68",
+    "@mariozechner/pi-ai": "0.67.68",
     "@vitest-evals/harness-pi-ai": "workspace:*",
     "vitest-evals": "workspace:*"
   }

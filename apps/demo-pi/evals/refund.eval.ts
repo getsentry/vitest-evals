@@ -1,5 +1,4 @@
 import { expect } from "vitest";
-import { createRefundAgent, type RefundCase } from "@demo/refund-agent";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
@@ -7,6 +6,7 @@ import {
   ToolCallJudge,
   toolCalls,
 } from "vitest-evals";
+import { createRefundAgent, type RefundCase } from "../src/refundAgent";
 
 const outputJudge = StructuredOutputJudge();
 

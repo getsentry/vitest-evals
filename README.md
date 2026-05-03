@@ -6,11 +6,8 @@ Monorepo for the explicit-run `vitest-evals` shape:
   types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
-- `examples/refund-agent`: private demo runtime with a small refund agent
-- `apps/demo-pi`: end-to-end Pi Mono demo evals wired through the workspace
-  runtime
-- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals wired through the workspace
-  runtime
+- `apps/demo-pi`: end-to-end Pi Mono demo evals with an app-local refund agent
+- `apps/demo-ai-sdk`: end-to-end AI SDK demo evals with app-local refund tools
 
 ## Workspace Layout
 
@@ -19,8 +16,6 @@ packages/
   vitest-evals/
   harness-ai-sdk/
   harness-pi-ai/
-examples/
-  refund-agent/
 apps/
   demo-ai-sdk/
   demo-pi/
@@ -62,7 +57,6 @@ The `apps/demo-pi` app shows the intended explicit-run flow:
 
 ```ts
 import { expect } from "vitest";
-import { createRefundAgent } from "@demo/refund-agent";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
@@ -70,6 +64,7 @@ import {
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
+import { createRefundAgent } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";
@@ -158,8 +153,6 @@ export default defineConfig({
     include: [
       "packages/**/*.test.ts",
       "packages/**/*.eval.ts",
-      "examples/**/*.test.ts",
-      "examples/**/*.eval.ts",
       "apps/**/*.test.ts",
       "apps/**/*.eval.ts",
     ],

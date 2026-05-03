@@ -1,6 +1,5 @@
-import { assertRefundCase } from "@demo/refund-agent/testing";
 import { describeEval } from "vitest-evals";
-import { refundHarness } from "./shared";
+import { assertRefundCase, refundHarness } from "./shared";
 
 describeEval(
   "demo ai-sdk refund agent",

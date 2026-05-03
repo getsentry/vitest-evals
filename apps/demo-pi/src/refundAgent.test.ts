@@ -4,7 +4,7 @@ import {
   createRefundAgent,
   lookupInvoice,
   parseRefundDecision,
-} from "./index";
+} from "./refundAgent";
 
 describe("parseRefundDecision", () => {
   test("parses plain approved JSON", () => {

@@ -28,8 +28,6 @@ packages/
       legacy/
   harness-ai-sdk/
   harness-pi-ai/
-examples/
-  refund-agent/
 apps/
   demo-ai-sdk/
   demo-pi/
@@ -136,12 +134,11 @@ standard tool replay/VCR behavior for opt-in tools, including:
 Replay metadata becomes part of the normalized tool record so the reporter can
 surface it.
 
-## Demo Runtime
+## Demo Apps
 
-`examples/refund-agent` contains the private refund-domain runtime used by the
-demo apps and tests. It stays outside `packages/` because `packages/` is
-reserved for real package surfaces that can be published or consumed
-independently.
+`apps/demo-pi` and `apps/demo-ai-sdk` own their demo fixtures locally. They stay
+under `apps/` because they are product demos, while `packages/` is reserved for
+real package surfaces that can be published or consumed independently.
 
 ## Extension Points
 

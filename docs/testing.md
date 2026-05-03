@@ -25,8 +25,8 @@ packages/harness-ai-sdk/src/
   index.test.ts
 packages/harness-pi-ai/src/
   index.test.ts
-examples/refund-agent/src/
-  index.test.ts
+apps/demo-pi/src/
+  refundAgent.test.ts
 apps/demo-ai-sdk/evals/
   *.eval.ts
 apps/demo-pi/evals/
