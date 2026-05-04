@@ -186,6 +186,14 @@ export interface PiAiHarnessResultArgs<
   result: TResult;
 }
 
+export interface PiAiCreateAgentArgs<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> {
+  input: TInput;
+  context: HarnessContext<TMetadata>;
+}
+
 interface PiAiHarnessBaseOptions<
   TAgent,
   TInput = string,
@@ -197,7 +205,9 @@ interface PiAiHarnessBaseOptions<
   >,
 > {
   agent?: TAgent;
-  createAgent?: () => MaybePromise<TAgent>;
+  createAgent?: (
+    args: PiAiCreateAgentArgs<TInput, TMetadata>,
+  ) => MaybePromise<TAgent>;
   toolReplay?: PiAiToolReplayPolicies<TInput, TMetadata>;
   normalize?: PiAiHarnessNormalizeOptions<
     TAgent,
@@ -365,7 +375,10 @@ export function piAiHarness<
     name: options.name ?? "pi-ai",
     prompt: options.prompt,
     run: async (input, context) => {
-      const agent = await resolveAgent(options);
+      const agent = await resolveAgent(options, {
+        input,
+        context,
+      });
       const messages: NormalizedMessage[] = [
         {
           role: "user",
@@ -517,13 +530,16 @@ async function resolveAgent<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
->(options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
+>(
+  options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  args: PiAiCreateAgentArgs<TInput, TMetadata>,
+) {
   if (options.agent !== undefined) {
     return options.agent;
   }
 
   if (options.createAgent) {
-    return options.createAgent();
+    return options.createAgent(args);
   }
 
   throw new Error(

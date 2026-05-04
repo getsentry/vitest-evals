@@ -74,6 +74,14 @@ export interface OpenAiAgentsRuntime<
   tools: OpenAiAgentsTool<TInput, TMetadata>[];
 }
 
+export interface OpenAiAgentsCreateAgentArgs<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> {
+  input: TInput;
+  context: HarnessContext<TMetadata>;
+}
+
 export interface OpenAiAgentsHarnessRunArgs<
   TAgent,
   TInput,
@@ -249,7 +257,9 @@ export interface OpenAiAgentsHarnessOptions<
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
 > {
   agent?: TAgent;
-  createAgent?: () => MaybePromise<TAgent>;
+  createAgent?: (
+    args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
+  ) => MaybePromise<TAgent>;
   runner?: TRunner;
   createRunner?: (
     args: Omit<
@@ -335,7 +345,10 @@ export function openaiAgentsHarness<
     name: options.name ?? "openai-agents",
     prompt: options.prompt,
     run: async (input, context) => {
-      const agent = await resolveAgent(options);
+      const agent = await resolveAgent(options, {
+        input,
+        context,
+      });
       return executeOpenAiAgentsHarness(options, agent, input, context);
     },
   };
@@ -586,9 +599,10 @@ async function resolveAgent<
     TResult,
     TContext
   >,
+  args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
 ) {
   if (options.createAgent) {
-    return options.createAgent();
+    return options.createAgent(args);
   }
 
   if (options.agent !== undefined) {

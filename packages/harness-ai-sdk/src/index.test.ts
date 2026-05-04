@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ToolExecutionOptions } from "ai";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
+import type { HarnessContext } from "vitest-evals/harness";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
@@ -903,6 +904,62 @@ test("creates a fresh agent for each explicit run", async () => {
 
   expect(createAgent).toHaveBeenCalledTimes(2);
   expect(run).toHaveBeenCalledTimes(2);
+});
+
+test("passes run input and context to agent factories", async () => {
+  const createAgent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      const scenario = context.metadata.scenario ?? "unknown";
+
+      return {
+        run: async (runInput: string) => ({
+          object: {
+            status: "approved",
+            input: runInput,
+            preparedInput: input,
+            scenario,
+          },
+        }),
+      };
+    },
+  );
+  const harness = aiSdkHarness({
+    prompt: judgePrompt,
+    agent: createAgent,
+  });
+  const context = createHarnessContext({
+    scenario: "refund",
+  });
+
+  const result = await harness.run("Refund invoice inv_123", context);
+
+  expect(createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+      context: expect.objectContaining({
+        metadata: {
+          scenario: "refund",
+        },
+      }),
+    }),
+  );
+  expect(context.setArtifact).toHaveBeenCalledWith(
+    "preparedInput",
+    "Refund invoice inv_123",
+  );
+  expect(result.output).toEqual({
+    status: "approved",
+    input: "Refund invoice inv_123",
+    preparedInput: "Refund invoice inv_123",
+    scenario: "refund",
+  });
 });
 
 test("normalizes domain results that resemble harness runs", async () => {

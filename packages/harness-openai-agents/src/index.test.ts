@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Agent, tool } from "@openai/agents";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { JsonValue } from "vitest-evals/harness";
+import type { HarnessContext, JsonValue } from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
 type DemoMetadata = {
@@ -258,6 +258,118 @@ test("exposes prompt and supports custom app output mapping", async () => {
   expect(result.artifacts).toEqual({
     entrypoint: "custom",
   });
+});
+
+test("passes run input and context to createAgent before tool instrumentation", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-openai-agents-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  let createdTool: OpenAiAgentsTool<string, DemoMetadata> | undefined;
+  const createAgent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      const scenario = context.metadata.scenario ?? "unknown";
+      const lookupBottle = {
+        type: "function",
+        name: "lookupBottle",
+        invoke: vi.fn(async (_runContext: unknown, rawInput: unknown) => {
+          if (typeof rawInput !== "string") {
+            throw new Error("Expected JSON tool input");
+          }
+
+          const parsed = JSON.parse(rawInput) as { bottleId: string };
+          return {
+            bottleId: parsed.bottleId,
+            preparedInput: input,
+            scenario,
+          };
+        }),
+      } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+
+      createdTool = lookupBottle;
+      return {
+        name: "classifier",
+        model: "gpt-4.1-mini",
+        tools: [lookupBottle],
+      } satisfies DemoAgent;
+    },
+  );
+  const runner = {
+    run: vi.fn(async (runAgent: DemoAgent, _input: string, runOptions) => {
+      expect(runAgent.tools?.[0]).not.toBe(createdTool);
+
+      const evidence = await runAgent.tools?.[0].invoke?.(
+        runOptions?.context,
+        JSON.stringify({
+          bottleId: "bt_123",
+        }),
+        {
+          toolCallId: "call_lookup",
+        },
+      );
+
+      return {
+        finalOutput: evidence,
+      };
+    }),
+  };
+  const harness = openaiAgentsHarness({
+    prompt: judgePrompt,
+    createAgent,
+    runner,
+    toolReplay: {
+      lookupBottle: true,
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "peated",
+    }),
+  );
+
+  expect(createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Classify bottle bt_123",
+      context: expect.objectContaining({
+        metadata: {
+          scenario: "peated",
+        },
+      }),
+    }),
+  );
+  expect(result.artifacts).toEqual({
+    preparedInput: "Classify bottle bt_123",
+  });
+  expect(result.output).toEqual({
+    bottleId: "bt_123",
+    preparedInput: "Classify bottle bt_123",
+    scenario: "peated",
+  });
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      id: "call_lookup",
+      name: "lookupBottle",
+      result: {
+        bottleId: "bt_123",
+        preparedInput: "Classify bottle bt_123",
+        scenario: "peated",
+      },
+      metadata: {
+        replay: {
+          status: "recorded",
+        },
+      },
+    },
+  ]);
 });
 
 test("wraps OpenAI Agents function tools with replay metadata", async () => {

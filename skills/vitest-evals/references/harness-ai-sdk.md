@@ -44,12 +44,15 @@ const harness = aiSdkHarness({
 |--------|-------------|
 | `prompt` | Required prompt seam for judges. |
 | `task` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent`. |
-| `agent` | Use for objects or factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `task`. |
+| `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `task`. |
 | `tools` | Optional AI SDK toolset; wrapped before being passed to the task or agent. |
 | `output` | Optional domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
 | `session` | Optional override when inferred steps or traces are insufficient. |
 | `usage`, `timings`, `errors` | Optional diagnostic overrides. |
 | `name` | Optional reporter label; defaults to `ai-sdk`. |
+
+Agent factories receive `{ input, context }` before execution so apps can
+derive instructions, metadata, or seeded state without side-channel setup.
 
 ## Normalization Behavior
 

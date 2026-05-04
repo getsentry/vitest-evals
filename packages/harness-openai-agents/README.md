@@ -60,6 +60,27 @@ const harness = openaiAgentsHarness({
 });
 ```
 
+`createAgent` receives the per-run input and harness context before the
+adapter instruments local function tools. Use that when an agent needs
+scenario-specific tool closures, instructions, seeded artifacts, or metadata
+while staying on the native replay path:
+
+```ts
+const harness = openaiAgentsHarness({
+  createAgent: ({ input, context }) =>
+    createClassifierAgent({
+      bottleId: parseBottleId(input),
+      metadata: context.metadata,
+      setArtifact: context.setArtifact,
+    }),
+  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
+  prompt: sharedJudgePrompt,
+  toolReplay: {
+    lookup_bottle: true,
+  },
+});
+```
+
 The required `prompt` callback is passed to harness-backed judges as
 `JudgeContext.harness.prompt`, so rubric or factuality judges can share the
 same provider/model setup as the suite harness.
@@ -67,7 +88,8 @@ same provider/model setup as the suite harness.
 The adapter provides:
 
 - native `Runner.run(agent, input, options)` execution
-- support for existing agents or per-test `createAgent()` factories
+- support for existing agents or per-run `createAgent({ input, context })`
+  factories
 - a `run` escape hatch for app-specific entrypoints
 - normalized assistant output, messages, tool calls, tool results, usage,
   timings, errors, and replay-friendly metadata
