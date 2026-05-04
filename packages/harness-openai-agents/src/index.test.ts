@@ -481,6 +481,75 @@ test("prefers captured local tool results over model-visible output wrappers", a
   );
 });
 
+test("preserves explicit null captured local tool results", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: vi.fn(async () => null),
+  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  const harness = openaiAgentsHarness({
+    prompt: judgePrompt,
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    } satisfies DemoAgent,
+    runner: {
+      run: async (agent: DemoAgent, _input: string, runOptions) => {
+        await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_unknown",
+          }),
+          {
+            toolCallId: "call_lookup",
+          },
+        );
+
+        return {
+          finalOutput: "classified",
+          newItems: [
+            {
+              type: "tool_call_item",
+              rawItem: {
+                type: "function_call",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                arguments: JSON.stringify({
+                  bottleId: "bt_unknown",
+                }),
+                status: "completed",
+              },
+            },
+            {
+              type: "tool_call_output_item",
+              rawItem: {
+                type: "function_call_result",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                status: "completed",
+                output: {
+                  type: "text",
+                  text: "null",
+                },
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_unknown",
+    createHarnessContext({}),
+  );
+  const [call] = toolCalls(result.session);
+
+  expect(call).toHaveProperty("result", null);
+  expect(call.error).toBeUndefined();
+});
+
 test("errors when replay is configured for unknown OpenAI Agents tools", async () => {
   const lookupBottle = {
     type: "function",

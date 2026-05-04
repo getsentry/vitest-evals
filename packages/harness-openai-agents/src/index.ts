@@ -1433,20 +1433,39 @@ function mergeToolCalls(
   }
 
   const error = runtimeCall.error ?? call.error;
+  const hasRuntimeResult = hasOwnObjectProperty(runtimeCall, "result");
+  const hasCallResult = hasOwnObjectProperty(call, "result");
+  const result = hasRuntimeResult ? runtimeCall.result : call.result;
 
-  return {
+  const merged = {
     ...runtimeCall,
     ...call,
     id: call.id ?? runtimeCall.id,
     name: call.name ?? runtimeCall.name,
     arguments: call.arguments ?? runtimeCall.arguments,
-    result: error ? undefined : (runtimeCall.result ?? call.result),
-    error,
     metadata: normalizeMetadata({
       ...(runtimeCall.metadata ?? {}),
       ...(call.metadata ?? {}),
     }),
   };
+
+  if (error) {
+    const { result: _result, ...withoutResult } = merged;
+    return {
+      ...withoutResult,
+      error,
+    };
+  }
+
+  const { error: _error, result: _result, ...withoutOutcome } = merged;
+  if (hasRuntimeResult || hasCallResult) {
+    return {
+      ...withoutOutcome,
+      result,
+    };
+  }
+
+  return withoutOutcome;
 }
 
 function normalizeMessageContent(
@@ -1746,6 +1765,10 @@ function getObjectProperty(value: unknown, key: string): unknown {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)[key]
     : undefined;
+}
+
+function hasOwnObjectProperty(value: object, key: keyof ToolCallRecord) {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function stringProperty(value: unknown, key: string): string | undefined {
