@@ -57,6 +57,26 @@ const harness = piAiHarness({
 If the agent already implements `run(input, runtime)`, you can omit `run` and
 the harness will call that method automatically.
 
+`createAgent` receives the per-run input and harness context before the adapter
+infers and instruments native agent tools. Use that for scenario-specific
+instructions, tool closures, metadata, or seeded artifacts without leaving the
+default replay path:
+
+```ts
+const harness = piAiHarness({
+  createAgent: ({ input, context }) =>
+    createRefundAgent({
+      instructions: buildInstructions(input),
+      metadata: context.metadata,
+      setArtifact: context.setArtifact,
+    }),
+  toolReplay: {
+    lookupInvoice: true,
+  },
+  prompt: sharedJudgePrompt,
+});
+```
+
 You should not need to configure output/session/usage basics for the normal Pi
 path. Pass your agent and let the adapter infer both the toolset and the
 normalized result from common Pi-style return values such as `decision` or

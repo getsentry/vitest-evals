@@ -2,9 +2,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
+import type { HarnessContext, JsonValue } from "vitest-evals/harness";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
-type DemoMetadata = Record<string, never>;
+type DemoMetadata = {
+  scenario?: string;
+};
 
 const createAgent = vi.fn(() => ({
   id: "refund-agent",
@@ -1147,6 +1150,123 @@ test("does not opt native agent tools into replay from tool objects", async () =
 
   expect(execute).toHaveBeenCalledTimes(1);
   expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+});
+
+test("passes run input and context to createAgent before native tool instrumentation", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-native-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const createContextualAgent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      const scenario = context.metadata.scenario ?? "unknown";
+      const nativeTools = [
+        {
+          name: "lookupInvoice",
+          execute: vi.fn(
+            async (_toolCallId: string, args: { invoiceId: string }) => ({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    invoiceId: args.invoiceId,
+                    scenario,
+                  }),
+                },
+              ],
+              details: {
+                invoiceId: args.invoiceId,
+                preparedInput: input,
+                scenario,
+              },
+            }),
+          ),
+        },
+      ];
+
+      return {
+        agent: {
+          state: {
+            tools: nativeTools,
+          },
+        },
+        async run(_input: string, runtime: { events: DemoRuntime["events"] }) {
+          const toolResult = await nativeTools[0].execute("call_lookup", {
+            invoiceId: "inv_123",
+          });
+
+          runtime.events.assistant(toolResult.content[0].text);
+
+          return {
+            decision: toolResult.details,
+          };
+        },
+      };
+    },
+  );
+  const harness = piAiHarness({
+    prompt: judgePrompt,
+    createAgent: createContextualAgent,
+    toolReplay: {
+      lookupInvoice: true,
+    },
+  });
+  const artifacts: Record<string, JsonValue> = {};
+  const context: HarnessContext<DemoMetadata> = {
+    metadata: {
+      scenario: "refund",
+    },
+    task: {
+      meta: {},
+    },
+    artifacts,
+    setArtifact: vi.fn((name: string, value: JsonValue) => {
+      artifacts[name] = value;
+    }),
+  };
+
+  const result = await harness.run("Refund invoice inv_123", context);
+
+  expect(createContextualAgent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+      context: expect.objectContaining({
+        metadata: {
+          scenario: "refund",
+        },
+      }),
+    }),
+  );
+  expect(result.artifacts).toEqual({
+    preparedInput: "Refund invoice inv_123",
+  });
+  expect(result.output).toEqual({
+    invoiceId: "inv_123",
+    preparedInput: "Refund invoice inv_123",
+    scenario: "refund",
+  });
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+        preparedInput: "Refund invoice inv_123",
+        scenario: "refund",
+      },
+      metadata: {
+        replay: {
+          status: "recorded",
+        },
+      },
+    },
+  ]);
 });
 
 test("records and replays opt-in tools in auto mode", async () => {

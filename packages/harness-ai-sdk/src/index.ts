@@ -46,7 +46,13 @@ import type {
 } from "ai";
 
 type MaybePromise<T> = T | Promise<T>;
-type AgentSource<TAgent> = TAgent | (() => MaybePromise<TAgent>);
+type AgentSource<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> =
+  | TAgent
+  | ((args: AiSdkCreateAgentArgs<TInput, TMetadata>) => MaybePromise<TAgent>);
 type AnyAiSdkToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -150,6 +156,14 @@ export interface AiSdkRuntime<
   signal?: AbortSignal;
 }
 
+export interface AiSdkCreateAgentArgs<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> {
+  input: TInput;
+  context: HarnessContext<TMetadata>;
+}
+
 export interface AiSdkHarnessRunArgs<
   TAgent,
   TInput,
@@ -185,7 +199,7 @@ export type AiSdkHarnessOptions<
 > = AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> &
   (
     | {
-        agent: AgentSource<TAgent>;
+        agent: AgentSource<TAgent, TInput, TMetadata>;
         task?: never;
       }
     | {
@@ -280,7 +294,10 @@ export function aiSdkHarness<
     name: options.name ?? "ai-sdk",
     prompt: options.prompt,
     run: async (input, context) => {
-      const agent = await resolveAgent(options);
+      const agent = await resolveAgent(options, {
+        input,
+        context,
+      });
       return runAiSdkHarness(options, agent, input, context);
     },
   };
@@ -420,9 +437,12 @@ async function resolveAgent<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends AiSdkToolset<TInput, TMetadata>,
->(options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
+>(
+  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  args: AiSdkCreateAgentArgs<TInput, TMetadata>,
+) {
   return hasAgentSource(options)
-    ? await resolveAgentSource(options.agent)
+    ? await resolveAgentSource(options.agent, args)
     : undefined;
 }
 
@@ -490,15 +510,20 @@ function hasAgentSource<
   TMetadata,
   TResult,
   TTools
-> & { agent: AgentSource<TAgent> } {
+> & { agent: AgentSource<TAgent, TInput, TMetadata> } {
   return "agent" in options && options.agent !== undefined;
 }
 
-async function resolveAgentSource<TAgent>(
-  agent: AgentSource<TAgent>,
+async function resolveAgentSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+  args: AiSdkCreateAgentArgs<TInput, TMetadata>,
 ): Promise<TAgent> {
   if (isAgentFactory(agent)) {
-    return agent();
+    return agent(args);
   }
 
   return agent;
@@ -526,9 +551,11 @@ function hasAiSdkGenerateMethod<
   return hasCallableMethod(agent, "generate");
 }
 
-function isAgentFactory<TAgent>(
-  agent: AgentSource<TAgent>,
-): agent is () => MaybePromise<TAgent> {
+function isAgentFactory<TAgent, TInput, TMetadata extends HarnessMetadata>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+): agent is (
+  args: AiSdkCreateAgentArgs<TInput, TMetadata>,
+) => MaybePromise<TAgent> {
   return (
     typeof agent === "function" &&
     !hasCallableMethod(agent, "run") &&

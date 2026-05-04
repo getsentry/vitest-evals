@@ -21,6 +21,9 @@ const harness = piAiHarness({
 });
 ```
 
+`createAgent` receives `{ input, context }` when per-run instructions, native
+tool closures, metadata, or seeded artifacts are needed before instrumentation.
+
 If the agent needs a custom entrypoint:
 
 ```ts
@@ -39,7 +42,7 @@ const harness = piAiHarness({
 | Option | Requirement |
 |--------|-------------|
 | `agent` | Existing instance used for runs. |
-| `createAgent` | Factory for a fresh agent; prefer for per-test isolation. |
+| `createAgent` | Factory for a fresh per-run agent; receives `{ input, context }`. |
 | `prompt` | Required prompt seam for judges. |
 | `run` | Optional custom execution; omitted when the agent exposes `run(input, runtime)`. |
 | `tools` | Optional explicit `PiAiToolset`; use when the agent hides its tool surface. |

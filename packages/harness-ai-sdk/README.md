@@ -68,6 +68,23 @@ const harness = aiSdkHarness({
 });
 ```
 
+If your app exposes an agent object instead, `agent` can be either that object
+or a per-run factory. Factories receive the eval input and harness context so
+input-dependent instructions, metadata, or seeded state do not require
+side-channel setup:
+
+```ts
+const harness = aiSdkHarness({
+  tools,
+  prompt: sharedJudgePrompt,
+  agent: ({ input, context }) =>
+    createRefundAgent({
+      instructions: buildInstructions(input),
+      metadata: context.metadata,
+    }),
+});
+```
+
 The required `prompt` callback is passed to harness-backed judges as
 `JudgeContext.harness.prompt`, which lets rubric or factuality judges share the
 same provider/model configuration as the suite harness.

@@ -15,6 +15,9 @@ hatches for advanced cases.
 - Put capabilities on the object that owns their configuration. Avoid parallel
   context objects with overlapping lifecycle names such as `harness` and
   `runtime`.
+- Per-run factories should receive one contextual args object with the run
+  input and harness context when the harness owns later instrumentation or
+  execution.
 - Infer context from fixtures, registered runs, or the current test when that
   removes repetitive parameters and avoids caller mistakes.
 - Keep explicit overrides for values that cannot be inferred reliably.
