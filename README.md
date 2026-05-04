@@ -146,7 +146,9 @@ Harness-backed suites stay close to plain Vitest:
 - judges layer in through `expect(...).toSatisfyJudge(...)`
 - every judge receives `JudgeContext`, including the configured harness with its
   required `prompt` function
-- per-run judge parameters should usually live under `metadata`
+- scenario-specific judge criteria can live in `inputValue`; use `metadata` for
+  per-run expectations or harness configuration that are not part of the
+  scenario payload
 - reporter output, replay, usage, and tool traces come from the normalized run
 
 Built-in judges like `StructuredOutputJudge()` are still available for

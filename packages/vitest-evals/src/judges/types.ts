@@ -17,7 +17,9 @@ export type JudgeResult = {
 /**
  * Full normalized context passed to every judge.
  *
- * Per-run judge parameters should generally live under `metadata`.
+ * Scenario-owned judge criteria should live on `inputValue`. Use `metadata`
+ * for per-run expectations or harness configuration that are not part of the
+ * scenario payload.
  */
 export interface JudgeContext<
   TInput = unknown,
