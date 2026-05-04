@@ -1741,7 +1741,6 @@ function resolveModel(result: unknown) {
 
   return (
     stringProperty(result, "model") ??
-    (typeof directModel === "string" ? directModel : undefined) ??
     stringProperty(directModel, "modelId") ??
     stringProperty(directModel, "id") ??
     (typeof lastAgentModel === "string" ? lastAgentModel : undefined) ??
