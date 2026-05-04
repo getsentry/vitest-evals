@@ -192,5 +192,7 @@ errors on missing recordings. Recordings are stored under
 `.vitest-evals/recordings/<tool-name>/`.
 
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`
-script. The demo apps expect provider keys in `.env` or `.env.local`. The
+script. The demo eval scripts default replay to `auto` and write recordings
+under `.vitest-evals/recordings`, unless those environment variables are
+already set. The demo apps expect provider keys in `.env` or `.env.local`. The
 intentional failing examples remain under the `evals:fail` scripts.

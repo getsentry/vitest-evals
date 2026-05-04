@@ -1432,14 +1432,16 @@ function mergeToolCalls(
     return call;
   }
 
+  const error = runtimeCall.error ?? call.error;
+
   return {
     ...runtimeCall,
     ...call,
     id: call.id ?? runtimeCall.id,
     name: call.name ?? runtimeCall.name,
     arguments: call.arguments ?? runtimeCall.arguments,
-    result: call.result ?? runtimeCall.result,
-    error: call.error ?? runtimeCall.error,
+    result: error ? undefined : (runtimeCall.result ?? call.result),
+    error,
     metadata: normalizeMetadata({
       ...(runtimeCall.metadata ?? {}),
       ...(call.metadata ?? {}),
@@ -1558,14 +1560,29 @@ function resolveRawToolName(rawItem: unknown) {
 }
 
 function countToolCallsFromResult(result: unknown): number {
-  const items = [
-    ...(arrayProperty(result, "newItems") ?? []),
-    ...(arrayProperty(result, "output") ?? []),
-  ];
+  const newItems = arrayProperty(result, "newItems");
+  const items =
+    newItems && newItems.length > 0
+      ? newItems
+      : (arrayProperty(result, "output") ?? []);
+  const seenCallIds = new Set<string>();
 
   return items.reduce<number>((count, item) => {
     const rawItem = getRunItemRawItem(item);
-    return isToolCallItem(item, rawItem) ? count + 1 : count;
+    if (!isToolCallItem(item, rawItem)) {
+      return count;
+    }
+
+    const callId = resolveRawToolCallId(rawItem);
+    if (callId) {
+      if (seenCallIds.has(callId)) {
+        return count;
+      }
+
+      seenCallIds.add(callId);
+    }
+
+    return count + 1;
   }, 0);
 }
 

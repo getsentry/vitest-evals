@@ -134,7 +134,10 @@ describeEval(
             },
           });
           expect(options?.stream).toBe(false);
-          return runResult;
+          return {
+            ...runResult,
+            output: runResult.newItems,
+          };
         }),
       },
     }),
@@ -388,6 +391,94 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
       },
     },
   ]);
+});
+
+test("prefers captured local tool results over model-visible output wrappers", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: vi.fn(async () => ({
+      bottleId: "bt_123",
+      family: "bourbon",
+    })),
+  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  const harness = openaiAgentsHarness({
+    prompt: judgePrompt,
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    } satisfies DemoAgent,
+    runner: {
+      run: async (agent: DemoAgent, _input: string, runOptions) => {
+        const evidence = await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_123",
+          }),
+          {
+            toolCallId: "call_lookup",
+          },
+        );
+
+        return {
+          finalOutput: "classified",
+          newItems: [
+            {
+              type: "tool_call_item",
+              rawItem: {
+                type: "function_call",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                arguments: JSON.stringify({
+                  bottleId: "bt_123",
+                }),
+                status: "completed",
+              },
+            },
+            {
+              type: "tool_call_output_item",
+              rawItem: {
+                type: "function_call_result",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                status: "completed",
+                output: {
+                  type: "text",
+                  text: JSON.stringify(evidence),
+                },
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      id: "call_lookup",
+      name: "lookupBottle",
+      result: {
+        bottleId: "bt_123",
+        family: "bourbon",
+      },
+    },
+  ]);
+  expect(result.session.messages).toContainEqual(
+    expect.objectContaining({
+      role: "tool",
+      content: {
+        type: "text",
+        text: '{"bottleId":"bt_123","family":"bourbon"}',
+      },
+    }),
+  );
 });
 
 test("errors when replay is configured for unknown OpenAI Agents tools", async () => {

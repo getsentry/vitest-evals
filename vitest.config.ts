@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/**/*.eval.ts",
       "apps/**/*.test.ts",
       "apps/**/*.eval.ts",
+      "scripts/**/*.test.mjs",
     ],
   },
 });
