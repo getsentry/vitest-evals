@@ -25,7 +25,9 @@ npm install -D @vitest-evals/harness-ai-sdk
 - the returned `result.output` is the app-facing value you assert on directly
 - the returned `result.session` is the canonical JSON-serializable trace for
   reporting, replay, tool assertions, and judges
-- per-run judge inputs should usually live under `metadata`
+- scenario-specific judge criteria can live in `inputValue`; use `metadata` for
+  per-run expectations or harness configuration that are not part of the
+  scenario payload
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
 - every judge receives `JudgeContext`, including the configured `harness` with
@@ -147,6 +149,158 @@ wrapped pieces can be injected.
 For the Pi-specific harness, output/session/usage normalization should usually
 be inferred automatically. Treat low-level normalization callbacks as an escape
 hatch, not part of the primary authoring path.
+
+## Custom App Harnesses
+
+First-party harness packages are conveniences, not the only supported path. If
+you need to test a full application flow, define a harness that runs your app
+through its normal entrypoint and returns a normalized `HarnessRun`. The same
+harness should also expose `prompt`, which LLM-backed judges can reuse through
+`JudgeContext.harness.prompt`.
+
+```ts
+import {
+  describeEval,
+  namedJudge,
+  type JudgeContext,
+} from "vitest-evals";
+import {
+  normalizeContent,
+  normalizeMetadata,
+  toJsonValue,
+  type Harness,
+  type HarnessRun,
+} from "vitest-evals/harness";
+
+type AppEvent = {
+  type: string;
+  payload: Record<string, unknown>;
+};
+
+type AppEvalInput = {
+  events: AppEvent[];
+  criteria: {
+    contract: string;
+    pass: string[];
+    fail?: string[];
+  };
+};
+
+const appHarness: Harness<AppEvalInput> = {
+  name: "custom-app",
+  prompt: (input, options) => promptJudgeModel(input, options),
+  run: async (input, context): Promise<HarnessRun> => {
+    const result = await replayAppEvents(input.events, {
+      signal: context.signal,
+    });
+    const output = {
+      replies: result.replies,
+      sideEffects: result.sideEffects,
+    };
+
+    return {
+      output: toJsonValue(output),
+      session: {
+        messages: [
+          ...input.events.map((event) => ({
+            role: "user" as const,
+            content: normalizeContent(event),
+          })),
+          ...result.replies.map((reply) => ({
+            role: "assistant" as const,
+            content: normalizeContent(reply.text),
+            metadata: normalizeMetadata({
+              target: reply.target,
+            }),
+          })),
+        ],
+        outputText: result.replies.map((reply) => reply.text).join("\n\n"),
+        metadata: normalizeMetadata({
+          replyCount: result.replies.length,
+        }),
+      },
+      usage: {},
+      artifacts:
+        Object.keys(context.artifacts).length > 0
+          ? context.artifacts
+          : undefined,
+      errors: [],
+    };
+  },
+};
+
+const AppRubricJudge = namedJudge(
+  "AppRubricJudge",
+  async (
+    ctx: JudgeContext<AppEvalInput, Record<string, unknown>, typeof appHarness>,
+  ) => {
+    const verdict = await ctx.harness.prompt(
+      formatRubricPrompt({
+        output: ctx.output,
+        criteria: ctx.inputValue.criteria,
+      }),
+      {
+        metadata: {
+          judge: "AppRubricJudge",
+        },
+      },
+    );
+
+    return parseRubricVerdict(verdict);
+  },
+);
+
+describeEval(
+  "app behavior",
+  {
+    harness: appHarness,
+    judges: [AppRubricJudge],
+    judgeThreshold: 0.75,
+  },
+  (it) => {
+    it("handles an event flow", async ({ run }) => {
+      await run({
+        events: [
+          {
+            type: "message.created",
+            payload: {
+              text: "Summarize the current incident.",
+            },
+          },
+        ],
+        criteria: {
+          contract: "The app posts one user-visible incident summary.",
+          pass: ["The reply names the incident status."],
+          fail: ["The reply exposes internal metadata."],
+        },
+      });
+    });
+  },
+);
+```
+
+Use `Harness.run(...)` for the application under test and `Harness.prompt(...)`
+for judge model calls. Calling `ctx.harness.run(...)` from inside a judge runs
+the application a second time, so reserve that for judges that intentionally
+need a second execution. Put criteria on `inputValue` when they are part of the
+scenario itself; use per-run `metadata` for harness configuration or
+expectations that are not part of the scenario payload. `session.outputText` is
+the canonical text sent to judges, so define it deliberately when your app
+returns structured artifacts.
+
+Provider setup and rubric parsing stay in your harness and judge. The core
+package only requires the judge to return a `JudgeResult` with a score and
+optional metadata.
+
+Automatic suite-level judges are a good fit when every `run(...)` should get
+the same scoring. For cases where only some runs need an LLM judge, keep the
+suite free of automatic judges and use an explicit matcher:
+
+```ts
+await expect(result).toSatisfyJudge(AppRubricJudge, {
+  threshold: 0.75,
+});
+```
 
 ## Judge Matchers
 

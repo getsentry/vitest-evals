@@ -61,6 +61,10 @@ app-level model setup. Calling `harness.run(...)`
 inside a judge executes the app again, so reserve that for judges that
 intentionally need a second run.
 
+When rubric criteria are part of the scenario under test, keep them on
+`inputValue`. Use per-run `metadata` for expectations or harness configuration
+that are not part of the scenario payload.
+
 Explicit matcher calls on the branded result returned by fixture `run(...)`
 use the run's canonical text output and reuse registered input, metadata,
 harness, and harness prompt. Inside an eval test, matcher calls on registered
