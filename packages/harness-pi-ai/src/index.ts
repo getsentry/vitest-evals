@@ -49,14 +49,6 @@ type PiAgentToolLike<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
-  replay?:
-    | boolean
-    | PiAiToolReplayConfig<
-        Record<string, JsonValue>,
-        JsonValue,
-        TInput,
-        TMetadata
-      >;
   execute: (toolCallId: string, args: Record<string, JsonValue>) => unknown;
 };
 
@@ -105,6 +97,23 @@ export type PiAiToolReplayConfig<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = ToolReplayConfig<TArgs, TResult, PiAiToolContext<TInput, TMetadata>>;
 
+export type PiAiToolReplayPolicy<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> =
+  | boolean
+  | PiAiToolReplayConfig<
+      Record<string, JsonValue>,
+      JsonValue,
+      TInput,
+      TMetadata
+    >;
+
+export type PiAiToolReplayPolicies<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = Record<string, PiAiToolReplayPolicy<TInput, TMetadata>>;
+
 export interface PiAiToolDefinition<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -112,7 +121,6 @@ export interface PiAiToolDefinition<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > {
   description?: string;
-  replay?: boolean | PiAiToolReplayConfig<TArgs, TResult, TInput, TMetadata>;
   execute: (
     args: TArgs,
     context: PiAiToolContext<TInput, TMetadata>,
@@ -190,6 +198,7 @@ interface PiAiHarnessBaseOptions<
 > {
   agent?: TAgent;
   createAgent?: () => MaybePromise<TAgent>;
+  toolReplay?: PiAiToolReplayPolicies<TInput, TMetadata>;
   normalize?: PiAiHarnessNormalizeOptions<
     TAgent,
     TInput,
@@ -309,6 +318,10 @@ type InferredToolSurfaces<TInput, TMetadata extends HarnessMetadata> = {
   nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>;
 };
 
+type PiToolExecutionState = {
+  activeNativeToolNames: Map<string, number>;
+};
+
 /** Adapts a Pi agent runtime into a normalized vitest-evals harness. */
 export function piAiHarness<
   TAgent,
@@ -403,10 +416,13 @@ async function executePiHarnessRun<
   runtimeTools: TTools | undefined,
   nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>,
 ): Promise<HarnessRun> {
+  const executionState = createPiToolExecutionState();
   const runtime = createRuntime({
     input,
     context,
     tools: runtimeTools,
+    toolReplay: options.toolReplay,
+    executionState,
     messages,
   });
 
@@ -419,6 +435,8 @@ async function executePiHarnessRun<
         context,
         messages,
         toolCalls: runtime.toolCalls,
+        toolReplay: options.toolReplay,
+        executionState,
       },
       () =>
         runAgent(options, {
@@ -725,6 +743,8 @@ async function withInstrumentedAgentTools<
     context: HarnessContext<TMetadata>;
     messages: NormalizedMessage[];
     toolCalls: ToolCallRecord[];
+    toolReplay: PiAiToolReplayPolicies<TInput, TMetadata> | undefined;
+    executionState: PiToolExecutionState;
   },
   callback: () => Promise<TResult>,
 ) {
@@ -756,13 +776,17 @@ async function withInstrumentedAgentTools<
         signal: args.context.signal,
         setArtifact: args.context.setArtifact,
       } satisfies PiAiToolContext<TInput, TMetadata>;
+      const leaveNativeTool = enterNativeToolExecution(
+        args.executionState,
+        tool.name,
+      );
 
       try {
         const execution = await executeNativeToolWithReplay({
           toolName: tool.name,
           toolCallId,
           execute: originalExecute,
-          replay: tool.replay,
+          replay: args.toolReplay?.[tool.name],
           args: rawArgs,
           context: toolContext,
         });
@@ -806,6 +830,8 @@ async function withInstrumentedAgentTools<
           toolCalls: [call],
         });
         throw error;
+      } finally {
+        leaveNativeTool();
       }
     };
     instrumentedExecute[ORIGINAL_NATIVE_EXECUTE] = originalExecute;
@@ -912,6 +938,39 @@ function getNativeToolExecuteOrigin<TInput, TMetadata extends HarnessMetadata>(
   return nativeExecute[ORIGINAL_NATIVE_EXECUTE] ?? nativeExecute;
 }
 
+function createPiToolExecutionState(): PiToolExecutionState {
+  return {
+    activeNativeToolNames: new Map(),
+  };
+}
+
+function enterNativeToolExecution(
+  state: PiToolExecutionState,
+  toolName: string,
+) {
+  state.activeNativeToolNames.set(
+    toolName,
+    (state.activeNativeToolNames.get(toolName) ?? 0) + 1,
+  );
+
+  return () => {
+    const nextCount = (state.activeNativeToolNames.get(toolName) ?? 1) - 1;
+    if (nextCount <= 0) {
+      state.activeNativeToolNames.delete(toolName);
+      return;
+    }
+
+    state.activeNativeToolNames.set(toolName, nextCount);
+  };
+}
+
+function hasActiveNativeToolExecution(
+  state: PiToolExecutionState,
+  toolName: string,
+) {
+  return (state.activeNativeToolNames.get(toolName) ?? 0) > 0;
+}
+
 async function executeNativeToolWithReplay<
   TInput,
   TMetadata extends HarnessMetadata,
@@ -926,7 +985,7 @@ async function executeNativeToolWithReplay<
   toolName: string;
   toolCallId: string;
   execute: PiAgentToolLike<TInput, TMetadata>["execute"];
-  replay: PiAgentToolLike<TInput, TMetadata>["replay"];
+  replay: PiAiToolReplayPolicy<TInput, TMetadata> | undefined;
   args: Record<string, JsonValue>;
   context: PiAiToolContext<TInput, TMetadata>;
 }) {
@@ -934,7 +993,7 @@ async function executeNativeToolWithReplay<
   let liveResult: unknown;
 
   const execution = await executeWithReplay({
-    toolName,
+    toolName: createNativeReplayToolName(toolName),
     args,
     context,
     execute: async (toolArgs) => {
@@ -959,6 +1018,10 @@ async function executeNativeToolWithReplay<
   };
 }
 
+function createNativeReplayToolName(toolName: string) {
+  return `${toolName}.native`;
+}
+
 function createRuntime<
   TInput,
   TMetadata extends HarnessMetadata,
@@ -967,11 +1030,15 @@ function createRuntime<
   input,
   context,
   tools,
+  toolReplay,
+  executionState,
   messages,
 }: {
   input: TInput;
   context: HarnessContext<TMetadata>;
   tools: TTools | undefined;
+  toolReplay: PiAiToolReplayPolicies<TInput, TMetadata> | undefined;
+  executionState: PiToolExecutionState;
   messages: NormalizedMessage[];
 }): PiAiRuntime<TTools, TInput, TMetadata> & {
   toolCalls: ToolCallRecord[];
@@ -1019,6 +1086,10 @@ function createRuntime<
       toolName,
       async (args: Record<string, JsonValue>) => {
         const startedAt = new Date();
+        const isNativeImplementationCall = hasActiveNativeToolExecution(
+          executionState,
+          toolName,
+        );
         const toolContext = {
           input,
           metadata: context.metadata,
@@ -1030,10 +1101,18 @@ function createRuntime<
           const execution = await executeToolWithReplay({
             toolName,
             tool,
+            replay: isNativeImplementationCall
+              ? undefined
+              : toolReplay?.[toolName],
             args,
             context: toolContext,
           });
           const finishedAt = new Date();
+
+          if (isNativeImplementationCall) {
+            return execution.result;
+          }
+
           const call = {
             name: toolName,
             arguments: args,
@@ -1058,6 +1137,10 @@ function createRuntime<
           return execution.result;
         } catch (error) {
           const finishedAt = new Date();
+          if (isNativeImplementationCall) {
+            throw error;
+          }
+
           const call = {
             name: toolName,
             arguments: args,
@@ -1319,19 +1402,26 @@ async function executeToolWithReplay<
 >({
   toolName,
   tool,
+  replay,
   args,
   context,
 }: {
   toolName: string;
   tool: PiAiToolDefinition<TArgs, TResult, TInput, TMetadata>;
+  replay: PiAiToolReplayPolicy<TInput, TMetadata> | undefined;
   args: TArgs;
   context: PiAiToolContext<TInput, TMetadata>;
 }) {
-  return executeWithReplay({
+  return executeWithReplay<
+    Record<string, JsonValue>,
+    JsonValue,
+    PiAiToolContext<TInput, TMetadata>
+  >({
     toolName,
     args,
     context,
-    execute: tool.execute,
-    replay: tool.replay,
+    execute: (toolArgs, toolContext) =>
+      tool.execute(toolArgs as TArgs, toolContext),
+    replay,
   });
 }

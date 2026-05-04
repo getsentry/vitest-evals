@@ -1,30 +1,19 @@
-import { expect } from "vitest";
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
   describeEval,
   StructuredOutputJudge,
   ToolCallJudge,
-  toolCalls,
 } from "vitest-evals";
-import {
-  createRefundAgent,
-  promptRefundModel,
-  type RefundCase,
-} from "../src/refundAgent";
+import { expect } from "vitest";
+import { assertRefundCase, refundHarness } from "./shared";
+import type { RefundCase } from "../src/refundAgent";
 
 const outputJudge = StructuredOutputJudge();
 
 describeEval(
-  "demo pi refund agent",
+  "demo openai agents refund agent",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
-    harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
-      toolReplay: {
-        lookupInvoice: true,
-      },
-      prompt: promptRefundModel,
-    }),
+    skipIf: () => !process.env.OPENAI_API_KEY,
+    harness: refundHarness,
     judges: [ToolCallJudge()],
   },
   (it) => {
@@ -46,21 +35,13 @@ describeEval(
         metadata,
       });
 
-      expect(result.output).toMatchObject({
-        status: metadata.expectedStatus,
-      });
+      await assertRefundCase(result, metadata);
       await expect(result).toSatisfyJudge(outputJudge, {
         metadata,
         expected: {
           status: metadata.expectedStatus,
         },
       });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        metadata.expectedTools,
-      );
-      expect(result.usage.provider).toBe("anthropic");
-      expect(result.usage.model).toContain("claude");
-      expect(result.usage.totalTokens).toBeGreaterThan(0);
     });
   },
 );

@@ -65,6 +65,14 @@ Owns:
 - adapting AI SDK results into `HarnessRun`
 - AI SDK specific usage/session normalization
 
+### `packages/harness-openai-agents`
+
+Owns:
+
+- adapting OpenAI Agents SDK `Runner.run(...)` results into `HarnessRun`
+- OpenAI Agents specific `RunResult` and function-tool normalization
+- replay metadata for opt-in local function tools
+
 ### `packages/harness-pi-ai`
 
 Owns:
@@ -75,9 +83,10 @@ Owns:
 
 ## Demo Apps
 
-`apps/demo-pi` and `apps/demo-ai-sdk` own live demo eval coverage and any
-app-local refund fixtures they need. Keep them realistic; they are part of the
-product story, not just smoke tests. `packages/` is for real package surfaces.
+`apps/demo-pi`, `apps/demo-ai-sdk`, and `apps/demo-openai-agents` own live demo
+eval coverage and any app-local refund fixtures they need. Keep them realistic;
+they are part of the product story, not just smoke tests. `packages/` is for
+real package surfaces.
 
 ## Adding a New Judge
 

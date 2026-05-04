@@ -403,7 +403,6 @@ test("default agent run receives wrapped runtime tools", async () => {
     }),
     tools: {
       lookupInvoice: {
-        replay: true,
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
@@ -1387,9 +1386,11 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const replayHarness = aiSdkHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
     tools: {
       lookupInvoice: {
-        replay: true,
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
@@ -1521,6 +1522,53 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 });
 
+test("does not opt into replay from tool definitions", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const harness = aiSdkHarness({
+    prompt: judgePrompt,
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } as unknown as AiSdkToolset<string, DemoMetadata>,
+    task: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        text: '{"status":"approved"}',
+      };
+    },
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+});
+
 test("rejects async iterable replay outputs after awaiting execute", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-ai-sdk-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -1532,9 +1580,11 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
 
   const replayHarness = aiSdkHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      streamRefund: true,
+    },
     tools: {
       streamRefund: {
-        replay: true,
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
@@ -1578,9 +1628,11 @@ test("errors when strict mode is missing a recording", async () => {
 
   const replayHarness = aiSdkHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
     tools: {
       lookupInvoice: {
-        replay: true,
         inputSchema: z.object({
           invoiceId: z.string(),
         }),

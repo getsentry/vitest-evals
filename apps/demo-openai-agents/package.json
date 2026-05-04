@@ -1,0 +1,16 @@
+{
+  "name": "@demo/demo-openai-agents",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "evals": "node ./scripts/run-evals.mjs",
+    "evals:verbose": "node ./scripts/run-evals.mjs -v",
+    "evals:fail": "node ./scripts/run-evals.mjs --fail"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.8.5",
+    "@vitest-evals/harness-openai-agents": "workspace:*",
+    "vitest-evals": "workspace:*",
+    "zod": "^4.3.6"
+  }
+}

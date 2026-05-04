@@ -1,18 +1,15 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { aiSdkHarness, type AiSdkToolset } from "@vitest-evals/harness-ai-sdk";
-import { generateText, stepCountIs } from "ai";
-import { expect } from "vitest";
-import { type HarnessRun, toolCalls } from "vitest-evals";
+import { Agent, Runner, tool } from "@openai/agents";
+import type { HarnessPromptOptions } from "vitest-evals";
 import { z } from "zod";
 
-type InvoiceRecord = {
+export type InvoiceRecord = {
   invoiceId: string;
   amount: number;
   refundable: boolean;
   customer: string;
 };
 
-type RefundDecision =
+export type RefundDecision =
   | {
       status: "approved";
       invoiceId: string;
@@ -25,13 +22,31 @@ type RefundDecision =
       reason: string;
     };
 
-export type RefundCase = {
-  input: string;
+export type RefundEvalMetadata = {
+  name?: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };
 
-const REFUND_SYSTEM_PROMPT = [
+export type RefundCase = RefundEvalMetadata & {
+  input: string;
+};
+
+export type LookupInvoiceInput = {
+  invoiceId: string;
+};
+
+export type CreateRefundInput = {
+  invoiceId: string;
+  amount: number;
+};
+
+export const LOOKUP_INVOICE_DESCRIPTION =
+  "Look up invoice details inside demo billing.";
+export const CREATE_REFUND_DESCRIPTION =
+  "Create a refund for a refundable invoice.";
+export const DEFAULT_REFUND_MODEL = "gpt-4.1-mini";
+export const REFUND_SYSTEM_PROMPT = [
   "You are the demo refund operations agent.",
   "You must decide whether a refund should be approved for the invoice in the user's request.",
   "Always call lookupInvoice before making a decision.",
@@ -57,11 +72,10 @@ const INVOICES: Record<string, InvoiceRecord> = {
   },
 };
 
-async function lookupInvoice({
+/** Looks up a demo invoice record for the OpenAI Agents local function tool. */
+export async function lookupInvoice({
   invoiceId,
-}: {
-  invoiceId: string;
-}): Promise<InvoiceRecord> {
+}: LookupInvoiceInput): Promise<InvoiceRecord> {
   const invoice = INVOICES[invoiceId];
   if (!invoice) {
     throw new Error(`Invoice ${invoiceId} not found`);
@@ -70,13 +84,11 @@ async function lookupInvoice({
   return invoice;
 }
 
-async function createRefund({
+/** Creates a deterministic demo refund record. */
+export async function createRefund({
   invoiceId,
   amount,
-}: {
-  invoiceId: string;
-  amount: number;
-}): Promise<{
+}: CreateRefundInput): Promise<{
   refundId: string;
   amount: number;
   status: "submitted";
@@ -88,66 +100,82 @@ async function createRefund({
   };
 }
 
-const refundTools = {
-  lookupInvoice: {
-    description: "Look up invoice details inside demo billing.",
-    inputSchema: z.object({
+function createRefundTools() {
+  const lookupInvoiceTool = tool({
+    name: "lookupInvoice",
+    description: LOOKUP_INVOICE_DESCRIPTION,
+    parameters: z.object({
       invoiceId: z
         .string()
         .describe("The invoice id to inspect, such as inv_123."),
     }),
     execute: lookupInvoice,
-  },
-  createRefund: {
-    description: "Create a refund for a refundable invoice.",
-    inputSchema: z.object({
+  });
+
+  const createRefundTool = tool({
+    name: "createRefund",
+    description: CREATE_REFUND_DESCRIPTION,
+    parameters: z.object({
       invoiceId: z.string().describe("The invoice id that should be refunded."),
       amount: z.number().describe("The amount to refund in cents."),
     }),
     execute: createRefund,
-  },
-} satisfies AiSdkToolset<string, RefundCase>;
-
-export const refundHarness = aiSdkHarness({
-  tools: refundTools,
-  toolReplay: {
-    lookupInvoice: true,
-  },
-  prompt: (input, options) =>
-    generateText({
-      model: anthropic("claude-sonnet-4-5"),
-      system: options?.system,
-      prompt: input,
-      temperature: 0,
-    }).then((result) => result.text),
-  task: async ({ input, runtime }) =>
-    generateText({
-      model: anthropic("claude-sonnet-4-5"),
-      system: REFUND_SYSTEM_PROMPT,
-      prompt: input,
-      tools: runtime.tools,
-      stopWhen: stepCountIs(5),
-      temperature: 0,
-    }),
-  output: ({ result }) => parseRefundDecision(result.text),
-});
-
-export async function assertRefundCase(
-  run: HarnessRun,
-  expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
-) {
-  expect(run.output).toMatchObject({
-    status: expected.expectedStatus,
   });
-  expect(toolCalls(run.session).map((call) => call.name)).toEqual(
-    expected.expectedTools,
-  );
-  expect(run.usage.provider).toContain("anthropic");
-  expect(run.usage.model).toContain("claude");
-  expect(run.usage.totalTokens).toBeGreaterThan(0);
+
+  return [lookupInvoiceTool, createRefundTool];
 }
 
-function parseRefundDecision(text: string): RefundDecision {
+/** Creates a fresh OpenAI Agents refund agent for one eval run. */
+export function createRefundAgent(options?: { model?: string }) {
+  return new Agent({
+    name: "demo_refund_agent",
+    instructions: REFUND_SYSTEM_PROMPT,
+    model: options?.model ?? DEFAULT_REFUND_MODEL,
+    modelSettings: {
+      temperature: 0,
+    },
+    tools: createRefundTools(),
+  });
+}
+
+/** Creates the OpenAI Agents runner used by the demo harness. */
+export function createRefundRunner() {
+  return new Runner({
+    tracingDisabled: true,
+    modelSettings: {
+      temperature: 0,
+    },
+  });
+}
+
+/** Uses the same OpenAI Agents stack as a provider-agnostic judge prompt seam. */
+export async function promptRefundModel(
+  input: string,
+  options?: HarnessPromptOptions,
+) {
+  const runner = createRefundRunner();
+  const agent = new Agent({
+    name: "demo_refund_prompt",
+    instructions: options?.system ?? "Return a concise answer.",
+    model: DEFAULT_REFUND_MODEL,
+    modelSettings: {
+      temperature: 0,
+    },
+  });
+  const result = await runner.run(agent, input, {
+    maxTurns: 2,
+  });
+  const outputText = resolveResultText(result);
+
+  if (!outputText) {
+    throw new Error("Prompt model returned an empty response.");
+  }
+
+  return outputText;
+}
+
+/** Parses the demo agent's final JSON payload into a typed refund decision. */
+export function parseRefundDecision(text: string): RefundDecision {
   const cleaned = stripMarkdownFence(text);
   const jsonText = extractJsonObjectText(cleaned);
   const parsed = JSON.parse(jsonText) as Record<string, unknown>;
@@ -179,6 +207,25 @@ function parseRefundDecision(text: string): RefundDecision {
   }
 
   throw new Error(`Refund agent returned an invalid decision payload: ${text}`);
+}
+
+/** Extracts text from an OpenAI Agents run result for app output mapping. */
+export function resolveResultText(result: unknown) {
+  if (!result || typeof result !== "object") {
+    return typeof result === "string" ? result : "";
+  }
+
+  const finalOutput = (result as { finalOutput?: unknown }).finalOutput;
+  if (typeof finalOutput === "string") {
+    return finalOutput.trim();
+  }
+
+  const output = (result as { output?: unknown }).output;
+  if (typeof output === "string") {
+    return output.trim();
+  }
+
+  return finalOutput === undefined ? "" : JSON.stringify(finalOutput);
 }
 
 function stripMarkdownFence(text: string) {

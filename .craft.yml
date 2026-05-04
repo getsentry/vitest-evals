@@ -10,6 +10,10 @@ targets:
     access: public
     includeNames: /^vitest-evals-harness-ai-sdk-\d.*\.tgz$/
   - name: npm
+    id: "@vitest-evals/harness-openai-agents"
+    access: public
+    includeNames: /^vitest-evals-harness-openai-agents-\d.*\.tgz$/
+  - name: npm
     id: "@vitest-evals/harness-pi-ai"
     access: public
     includeNames: /^vitest-evals-harness-pi-ai-\d.*\.tgz$/

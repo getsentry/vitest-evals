@@ -1,30 +1,18 @@
 import { expect } from "vitest";
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
-import {
-  createRefundAgent,
-  promptRefundModel,
-  type RefundCase,
-} from "../src/refundAgent";
+import { refundHarness } from "./shared";
+import type { RefundCase } from "../src/refundAgent";
 
 type AssertionRefundCase = RefundCase;
 type ScoredRefundCase = RefundCase & {
   expected: Record<string, unknown>;
 };
 
-const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  toolReplay: {
-    lookupInvoice: true,
-  },
-  prompt: promptRefundModel,
-});
-
 describeEval(
-  "demo pi refund scorer failing example",
+  "demo openai agents refund scorer failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
-    harness,
+    skipIf: () => !process.env.OPENAI_API_KEY,
+    harness: refundHarness,
     judges: [StructuredOutputJudge()],
   },
   (it) => {
@@ -47,18 +35,18 @@ describeEval(
 );
 
 describeEval(
-  "demo pi refund assertion failing example",
+  "demo openai agents refund assertion failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
-    harness,
+    skipIf: () => !process.env.OPENAI_API_KEY,
+    harness: refundHarness,
   },
   (it) => {
     it.for<AssertionRefundCase>([
       {
-        name: "throws after the agent handles a missing invoice",
-        input: "Refund invoice inv_missing",
-        expectedStatus: "denied",
-        expectedTools: ["lookupInvoice"],
+        name: "asserts the wrong refund id after approval",
+        input: "Refund invoice inv_123",
+        expectedStatus: "approved",
+        expectedTools: ["lookupInvoice", "createRefund"],
       },
     ])("$name", async ({ input, ...metadata }, { run }) => {
       const result = await run(input, {
@@ -66,14 +54,10 @@ describeEval(
       });
 
       expect(result.output).toMatchObject({
-        status: "denied",
-        invoiceId: "inv_missing",
-        reason: "Invoice inv_missing not found",
+        status: "approved",
+        invoiceId: "inv_123",
+        refundId: "rf_wrong",
       });
-
-      throw new Error(
-        "Intentional demo eval error after the agent handled a tool failure.",
-      );
     });
   },
 );

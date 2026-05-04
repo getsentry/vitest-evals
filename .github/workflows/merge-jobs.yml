@@ -66,6 +66,7 @@ jobs:
           mkdir -p artifacts
           pnpm --filter vitest-evals pack --pack-destination artifacts
           pnpm --filter @vitest-evals/harness-ai-sdk pack --pack-destination artifacts
+          pnpm --filter @vitest-evals/harness-openai-agents pack --pack-destination artifacts
           pnpm --filter @vitest-evals/harness-pi-ai pack --pack-destination artifacts
           ls -la artifacts
 

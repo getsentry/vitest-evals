@@ -31,6 +31,9 @@ export function parseEvalCliArgs(args) {
 export function createEvalEnv(baseEnv, toolDetailLevel) {
   return {
     ...baseEnv,
+    VITEST_EVALS_REPLAY_MODE: baseEnv.VITEST_EVALS_REPLAY_MODE ?? "auto",
+    VITEST_EVALS_REPLAY_DIR:
+      baseEnv.VITEST_EVALS_REPLAY_DIR ?? ".vitest-evals/recordings",
     ...(toolDetailLevel > 0
       ? {
           VITEST_EVALS_TOOL_DETAILS: "1",
