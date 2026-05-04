@@ -494,6 +494,151 @@ describeEval(
   },
 );
 
+test("lets native Pi tools own replay when they delegate to a runtime tool of the same name", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-overlap-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const lookupInvoice = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  let activeRuntime: DemoRuntime | undefined;
+  const nativeExecute = vi.fn(
+    async (_toolCallId: string, args: { invoiceId: string }) => {
+      if (!activeRuntime) {
+        throw new Error("Expected runtime before native tool execution");
+      }
+
+      const invoice = await activeRuntime.tools.lookupInvoice({
+        invoiceId: args.invoiceId,
+      });
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(invoice) }],
+        details: invoice,
+      };
+    },
+  );
+
+  const replayHarness = piAiHarness({
+    prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
+    createAgent: () => {
+      const nativeTools = [
+        {
+          name: "lookupInvoice",
+          execute: nativeExecute,
+        },
+      ];
+
+      return {
+        toolset: {
+          lookupInvoice: {
+            execute: lookupInvoice,
+          },
+        } satisfies PiAiToolset<string, DemoMetadata>,
+        agent: {
+          state: {
+            tools: nativeTools,
+          },
+        },
+        async run(_input: string, runtime: DemoRuntime) {
+          activeRuntime = runtime;
+          const toolResult = await nativeTools[0].execute("lookupInvoice", {
+            invoiceId: "inv_123",
+          });
+
+          runtime.events.assistant(toolResult.content[0].text);
+
+          return {
+            decision: toolResult.details.refundable
+              ? { status: "approved" as const }
+              : { status: "denied" as const, reason: "not refundable" },
+          };
+        },
+      };
+    },
+  });
+
+  const firstRun = await replayHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(nativeExecute).toHaveBeenCalledTimes(1);
+  expect(lookupInvoice).toHaveBeenCalledTimes(1);
+  const firstCalls = toolCalls(firstRun.session);
+  expect(firstCalls).toHaveLength(1);
+  expect(firstCalls[0]).toMatchObject({
+    name: "lookupInvoice",
+    result: {
+      invoiceId: "inv_123",
+      refundable: true,
+    },
+    metadata: {
+      replay: {
+        status: "recorded",
+      },
+    },
+  });
+  const recordingPath = (
+    firstCalls[0].metadata?.replay as { recordingPath: string }
+  ).recordingPath;
+  expect(recordingPath).toContain("lookupInvoice.native");
+  const recording = JSON.parse(
+    readFileSync(join(process.cwd(), recordingPath), "utf8"),
+  ) as {
+    output: {
+      __vitestEvals: { kind: string };
+      normalizedResult: { invoiceId: string; refundable: boolean };
+    };
+  };
+  expect(recording.output).toMatchObject({
+    __vitestEvals: {
+      kind: "pi-ai-native-tool-result",
+    },
+    normalizedResult: {
+      invoiceId: "inv_123",
+      refundable: true,
+    },
+  });
+
+  nativeExecute.mockImplementation(async () => {
+    throw new Error("native tool should not execute after recording exists");
+  });
+  lookupInvoice.mockImplementation(async () => {
+    throw new Error("runtime tool should not execute after recording exists");
+  });
+
+  const secondRun = await replayHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(nativeExecute).toHaveBeenCalledTimes(1);
+  expect(lookupInvoice).toHaveBeenCalledTimes(1);
+  expect(toolCalls(secondRun.session)).toHaveLength(1);
+  expect(toolCalls(secondRun.session)[0]).toMatchObject({
+    name: "lookupInvoice",
+    metadata: {
+      replay: {
+        status: "replayed",
+      },
+    },
+  });
+});
+
 describeEval(
   "pi-ai harness infers runtime toolsets from existing agents",
   {
@@ -790,11 +935,13 @@ test("replays native agent tools without breaking the agent-facing result", asyn
 
   const replayHarness = piAiHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
     createAgent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
-          replay: true,
           execute,
         },
       ];
@@ -932,6 +1079,76 @@ test("replays native agent tools without breaking the agent-facing result", asyn
   ]);
 });
 
+test("does not opt native agent tools into replay from tool objects", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-native-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(
+    async (_toolCallId: string, args: { invoiceId: string }) => ({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            invoiceId: args.invoiceId,
+            refundable: true,
+          }),
+        },
+      ],
+      details: {
+        invoiceId: args.invoiceId,
+        refundable: true,
+      },
+    }),
+  );
+
+  const harness = piAiHarness({
+    prompt: judgePrompt,
+    createAgent: () => {
+      const nativeTools = [
+        {
+          name: "lookupInvoice",
+          replay: true,
+          execute,
+        },
+      ];
+
+      return {
+        agent: {
+          state: {
+            tools: nativeTools,
+          },
+        },
+        async run(_input: string, runtime: { events: DemoRuntime["events"] }) {
+          const toolResult = await nativeTools[0].execute("lookupInvoice", {
+            invoiceId: "inv_123",
+          });
+
+          runtime.events.assistant(toolResult.content[0].text);
+
+          return {
+            decision: {
+              status: "approved" as const,
+            },
+          };
+        },
+      };
+    },
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+});
+
 test("records and replays opt-in tools in auto mode", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -944,10 +1161,12 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const replayHarness = piAiHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
     createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
-        replay: true,
         execute,
       },
     } satisfies PiAiToolset<string, DemoMetadata>,
@@ -1016,6 +1235,51 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 });
 
+test("does not opt runtime tools into replay from tool definitions", async () => {
+  replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
+  vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
+  vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
+
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+
+  const harness = piAiHarness<{ id: string }, string, DemoMetadata>({
+    prompt: judgePrompt,
+    createAgent: () => ({ id: "refund-agent" }),
+    tools: {
+      lookupInvoice: {
+        replay: true,
+        execute,
+      },
+    } as unknown as PiAiToolset<string, DemoMetadata>,
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        decision: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const run = await harness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+});
+
 test("errors when strict mode is missing a recording", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "strict");
@@ -1028,10 +1292,12 @@ test("errors when strict mode is missing a recording", async () => {
 
   const replayHarness = piAiHarness({
     prompt: judgePrompt,
+    toolReplay: {
+      lookupInvoice: true,
+    },
     createAgent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
-        replay: true,
         execute,
       },
     } satisfies PiAiToolset<string, DemoMetadata>,

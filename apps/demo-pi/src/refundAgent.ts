@@ -108,7 +108,6 @@ export async function createRefund({
 const refundAgentTools = {
   lookupInvoice: {
     description: LOOKUP_INVOICE_DESCRIPTION,
-    replay: true,
     execute: lookupInvoice,
   },
   createRefund: {

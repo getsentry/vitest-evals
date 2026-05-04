@@ -5,9 +5,12 @@ Monorepo for the explicit-run `vitest-evals` shape:
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
   types, reporter, and legacy compatibility exports
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
+- `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
 - `apps/demo-pi`: end-to-end Pi Mono demo evals with an app-local refund agent
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals with app-local refund tools
+- `apps/demo-openai-agents`: end-to-end OpenAI Agents demo evals with
+  app-local refund tools
 
 ## Workspace Layout
 
@@ -15,9 +18,11 @@ Monorepo for the explicit-run `vitest-evals` shape:
 packages/
   vitest-evals/
   harness-ai-sdk/
+  harness-openai-agents/
   harness-pi-ai/
 apps/
   demo-ai-sdk/
+  demo-openai-agents/
   demo-pi/
 ```
 
@@ -158,8 +163,8 @@ when the judge needs richer run/session data or the suite's configured model
 prompt seam.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
-Configure it globally in Vitest and then mark individual tools with
-`replay: true`:
+Configure the replay mode and directory globally in Vitest, then opt individual
+tools in from the harness with `toolReplay: { toolName: true }`.
 
 ```ts
 import tsconfigPaths from "vite-tsconfig-paths";

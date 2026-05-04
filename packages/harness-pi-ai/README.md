@@ -15,6 +15,9 @@ import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
+  toolReplay: {
+    lookupInvoice: true,
+  },
   prompt: sharedJudgePrompt,
 });
 ```
@@ -74,7 +77,7 @@ The adapter provides:
 - a required prompt seam for LLM-backed judges
 - normalized session capture from emitted events and wrapped tool calls
 - usage/output inference for common `pi-ai`-style result objects
-- opt-in tool replay/recording when the tool definition sets `replay: true`
+- opt-in tool replay/recording from harness-level `toolReplay`
 
 See the workspace demo in `apps/demo-pi`.
 
@@ -95,16 +98,23 @@ export default defineConfig({
 });
 ```
 
-Then opt individual tools into recording/replay:
+Then opt individual tools into recording/replay from the harness:
 
 ```ts
-const tools = {
-  lookupInvoice: {
-    replay: true,
-    execute: async ({ invoiceId }) => fetchInvoice(invoiceId),
+const harness = piAiHarness({
+  createAgent: () => createRefundAgent(),
+  toolReplay: {
+    lookupInvoice: true,
   },
-};
+  prompt: sharedJudgePrompt,
+});
 ```
+
+When an agent exposes both a native Pi tool and a runtime tool with the same
+name, a native tool call records in its own cassette namespace. Runtime calls of
+that same name are treated as implementation details while the native tool is
+executing, so delegated runtime calls do not create duplicate trace entries or
+overwrite the native recording.
 
 Supported modes:
 

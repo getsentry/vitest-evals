@@ -27,9 +27,11 @@ packages/
       judges/
       legacy/
   harness-ai-sdk/
+  harness-openai-agents/
   harness-pi-ai/
 apps/
   demo-ai-sdk/
+  demo-openai-agents/
   demo-pi/
 ```
 
@@ -127,12 +129,24 @@ the judge in matcher options.
 
 ## First-Party Harness Packages
 
+Replay/VCR policy is configured at the harness boundary with `toolReplay` and
+global Vitest environment settings. Tool definitions should describe tool
+behavior only.
+
 ### `@vitest-evals/harness-ai-sdk`
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
 result objects, while still allowing custom `run`, `session`, `output`, and
 `usage` overrides.
+
+### `@vitest-evals/harness-openai-agents`
+
+Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
+normalized run/session shape. It accepts an existing agent or `createAgent()`
+factory, supports custom app entrypoints, normalizes `RunResult` output,
+messages, usage, tool calls, tool results, errors, trace metadata, and records
+replay metadata for opt-in local function tools.
 
 ### `@vitest-evals/harness-pi-ai`
 
@@ -149,9 +163,10 @@ surface it.
 
 ## Demo Apps
 
-`apps/demo-pi` and `apps/demo-ai-sdk` own their demo fixtures locally. They stay
-under `apps/` because they are product demos, while `packages/` is reserved for
-real package surfaces that can be published or consumed independently.
+`apps/demo-pi`, `apps/demo-ai-sdk`, and `apps/demo-openai-agents` own their demo
+fixtures locally. They stay under `apps/` because they are product demos, while
+`packages/` is reserved for real package surfaces that can be published or
+consumed independently.
 
 ## Extension Points
 

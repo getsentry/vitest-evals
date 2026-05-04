@@ -109,11 +109,19 @@ export type AiSdkToolReplayConfig<
 export type AiSdkToolDefinition<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
+  _TInput = string,
+  _TMetadata extends HarnessMetadata = HarnessMetadata,
+> = Tool<TArgs, TResult>;
+
+export type AiSdkToolReplayPolicy<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-> = Tool<TArgs, TResult> & {
-  replay?: boolean | AiSdkToolReplayConfig<TArgs, TResult, TInput, TMetadata>;
-};
+> = boolean | AiSdkToolReplayConfig<JsonValue, JsonValue, TInput, TMetadata>;
+
+export type AiSdkToolReplayPolicies<
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = Record<string, AiSdkToolReplayPolicy<TInput, TMetadata>>;
 
 export type AiSdkToolset<
   TInput = string,
@@ -199,6 +207,7 @@ interface AiSdkHarnessBaseOptions<
   >,
 > {
   tools?: TTools;
+  toolReplay?: AiSdkToolReplayPolicies<TInput, TMetadata>;
   session?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
   ) => MaybePromise<NormalizedSession>;
@@ -295,6 +304,7 @@ async function runAiSdkHarness<
     input,
     context,
     tools: options.tools,
+    toolReplay: options.toolReplay,
     replayMetadataByToolCallId,
     runtimeToolCalls,
   });
@@ -534,18 +544,22 @@ function createToolset<
   input,
   context,
   tools,
+  toolReplay,
   replayMetadataByToolCallId,
   runtimeToolCalls,
 }: {
   input: TInput;
   context: HarnessContext<TMetadata>;
   tools: TTools | undefined;
+  toolReplay: AiSdkToolReplayPolicies<TInput, TMetadata> | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
   runtimeToolCalls: ToolCallRecord[];
 }) {
   return Object.fromEntries(
     Object.entries(tools ?? {}).map(([toolName, tool]) => {
-      if (tool.replay && !tool.execute) {
+      const replay = toolReplay?.[toolName];
+
+      if (replay && !tool.execute) {
         throw new Error(
           `Tool replay requires execute() for ${toolName}. Provider-executed tools cannot be recorded automatically.`,
         );
@@ -573,14 +587,14 @@ function createToolset<
           } satisfies AiSdkToolContext<TInput, TMetadata>;
 
           try {
-            const executionResult = tool.replay
+            const executionResult = replay
               ? await executeToolWithReplay({
                   toolName,
                   toolInput,
                   execute,
                   execution,
                   context: replayContext,
-                  replay: tool.replay,
+                  replay,
                 })
               : {
                   result: await execute(toolInput, execution),
@@ -659,14 +673,15 @@ async function executeToolWithReplay<
   execute: NonNullable<TTool["execute"]>;
   execution: ToolExecutionOptions;
   context: AiSdkToolContext<TInput, TMetadata>;
-  replay: NonNullable<TTool["replay"]>;
+  replay: AiSdkToolReplayPolicy<TInput, TMetadata>;
 }) {
-  const replayInput = toReplayJsonValue(
-    toolInput,
-    `${toolName} tool input`,
-  ) as InferToolInput<TTool> & JsonValue;
+  const replayInput = toReplayJsonValue(toolInput, `${toolName} tool input`);
 
-  return executeWithReplay({
+  return executeWithReplay<
+    JsonValue,
+    JsonValue,
+    AiSdkToolContext<TInput, TMetadata>
+  >({
     toolName,
     args: replayInput,
     context,
@@ -682,10 +697,7 @@ async function executeToolWithReplay<
         );
       }
 
-      return toReplayJsonValue(
-        output,
-        `${toolName} tool output`,
-      ) as InferToolOutput<TTool> & JsonValue;
+      return toReplayJsonValue(output, `${toolName} tool output`);
     },
     replay,
   });

@@ -14,6 +14,8 @@ Install a first-party harness package for the runtime you want to test:
 npm install -D @vitest-evals/harness-pi-ai
 # or
 npm install -D @vitest-evals/harness-ai-sdk
+# or
+npm install -D @vitest-evals/harness-openai-agents
 ```
 
 ## Core Model
@@ -146,9 +148,20 @@ The harness owns normalization, diagnostics, tool capture, replay plumbing, and
 reporter-facing artifacts. Your app just needs one runtime seam where those
 wrapped pieces can be injected.
 
+Replay opt-in belongs on the harness, via `toolReplay`, while replay mode and
+recording directory can live in Vitest environment config. Tool definitions
+should stay free of VCR policy.
+
 For the Pi-specific harness, output/session/usage normalization should usually
 be inferred automatically. Treat low-level normalization callbacks as an escape
 hatch, not part of the primary authoring path.
+
+For OpenAI Agents SDK apps, use
+`@vitest-evals/harness-openai-agents` with an existing `Agent` or
+`createAgent()` factory and a `Runner` / `createRunner()` callback. The harness
+calls `Runner.run(agent, input, options)` by default and exposes the same
+normalization and replay hooks when the app needs a custom entrypoint or
+structured domain output mapping.
 
 ## Custom App Harnesses
 

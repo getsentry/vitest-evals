@@ -17,7 +17,6 @@ import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
 
 const tools = {
   lookupInvoice: {
-    replay: true,
     inputSchema: lookupInvoiceSchema,
     execute: lookupInvoice,
   },
@@ -25,6 +24,9 @@ const tools = {
 
 const harness = aiSdkHarness({
   tools,
+  toolReplay: {
+    lookupInvoice: true,
+  },
   prompt: (input, options) =>
     generateText({
       model: openai("gpt-4o-mini"),
@@ -61,7 +63,7 @@ The adapter infers:
 - usage diagnostics from `totalUsage` / `usage`
 - `run.output` from common AI SDK result fields such as `output`, `object`, and
   `text`
-- replay/cassette metadata for opt-in tools when they set `replay: true`
+- replay/cassette metadata for local tools configured with `toolReplay`
 
 See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in
 `docs/harness-first-rfc.md`.

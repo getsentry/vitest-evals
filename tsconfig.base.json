@@ -11,6 +11,9 @@
       "vitest-evals": ["packages/vitest-evals/src/index.ts"],
       "vitest-evals/*": ["packages/vitest-evals/src/*"],
       "@vitest-evals/harness-ai-sdk": ["packages/harness-ai-sdk/src/index.ts"],
+      "@vitest-evals/harness-openai-agents": [
+        "packages/harness-openai-agents/src/index.ts"
+      ],
       "@vitest-evals/harness-pi-ai": ["packages/harness-pi-ai/src/index.ts"]
     }
   }

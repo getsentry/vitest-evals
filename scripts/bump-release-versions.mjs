@@ -11,6 +11,7 @@ if (!newVersion) {
 const files = [
   "packages/vitest-evals/package.json",
   "packages/harness-ai-sdk/package.json",
+  "packages/harness-openai-agents/package.json",
   "packages/harness-pi-ai/package.json",
 ];
 
