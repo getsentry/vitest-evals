@@ -11,7 +11,9 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 ## Usage
 
 ```ts
+import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
@@ -19,6 +21,20 @@ const harness = piAiHarness({
     lookupInvoice: true,
   },
   prompt: sharedJudgePrompt,
+});
+
+describeEval("refund agent", { harness }, (it) => {
+  it("approves a refundable invoice", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+
+    expect(result.output).toMatchObject({
+      status: "approved",
+    });
+    expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+      "lookupInvoice",
+      "createRefund",
+    ]);
+  });
 });
 ```
 

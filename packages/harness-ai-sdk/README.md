@@ -11,9 +11,11 @@ npm install -D ai vitest-evals @vitest-evals/harness-ai-sdk
 ## Usage
 
 ```ts
+import { expect } from "vitest";
 import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
+import { describeEval, toolCalls } from "vitest-evals";
 
 const tools = {
   lookupInvoice: {
@@ -40,6 +42,19 @@ const harness = aiSdkHarness({
       tools: runtime.tools,
       stopWhen: stepCountIs(5),
     }),
+});
+
+describeEval("refund agent", { harness }, (it) => {
+  it("approves a refundable invoice", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+
+    expect(result.output).toMatchObject({
+      status: "approved",
+    });
+    expect(toolCalls(result.session).map((call) => call.name)).toContain(
+      "lookupInvoice",
+    );
+  });
 });
 ```
 

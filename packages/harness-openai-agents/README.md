@@ -11,8 +11,10 @@ npm install -D @openai/agents vitest-evals @vitest-evals/harness-openai-agents
 ## Usage
 
 ```ts
+import { expect } from "vitest";
 import { Runner } from "@openai/agents";
 import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
+import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = openaiAgentsHarness({
   createAgent: () => createClassifierAgent(),
@@ -22,6 +24,19 @@ const harness = openaiAgentsHarness({
       tracingDisabled: true,
     }),
   prompt: sharedJudgePrompt,
+});
+
+describeEval("classifier agent", { harness }, (it) => {
+  it("classifies a bottle", async ({ run }) => {
+    const result = await run("Classify bottle bt_123");
+
+    expect(result.output).toMatchObject({
+      label: "bourbon",
+    });
+    expect(toolCalls(result.session).map((call) => call.name)).toContain(
+      "lookup_bottle",
+    );
+  });
 });
 ```
 
