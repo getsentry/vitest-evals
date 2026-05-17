@@ -1294,9 +1294,12 @@ function normalizeToolResult(result: unknown): JsonValue | undefined {
     return details;
   }
 
-  return (
-    toJsonValue(result) ?? (result === undefined ? undefined : String(result))
-  );
+  const normalized = toJsonValue(result);
+  return normalized !== undefined
+    ? normalized
+    : result === undefined
+      ? undefined
+      : String(result);
 }
 
 function normalizeReplayToolResult(result: unknown): JsonValue {
@@ -1326,12 +1329,14 @@ function createNativeToolReplayEnvelope(
 ): NativeToolReplayEnvelope {
   const normalizedResult = normalizeReplayToolResult(result);
 
+  const agentResult = toJsonValue(result);
+
   return {
     __vitestEvals: {
       kind: "pi-ai-native-tool-result",
       version: 2,
     },
-    agentResult: toJsonValue(result) ?? normalizedResult,
+    agentResult: agentResult !== undefined ? agentResult : normalizedResult,
     normalizedResult,
   };
 }

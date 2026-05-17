@@ -244,7 +244,8 @@ export function normalizeMetadata(
 
 /** Converts arbitrary content into the JSON-safe message content shape. */
 export function normalizeContent(value: unknown): JsonValue {
-  return toJsonValue(value) ?? String(value);
+  const normalized = toJsonValue(value);
+  return normalized !== undefined ? normalized : String(value);
 }
 
 /** Creates a harness from the common "run app code and return output" shape. */
@@ -382,7 +383,7 @@ function createDefaultSessionMessages<TInput>({
       content: normalizeContent(input),
     },
   ];
-  const assistantContent = output ?? outputText;
+  const assistantContent = output !== undefined ? output : outputText;
 
   if (assistantContent !== undefined || normalizedToolCalls.length > 0) {
     messages.push({
