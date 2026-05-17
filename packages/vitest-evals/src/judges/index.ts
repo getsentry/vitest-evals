@@ -11,9 +11,9 @@ export {
 } from "./toolCallJudge";
 
 export type {
+  Judge,
+  JudgeAssessFn,
   JudgeContext,
-  JudgeFn,
   JudgeOptions,
   JudgeResult,
-  QueryableJudgeContext,
 } from "./types";

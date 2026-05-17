@@ -14,12 +14,10 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
-  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -263,7 +261,6 @@ interface AiSdkHarnessBaseOptions<
     TTools
   >;
   name?: string;
-  query?: HarnessQuery;
 }
 
 type AiSdkRunnableAgent<
@@ -300,20 +297,6 @@ export function aiSdkHarness<
     TMetadata
   >,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools> & {
-    query: HarnessQuery;
-  },
-): QueryableHarness<TInput, TMetadata>;
-export function aiSdkHarness<
-  TAgent = unknown,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
-  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
-    TInput,
-    TMetadata
-  >,
->(
   options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
 ): Harness<TInput, TMetadata>;
 export function aiSdkHarness<
@@ -327,7 +310,7 @@ export function aiSdkHarness<
   >,
 >(
   options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+): Harness<TInput, TMetadata> {
   validateOptions(options);
 
   const harness: Harness<TInput, TMetadata> = {
@@ -341,12 +324,7 @@ export function aiSdkHarness<
     },
   };
 
-  return options.query
-    ? {
-        ...harness,
-        query: options.query,
-      }
-    : harness;
+  return harness;
 }
 
 async function runAiSdkHarness<

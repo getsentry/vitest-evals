@@ -24,6 +24,13 @@ hatches for advanced cases.
 - Put capabilities on the object that owns their configuration. Avoid parallel
   context objects with overlapping lifecycle names such as `harness` and
   `runtime`.
+- Put the action on the role that performs it. A harness runs the system under
+  test; a judge assesses a run. Binding helpers should assemble context and
+  delegate to that role method rather than becoming another owner of the
+  behavior.
+- Keep assessment prompts, model choices, and parsers on the judge. Reuse
+  provider clients or credentials by sharing app-local dependencies, not by
+  adding judge-call methods to the harness.
 - Per-run factories should receive one contextual args object with the run
   input and harness context when the harness owns later instrumentation or
   execution.

@@ -115,31 +115,6 @@ const runResult = {
   ],
 } as const;
 
-test("exposes a judge query helper only when configured", async () => {
-  const query = vi.fn(async (input: string) => `judge: ${input}`);
-  const queryable = openaiAgentsHarness({
-    agent: {
-      name: "classifier",
-      model: "gpt-4.1-mini",
-    },
-    query,
-    run: async () => runResult,
-  });
-  const plain = openaiAgentsHarness({
-    agent: {
-      name: "classifier",
-      model: "gpt-4.1-mini",
-    },
-    run: async () => runResult,
-  });
-
-  await expect(queryable.query("score classification")).resolves.toBe(
-    "judge: score classification",
-  );
-  expect(query).toHaveBeenCalledWith("score classification");
-  expect("query" in plain).toBe(false);
-});
-
 describeEval(
   "openai agents harness adapter",
   {

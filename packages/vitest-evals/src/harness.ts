@@ -54,27 +54,16 @@ export type NormalizedSession = {
   metadata?: Record<string, JsonValue>;
 };
 
-export type HarnessRun = {
+export type HarnessRun<
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = {
   session: NormalizedSession;
-  output?: JsonValue;
+  output?: TOutput;
   usage: UsageSummary;
   timings?: TimingSummary;
   artifacts?: Record<string, JsonValue>;
   errors: Array<Record<string, JsonValue>>;
 };
-
-/** Optional provider-facing hints for harness query calls. */
-export type HarnessQueryOptions = {
-  system?: string;
-  metadata?: Record<string, JsonValue>;
-  signal?: AbortSignal;
-};
-
-/** Provider-agnostic model query function that judges can reuse from a harness. */
-export type HarnessQuery = (
-  input: string,
-  options?: HarnessQueryOptions,
-) => Promise<string>;
 
 export type HarnessRunError = Error & {
   vitestEvalsRun: HarnessRun;
@@ -97,20 +86,13 @@ export type HarnessContext<
 export type Harness<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = {
   name: string;
   run: (
     input: TInput,
     context: HarnessContext<TMetadata>,
-  ) => Promise<HarnessRun>;
-};
-
-export type QueryableHarness<
-  TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-> = Harness<TInput, TMetadata> & {
-  /** Model query helper for judges; this must not execute the system under test. */
-  query: HarnessQuery;
+  ) => Promise<HarnessRun<TOutput>>;
 };
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -125,8 +107,10 @@ export type SimpleToolCallRecord = Omit<
   metadata?: Record<string, unknown>;
 };
 
-export type SimpleHarnessResult = {
-  output?: unknown;
+export type SimpleHarnessResult<
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = {
+  output?: TOutput;
   outputText?: string;
   messages?: NormalizedMessage[];
   toolCalls?: SimpleToolCallRecord[];
@@ -137,7 +121,9 @@ export type SimpleHarnessResult = {
   errors?: unknown[];
 };
 
-export type HarnessResultLike = HarnessRun | SimpleHarnessResult;
+export type HarnessResultLike<
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = HarnessRun<TOutput> | SimpleHarnessResult<TOutput>;
 
 export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
   input: TInput;
@@ -151,18 +137,12 @@ export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
 export type CreateHarnessOptions<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = {
   name: string;
   run: (
     args: CreateHarnessRunArgs<TInput, TMetadata>,
-  ) => MaybePromise<HarnessResultLike>;
-};
-
-export type CreateQueryableHarnessOptions<
-  TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-> = CreateHarnessOptions<TInput, TMetadata> & {
-  query: HarnessQuery;
+  ) => MaybePromise<HarnessResultLike<TOutput>>;
 };
 
 function isJsonPrimitive(value: unknown): value is JsonPrimitive {
@@ -252,22 +232,18 @@ export function normalizeContent(value: unknown): JsonValue {
 export function createHarness<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: CreateQueryableHarnessOptions<TInput, TMetadata>,
-): QueryableHarness<TInput, TMetadata>;
+  options: CreateHarnessOptions<TInput, TMetadata, TOutput>,
+): Harness<TInput, TMetadata, TOutput>;
 export function createHarness<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
->(options: CreateHarnessOptions<TInput, TMetadata>): Harness<TInput, TMetadata>;
-export function createHarness<
-  TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options:
-    | CreateHarnessOptions<TInput, TMetadata>
-    | CreateQueryableHarnessOptions<TInput, TMetadata>,
-): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
-  const harness: Harness<TInput, TMetadata> = {
+  options: CreateHarnessOptions<TInput, TMetadata, TOutput>,
+): Harness<TInput, TMetadata, TOutput> {
+  const harness: Harness<TInput, TMetadata, TOutput> = {
     name: options.name,
     run: async (input, context) => {
       const result = await options.run({
@@ -283,15 +259,6 @@ export function createHarness<
     },
   };
 
-  const query = "query" in options ? options.query : undefined;
-
-  if (query) {
-    return {
-      ...harness,
-      query,
-    };
-  }
-
   return harness;
 }
 
@@ -299,11 +266,12 @@ export function createHarness<
 export function normalizeHarnessRun<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
   input: TInput,
-  result: HarnessResultLike,
+  result: HarnessResultLike<TOutput>,
   context?: HarnessContext<TMetadata>,
-): HarnessRun {
+): HarnessRun<TOutput> {
   if (isHarnessRun(result)) {
     if (
       context &&
@@ -319,7 +287,7 @@ export function normalizeHarnessRun<
     return result;
   }
 
-  const output = toJsonValue(result.output);
+  const output = toJsonValue(result.output) as TOutput | undefined;
   const toolCalls = normalizeSimpleToolCalls(result.toolCalls);
   const outputText = resolveSimpleOutputText(result, output);
   const usage = result.usage ?? {};

@@ -102,8 +102,8 @@ The `apps/demo-pi` app shows the intended explicit-run flow:
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
+  createJudge,
   describeEval,
-  namedJudge,
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
@@ -114,13 +114,17 @@ type RefundEvalMetadata = {
   expectedTools: string[];
 };
 
-const FactualityJudge = namedJudge(
+type RefundOutput = {
+  status: "approved" | "denied";
+};
+
+const FactualityJudge = createJudge(
   "FactualityJudge",
   async ({
     input,
     output,
     metadata,
-  }: JudgeContext<string, RefundEvalMetadata>) => {
+  }: JudgeContext<string, RefundOutput, RefundEvalMetadata>) => {
     const verdict = await judgeFactuality({
       question: input,
       answer: output,
@@ -174,11 +178,13 @@ Harness-backed suites stay close to plain Vitest:
 - tests call `run(...)` explicitly
 - ordinary `expect(...)` assertions stay first-class
 - judges layer in through `expect(...).toSatisfyJudge(...)`
-- every judge receives `JudgeContext` with the normalized run, harness context,
-  and run abort signal when available
-- harnesses may expose a real `query(...)` helper for judges that should reuse
-  the same provider library or credentials without running the app agent
-- scenario-specific judge criteria can live in `inputValue`; use `metadata` for
+- every judge is a named object with `assess(ctx)`
+- every judge receives `JudgeContext` with typed `input`, typed `output`, the
+  normalized run/session, tool calls, metadata, and run abort signal
+- judges own their prompt, rubric, model call, and parsing; a judge can close
+  over the same provider client or credentials as the harness without calling
+  the app agent under test
+- scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
 - reporter output, replay, usage, and tool traces come from the normalized run

@@ -65,31 +65,6 @@ const runAgent = vi.fn(
   },
 );
 
-test("exposes a judge query helper only when configured", async () => {
-  const query = vi.fn(async (input: string) => `judge: ${input}`);
-  const queryable = piAiHarness({
-    agent: {
-      id: "refund-agent",
-    },
-    query,
-    run: runAgent,
-    tools,
-  });
-  const plain = piAiHarness({
-    agent: {
-      id: "refund-agent",
-    },
-    run: runAgent,
-    tools,
-  });
-
-  await expect(queryable.query("score refund")).resolves.toBe(
-    "judge: score refund",
-  );
-  expect(query).toHaveBeenCalledWith("score refund");
-  expect("query" in plain).toBe(false);
-});
-
 test("accepts agent as a factory", async () => {
   const agent = vi.fn(
     ({

@@ -34,23 +34,6 @@ function createHarnessContext<TMetadata extends Record<string, unknown>>(
   };
 }
 
-test("exposes a judge query helper only when configured", async () => {
-  const query = vi.fn(async (input: string) => `judge: ${input}`);
-  const queryable = aiSdkHarness({
-    query,
-    run: async () => ({ text: "approved" }),
-  });
-  const plain = aiSdkHarness({
-    run: async () => ({ text: "approved" }),
-  });
-
-  await expect(queryable.query("score refund")).resolves.toBe(
-    "judge: score refund",
-  );
-  expect(query).toHaveBeenCalledWith("score refund");
-  expect("query" in plain).toBe(false);
-});
-
 const generateTextLikeResult = {
   text: '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
   steps: [

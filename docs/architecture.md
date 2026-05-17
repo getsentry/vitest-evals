@@ -43,7 +43,6 @@ apps/
 Defines the normalized runtime model:
 
 - `Harness`
-- `QueryableHarness`
 - `HarnessRun`
 - `NormalizedSession`
 - `ToolCallRecord`
@@ -79,10 +78,11 @@ can stay on the harness-first surface while older matching behavior remains
 available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data,
-the configured `harness`, and the run abort signal when Vitest provides one.
-LLM-backed judges own their prompt and rubric text. When a harness is
-configured with `query(...)`, judges can reuse that separate judge-model helper
-for shared provider setup or credentials without running the system under test.
+typed `input`, typed `output`, the configured `harness`, and the run abort
+signal when Vitest provides one. LLM-backed judges own their prompt, rubric
+text, model call, and parser. If a judge needs the same provider setup or
+credentials as the harness, share that app-local dependency directly with the
+judge.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -141,14 +141,13 @@ For each eval test in a harness-backed suite:
 8. The eval test asserts on the same returned result and session.
 9. The reporter renders the recorded metadata without re-executing the harness.
 
-Explicit `expect(result).toSatisfyJudge(...)` calls use the run's canonical
-text output and reuse registered input, metadata, and harness context
+Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
+and reuse registered input, metadata, and harness context
 when `result` came from the fixture-backed `run(...)`. Inside an eval test,
-calls on registered raw output or session objects reuse that exact run context;
-raw output values are serialized as the judge `output`, and other raw values
-fall back to the current test's most recent `run(...)` context. Calls outside
-that context, or on manually-created runs, must pass the context required by
-the judge in matcher options.
+calls on registered output objects or session objects reuse that exact run
+context; other raw values fall back to the current test's most recent
+`run(...)` context. Calls outside that context, or on manually-created runs,
+must pass the context required by the judge in matcher options.
 
 ## First-Party Harness Packages
 
@@ -200,8 +199,6 @@ New runtime integrations should be implemented as thin adapter packages that:
 - execute the target runtime through its normal seam
 - capture messages, tool calls, usage, timings, and errors
 - normalize them into `HarnessRun`
-- expose `query` only when LLM-backed judges need a real separate model helper
-  for shared provider setup or credentials
 - avoid inventing harness-specific assertion or reporter behavior in userland
 
 ### New Judges
@@ -210,20 +207,21 @@ Root-level custom evaluation logic should generally be written as judges over
 normalized run/session data:
 
 ```ts
-import type { JudgeFn, JudgeOptions } from "vitest-evals";
+import { createJudge, type JudgeOptions } from "vitest-evals";
 
-export const RefundToolJudge: JudgeFn<
-  JudgeOptions<{ expectedTools: string[] }>
-> = async ({ expectedTools, toolCalls }) => ({
-  score: expectedTools.every(
-    (name, index) => toolCalls[index]?.name === name,
-  )
-    ? 1
-    : 0,
-  metadata: {
-    rationale: `Expected ${expectedTools.join(" -> ")}`,
+export const RefundToolJudge = createJudge(
+  "RefundToolJudge",
+  async ({ expectedTools, toolCalls }: JudgeOptions<{ expectedTools: string[] }>) => ({
+    score: expectedTools.every(
+      (name, index) => toolCalls[index]?.name === name,
+    )
+      ? 1
+      : 0,
+    metadata: {
+      rationale: `Expected ${expectedTools.join(" -> ")}`,
+    },
   },
-});
+);
 ```
 
 ### Legacy Support

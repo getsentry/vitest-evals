@@ -104,19 +104,20 @@ real package surfaces.
 
 ## Adding a New Judge
 
-Root-level evaluation logic should usually be implemented as a `JudgeFn`:
+Root-level evaluation logic should usually be implemented as a named judge:
 
 ```ts
-import type { JudgeFn, JudgeOptions } from "vitest-evals";
+import { createJudge, type JudgeOptions } from "vitest-evals";
 
-export const DomainJudge: JudgeFn<
-  JudgeOptions<{ expectedTool: string }>
-> = async ({ toolCalls, expectedTool }) => ({
-  score: toolCalls.some((call) => call.name === expectedTool) ? 1 : 0,
-  metadata: {
-    rationale: `Expected tool ${expectedTool}`,
+export const DomainJudge = createJudge(
+  "DomainJudge",
+  async ({ toolCalls, expectedTool }: JudgeOptions<{ expectedTool: string }>) => ({
+    score: toolCalls.some((call) => call.name === expectedTool) ? 1 : 0,
+    metadata: {
+      rationale: `Expected tool ${expectedTool}`,
+    },
   },
-});
+);
 ```
 
 Prefer judges when:
@@ -137,7 +138,8 @@ package should focus on:
 
 Follow [API design policy](../policies/api-design.md): prefer one public
 spelling per concept, value-or-factory inputs for lifecycle choices, and strong
-types for optional capabilities such as queryable harnesses.
+types for optional capabilities. Judges own assessment-specific provider calls;
+do not put judge prompts or judge model calls on the harness.
 
 Do not push core reporter or assertion behavior into a harness package unless
 the runtime truly requires it.

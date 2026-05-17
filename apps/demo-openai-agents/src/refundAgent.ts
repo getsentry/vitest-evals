@@ -1,6 +1,5 @@
 import { Agent, Runner, tool } from "@openai/agents";
 import { z } from "zod";
-import type { HarnessQueryOptions } from "vitest-evals";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -146,33 +145,6 @@ export function createRefundRunner() {
       temperature: 0,
     },
   });
-}
-
-/** Queries the same provider stack for judges without using the refund agent tools. */
-export async function queryRefundModel(
-  input: string,
-  options?: HarnessQueryOptions,
-) {
-  const runner = createRefundRunner();
-  const agent = new Agent({
-    name: "demo_refund_judge_query",
-    instructions: options?.system ?? "Return a concise answer.",
-    model: DEFAULT_REFUND_MODEL,
-    modelSettings: {
-      temperature: 0,
-    },
-  });
-  const result = await runner.run(agent, input, {
-    maxTurns: 2,
-    signal: options?.signal,
-  });
-  const outputText = resolveResultText(result);
-
-  if (!outputText) {
-    throw new Error("Judge query model returned an empty response.");
-  }
-
-  return outputText;
 }
 
 /** Parses the demo agent's final JSON payload into a typed refund decision. */

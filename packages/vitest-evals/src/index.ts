@@ -20,7 +20,8 @@ import {
 } from "./harness";
 import type {
   JudgeContext,
-  JudgeFn,
+  Judge,
+  JudgeAssessFn,
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
@@ -45,25 +46,30 @@ type EvalTaskLike = {
 };
 
 type RegisteredJudgeRunContext = {
-  harness: Harness<any, any>;
-  inputValue: unknown;
+  harness: Harness<any, any, any>;
+  input: unknown;
   metadata: HarnessMetadata;
   run: HarnessRun;
   signal?: AbortSignal;
 };
 
 type InternalEvalFixtures = {
-  harness: Harness<any, any>;
-  automaticJudges: Array<JudgeFn<JudgeContext<any, any, any>>>;
+  harness: Harness<any, any, any>;
+  automaticJudges: Array<Judge<JudgeContext<any, any, any, any>>>;
   judgeThreshold: number | null | undefined;
-  run: EvalRun<any, any>;
+  run: EvalRun<any, any, any>;
 };
 
-type HarnessInput<THarness extends Harness<any, any>> =
-  THarness extends Harness<infer TInput, any> ? TInput : unknown;
+type HarnessInput<THarness extends Harness<any, any, any>> =
+  THarness extends Harness<infer TInput, any, any> ? TInput : unknown;
 
-type HarnessMetadataFor<THarness extends Harness<any, any>> =
-  THarness extends Harness<any, infer TMetadata> ? TMetadata : HarnessMetadata;
+type HarnessMetadataFor<THarness extends Harness<any, any, any>> =
+  THarness extends Harness<any, infer TMetadata, any>
+    ? TMetadata
+    : HarnessMetadata;
+
+type HarnessOutput<THarness extends Harness<any, any, any>> =
+  THarness extends Harness<any, any, infer TOutput> ? TOutput : JsonValue;
 
 declare const evalHarnessRunBrand: unique symbol;
 
@@ -71,11 +77,17 @@ declare const evalHarnessRunBrand: unique symbol;
 export type EvalHarnessRun<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> = Harness<TInput, TMetadata>,
-> = HarnessRun & {
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+    TInput,
+    TMetadata,
+    TOutput
+  >,
+> = HarnessRun<TOutput> & {
   readonly [evalHarnessRunBrand]: {
     readonly input: TInput;
     readonly metadata: TMetadata;
+    readonly output: TOutput;
     readonly harness: THarness;
   };
 };
@@ -91,68 +103,96 @@ export interface EvalRunOptions<
 export type EvalRun<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> = Harness<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+    TInput,
+    TMetadata,
+    TOutput
+  >,
 > = (
   input: TInput,
   options?: EvalRunOptions<TMetadata>,
-) => Promise<EvalHarnessRun<TInput, TMetadata, THarness>>;
+) => Promise<EvalHarnessRun<TInput, TMetadata, TOutput, THarness>>;
 
 /** Fixture-backed Vitest context exposed inside `describeEval(...)` tests. */
 export interface EvalTestContext<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> = Harness<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+    TInput,
+    TMetadata,
+    TOutput
+  >,
 > {
-  run: EvalRun<TInput, TMetadata, THarness>;
+  run: EvalRun<TInput, TMetadata, TOutput, THarness>;
 }
 
 export type EvalTestAPI<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> = Harness<TInput, TMetadata>,
-> = TestAPI<EvalTestContext<TInput, TMetadata, THarness>>;
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+    TInput,
+    TMetadata,
+    TOutput
+  >,
+> = TestAPI<EvalTestContext<TInput, TMetadata, TOutput, THarness>>;
 
 /** Suite-level configuration for a harness-backed eval block. */
 export interface DescribeEvalOptions<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> = Harness<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+    TInput,
+    TMetadata,
+    TOutput
+  >,
 > {
   /** Harness used for every explicit `run(...)` call in the suite. */
   harness: THarness;
   /** Automatic judges applied after each successful `run(...)`. */
-  judges?: Array<JudgeFn<JudgeContext<TInput, TMetadata, THarness>>>;
+  judges?: Array<Judge<JudgeContext<TInput, TOutput, TMetadata, THarness>>>;
   /** Passing threshold for automatic suite-level judges. `null` disables fail-on-score. */
   judgeThreshold?: number | null;
   skipIf?: () => boolean;
 }
 
-type JudgeAssertionInputValue<
-  TJudgeOptions extends JudgeContext<any, any, any>,
-> = TJudgeOptions extends { inputValue: infer TInput } ? TInput : unknown;
+type JudgeAssertionInput<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = TJudgeOptions extends { input: infer TInput } ? TInput : unknown;
 
-type JudgeAssertionMetadata<TJudgeOptions extends JudgeContext<any, any, any>> =
-  TJudgeOptions extends { metadata: infer TMetadata }
-    ? TMetadata
-    : HarnessMetadata;
+type JudgeAssertionOutput<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = TJudgeOptions extends { output: infer TOutput }
+  ? Exclude<TOutput, undefined>
+  : JsonValue;
 
-type JudgeAssertionHarness<TJudgeOptions extends JudgeContext<any, any, any>> =
-  TJudgeOptions extends { harness: infer THarness }
-    ? Exclude<THarness, undefined>
-    : Harness<
-        JudgeAssertionInputValue<TJudgeOptions>,
-        JudgeAssertionMetadata<TJudgeOptions>
-      >;
+type JudgeAssertionMetadata<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = TJudgeOptions extends { metadata: infer TMetadata }
+  ? TMetadata
+  : HarnessMetadata;
+
+type JudgeAssertionHarness<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = TJudgeOptions extends { harness: infer THarness }
+  ? Exclude<THarness, undefined>
+  : Harness<
+      JudgeAssertionInput<TJudgeOptions>,
+      JudgeAssertionMetadata<TJudgeOptions>,
+      JudgeAssertionOutput<TJudgeOptions>
+    >;
 
 /** Optional overrides passed to `expect(...).toSatisfyJudge(...)`. */
 export type JudgeAssertionOptions<
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = Partial<
   Omit<
     TJudgeOptions,
     | "input"
     | "output"
-    | "inputValue"
     | "metadata"
     | "toolCalls"
     | "run"
@@ -160,8 +200,8 @@ export type JudgeAssertionOptions<
     | "harness"
   >
 > & {
-  input?: string;
-  inputValue?: JudgeAssertionInputValue<TJudgeOptions>;
+  input?: JudgeAssertionInput<TJudgeOptions>;
+  output?: JudgeAssertionOutput<TJudgeOptions>;
   metadata?: JudgeAssertionMetadata<TJudgeOptions>;
   toolCalls?: ToolCallRecord[];
   run?: HarnessRun;
@@ -172,9 +212,9 @@ export type JudgeAssertionOptions<
 };
 
 export type ToSatisfyJudge<TReceived = unknown> = <
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
-  judge: JudgeFn<TJudgeOptions>,
+  judge: Judge<TJudgeOptions>,
   options?: JudgeAssertionOptions<TJudgeOptions>,
 ) => Promise<TReceived>;
 
@@ -200,13 +240,20 @@ const evalTest = test
       "describeEval must override the harness fixture before running tests.",
     );
   })
-  .extend("automaticJudges", [] as Array<JudgeFn<JudgeContext<any, any, any>>>)
+  .extend(
+    "automaticJudges",
+    [] as Array<Judge<JudgeContext<any, any, any, any>>>,
+  )
   .extend("judgeThreshold", undefined as number | null | undefined)
   .extend(
     "run",
     async ({ automaticJudges, harness, judgeThreshold, signal, task }) => {
       return async (input: unknown, options?: EvalRunOptions) => {
-        const resolvedHarness = harness as Harness<unknown, HarnessMetadata>;
+        const resolvedHarness = harness as Harness<
+          unknown,
+          HarnessMetadata,
+          JsonValue | undefined
+        >;
         const metadata = createMetadata(options?.metadata);
         const artifacts: HarnessContext["artifacts"] = {};
         const context: HarnessContext<HarnessMetadata> = {
@@ -269,6 +316,7 @@ const evalTest = test
         return run as EvalHarnessRun<
           unknown,
           HarnessMetadata,
+          JsonValue | undefined,
           typeof resolvedHarness
         >;
       };
@@ -277,10 +325,10 @@ const evalTest = test
 
 expect.extend({
   toSatisfyJudge: async function toSatisfyJudge<
-    TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+    TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
   >(
     received: unknown,
-    judge: JudgeFn<TJudgeOptions>,
+    judge: Judge<TJudgeOptions>,
     options: JudgeAssertionOptions<TJudgeOptions> = {},
   ) {
     const { threshold = 1.0, ...context } = options;
@@ -290,7 +338,7 @@ expect.extend({
       isEvalTaskLike(this.task) ? this.task : undefined,
     );
 
-    const result = await judge(judgeOptions);
+    const result = await judge.assess(judgeOptions);
 
     const score = result.score ?? 0;
     const pass = threshold === null ? true : score >= threshold;
@@ -330,7 +378,6 @@ expect.extend({
  * describeEval("refund agent", {
  *   harness: piAiHarness({
  *     agent: () => createRefundAgent(),
- *     query: judgeModelQuery,
  *   }),
  *   judges: [ToolCallJudge()],
  * }, (it) => {
@@ -344,17 +391,19 @@ expect.extend({
  * });
  * ```
  */
-export function describeEval<THarness extends Harness<any, any>>(
+export function describeEval<THarness extends Harness<any, any, any>>(
   name: string,
   options: DescribeEvalOptions<
     HarnessInput<THarness>,
     HarnessMetadataFor<THarness>,
+    HarnessOutput<THarness>,
     THarness
   >,
   define: (
     it: EvalTestAPI<
       HarnessInput<THarness>,
       HarnessMetadataFor<THarness>,
+      HarnessOutput<THarness>,
       THarness
     >,
   ) => void,
@@ -365,12 +414,13 @@ export function describeEval<THarness extends Harness<any, any>>(
     const it = evalTest.override({
       harness: options.harness,
       automaticJudges: (options.judges ?? []) as Array<
-        JudgeFn<JudgeContext<any, any, any>>
+        Judge<JudgeContext<any, any, any, any>>
       >,
       judgeThreshold: options.judgeThreshold,
     }) as unknown as EvalTestAPI<
       HarnessInput<THarness>,
       HarnessMetadataFor<THarness>,
+      HarnessOutput<THarness>,
       THarness
     >;
 
@@ -387,34 +437,33 @@ function createMetadata<TMetadata extends HarnessMetadata>(
 async function applyAutomaticJudges<
   TInput,
   TMetadata extends HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
+  THarness extends Harness<TInput, TMetadata, TOutput>,
 >(
   task: EvalTaskLike,
-  judges: Array<JudgeFn<JudgeContext<TInput, TMetadata, THarness>>>,
+  judges: Array<Judge<JudgeContext<TInput, TOutput, TMetadata, THarness>>>,
   threshold: number | null | undefined,
   harness: THarness,
   input: TInput,
   metadata: TMetadata,
-  run: HarnessRun,
+  run: HarnessRun<TOutput>,
   signal?: AbortSignal,
 ) {
-  const output = formatJudgeTextOutput(run);
   const runToolCalls = toolCalls(run.session);
   const scores = await Promise.all(
     judges.map((judge) => {
       const judgeOptions = {
-        input: formatJudgeInput(input),
-        inputValue: input,
-        output,
+        input,
+        output: run.output,
         toolCalls: runToolCalls,
         metadata,
         run,
         session: run.session,
         signal,
         harness,
-      } as JudgeContext<TInput, TMetadata, THarness>;
+      } as JudgeContext<TInput, TOutput, TMetadata, THarness>;
 
-      return Promise.resolve(judge(judgeOptions));
+      return Promise.resolve(judge.assess(judgeOptions));
     }),
   );
 
@@ -430,7 +479,7 @@ async function applyAutomaticJudges<
   task.meta.eval = {
     scores: scoresWithName,
     avgScore,
-    output,
+    output: run.output ?? formatJudgeTextOutput(run),
     toolCalls: runToolCalls,
     thresholdFailed,
   };
@@ -440,7 +489,7 @@ async function applyAutomaticJudges<
       avgScore >= thresholdValue,
       [
         `Score: ${avgScore.toFixed(2)} below threshold: ${thresholdValue.toFixed(2)}`,
-        `Output: ${wrapText(output)}`,
+        `Output: ${wrapText(formatJudgeTextOutput(run))}`,
         formatScores(scoresWithName),
       ].join("\n\n"),
     );
@@ -459,16 +508,20 @@ function setHarnessMeta(task: EvalTaskLike, name: string, run: HarnessRun) {
   };
 }
 
-function recordJudgeRunContext<TInput, TMetadata extends HarnessMetadata>(
-  run: HarnessRun,
-  harness: Harness<TInput, TMetadata>,
-  inputValue: TInput,
+function recordJudgeRunContext<
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TOutput extends JsonValue | undefined,
+>(
+  run: HarnessRun<TOutput>,
+  harness: Harness<TInput, TMetadata, TOutput>,
+  input: TInput,
   metadata: TMetadata,
   signal?: AbortSignal,
 ) {
   const context = {
     harness,
-    inputValue,
+    input,
     metadata,
     run,
     signal,
@@ -529,18 +582,6 @@ function isEvalTaskLike(task: unknown): task is EvalTaskLike {
   );
 }
 
-function formatJudgeInput(input: unknown) {
-  if (typeof input === "string") {
-    return input;
-  }
-
-  try {
-    return JSON.stringify(input) ?? String(input);
-  } catch {
-    return String(input);
-  }
-}
-
 function hasMeaningfulText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -570,7 +611,7 @@ function formatJudgeTextOutput(run: HarnessRun) {
 }
 
 function buildJudgeAssertionOptions<
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
@@ -586,49 +627,49 @@ function buildJudgeAssertionOptions<
   const metadata = (options.metadata ??
     registeredContext?.metadata ??
     {}) as JudgeAssertionMetadata<TJudgeOptions>;
-  const inputValue =
-    options.inputValue ??
-    (registeredContext?.inputValue as
-      | JudgeAssertionInputValue<TJudgeOptions>
+  const input =
+    options.input ??
+    (registeredContext?.input as
+      | JudgeAssertionInput<TJudgeOptions>
       | undefined) ??
     undefined;
   const contextualOptions = {
     ...options,
-    ...(inputValue !== undefined ? { inputValue } : {}),
+    ...(input !== undefined ? { input } : {}),
   };
   const run = resolveJudgeRun(
     received,
     contextualOptions,
     registeredContext?.run,
   );
-  const resolvedInputValue =
-    inputValue ??
+  const resolvedInput =
+    input ??
     (userMessages(run.session)[0]?.content as
-      | JudgeAssertionInputValue<TJudgeOptions>
+      | JudgeAssertionInput<TJudgeOptions>
       | undefined) ??
     undefined;
-  const input =
-    options.input ??
-    (resolvedInputValue !== undefined
-      ? formatJudgeInput(resolvedInputValue)
-      : "");
+  const output = resolveJudgeAssertionOutput<TJudgeOptions>(
+    received,
+    run,
+    options.output,
+  );
+  const resolvedToolCalls = options.toolCalls ?? toolCalls(run.session);
 
   return {
     ...(options as Record<string, unknown>),
-    input,
-    inputValue: resolvedInputValue,
-    output: formatJudgeAssertionOutput(received, run),
+    input: resolvedInput,
+    output,
     metadata,
     run,
     session: options.session ?? run.session,
     signal,
-    toolCalls: options.toolCalls ?? toolCalls(run.session),
+    toolCalls: resolvedToolCalls,
     harness,
   } as unknown as TJudgeOptions;
 }
 
 function resolveRegisteredJudgeRunContext<
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
@@ -661,7 +702,7 @@ function isWeakMapKey(value: unknown): value is object {
 }
 
 function resolveJudgeRun<
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
@@ -708,41 +749,40 @@ function resolveJudgeRun<
   };
 }
 
-function formatJudgeAssertionOutput(received: unknown, run: HarnessRun) {
-  if (isHarnessRun(received) || isNormalizedSession(received)) {
-    return formatJudgeTextOutput(run);
+function resolveJudgeAssertionOutput<
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+>(
+  received: unknown,
+  run: HarnessRun,
+  explicitOutput?: JudgeAssertionOutput<TJudgeOptions>,
+) {
+  if (explicitOutput !== undefined) {
+    return explicitOutput;
   }
 
-  return formatReceivedJudgeOutput(received);
-}
-
-function formatReceivedJudgeOutput(received: unknown) {
-  if (typeof received === "string") {
-    return received;
+  if (isHarnessRun(received)) {
+    return received.output as JudgeAssertionOutput<TJudgeOptions> | undefined;
   }
 
-  if (received !== undefined) {
-    try {
-      return JSON.stringify(received) ?? String(received);
-    } catch {
-      return String(received);
-    }
+  if (isNormalizedSession(received)) {
+    return inferJudgeOutputValue(received, run.session) as
+      | JudgeAssertionOutput<TJudgeOptions>
+      | undefined;
   }
 
-  return "";
+  return normalizeJudgeJsonValue(received) as
+    | JudgeAssertionOutput<TJudgeOptions>
+    | undefined;
 }
 
 function createSyntheticJudgeSession<
-  TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
+  TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
 ): NormalizedSession {
   const messages: NormalizedSession["messages"] = [];
-  const userContent =
-    options.inputValue !== undefined
-      ? normalizeJudgeJsonValue(options.inputValue)
-      : options.input;
+  const userContent = normalizeJudgeJsonValue(options.input);
   if (userContent !== undefined) {
     messages.push({
       role: "user",
@@ -833,16 +873,15 @@ export function formatScores(scores: (JudgeResult & { name: string })[]) {
     .join("\n\n");
 }
 
-/** Applies a stable display name to a custom judge function. */
-export function namedJudge<TOptions extends JudgeContext<any, any, any>>(
+/** Creates a named judge object from an assessment function. */
+export function createJudge<TOptions extends JudgeContext<any, any, any, any>>(
   name: string,
-  judge: JudgeFn<TOptions>,
-): JudgeFn<TOptions> {
-  const named = ((opts: TOptions) => judge(opts)) as JudgeFn<TOptions>;
-  Object.defineProperty(named, "name", {
-    value: name,
-  });
-  return named;
+  assess: JudgeAssessFn<TOptions>,
+): Judge<TOptions> {
+  return {
+    name,
+    assess,
+  };
 }
 
 export { wrapText } from "./wrapText";
@@ -858,13 +897,10 @@ export {
   toolMessages,
   userMessages,
   type CreateHarnessOptions,
-  type CreateQueryableHarnessOptions,
   type CreateHarnessRunArgs,
   type Harness,
   type HarnessContext,
   type HarnessMetadata,
-  type HarnessQuery,
-  type HarnessQueryOptions,
   type HarnessResultLike,
   type HarnessRun,
   type HarnessRunError,
@@ -873,7 +909,6 @@ export {
   type MaybePromise,
   type NormalizedMessage,
   type NormalizedSession,
-  type QueryableHarness,
   type SimpleHarnessResult,
   type SimpleToolCallRecord,
   type TimingSummary,
@@ -890,9 +925,9 @@ export {
   type ToolCallJudgeOptions,
 } from "./judges";
 export type {
+  Judge,
+  JudgeAssessFn,
   JudgeContext,
-  JudgeFn,
   JudgeOptions,
   JudgeResult,
-  QueryableJudgeContext,
 } from "./judges/types";

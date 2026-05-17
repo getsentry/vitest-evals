@@ -2,12 +2,10 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
-  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -222,7 +220,6 @@ interface PiAiHarnessBaseOptions<
     TTools
   >;
   name?: string;
-  query?: HarnessQuery;
 }
 
 export interface PiAiHarnessWithToolsOptions<
@@ -354,43 +351,8 @@ export function piAiHarness<
     TMetadata,
     TResult,
     TTools
-  > & {
-    query: HarnessQuery;
-  },
-): QueryableHarness<TInput, TMetadata>;
-export function piAiHarness<
-  TAgent,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
-  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
-    TInput,
-    TMetadata
-  >,
->(
-  options: PiAiHarnessWithToolsOptions<
-    TAgent,
-    TInput,
-    TMetadata,
-    TResult,
-    TTools
   >,
 ): Harness<TInput, TMetadata>;
-export function piAiHarness<
-  TAgent,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
->(
-  options: PiAiHarnessInferredToolsOptions<
-    TAgent,
-    TInput,
-    TMetadata,
-    TResult
-  > & {
-    query: HarnessQuery;
-  },
-): QueryableHarness<TInput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -410,7 +372,7 @@ export function piAiHarness<
   >,
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+): Harness<TInput, TMetadata> {
   validateOptions(options);
 
   const harness: Harness<TInput, TMetadata> = {
@@ -454,12 +416,7 @@ export function piAiHarness<
     },
   };
 
-  return options.query
-    ? {
-        ...harness,
-        query: options.query,
-      }
-    : harness;
+  return harness;
 }
 
 function validateOptions<

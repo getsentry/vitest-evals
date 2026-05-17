@@ -2,12 +2,10 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
-  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -316,7 +314,6 @@ type OpenAiAgentsHarnessBaseOptions<
     TContext
   >;
   name?: string;
-  query?: HarnessQuery;
 };
 
 type OpenAiAgentsRunFn<
@@ -421,30 +418,6 @@ export function openaiAgentsHarness<
     TRunner,
     TResult,
     TContext
-  > & {
-    query: HarnessQuery;
-  },
-): QueryableHarness<TInput, TMetadata>;
-export function openaiAgentsHarness<
-  TAgent,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TRunner = OpenAiAgentsRunner<
-    TAgent,
-    TInput,
-    OpenAiAgentsRuntimeContext<TMetadata>,
-    unknown
-  >,
-  TResult = unknown,
-  TContext = OpenAiAgentsRuntimeContext<TMetadata>,
->(
-  options: OpenAiAgentsHarnessOptions<
-    TAgent,
-    TInput,
-    TMetadata,
-    TRunner,
-    TResult,
-    TContext
   >,
 ): Harness<TInput, TMetadata>;
 export function openaiAgentsHarness<
@@ -468,7 +441,7 @@ export function openaiAgentsHarness<
     TResult,
     TContext
   >,
-): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+): Harness<TInput, TMetadata> {
   validateOptions(options);
 
   const harness: Harness<TInput, TMetadata> = {
@@ -482,12 +455,7 @@ export function openaiAgentsHarness<
     },
   };
 
-  return options.query
-    ? {
-        ...harness,
-        query: options.query,
-      }
-    : harness;
+  return harness;
 }
 
 async function executeOpenAiAgentsHarness<

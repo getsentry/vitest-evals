@@ -6,11 +6,7 @@ import {
   ToolCallJudge,
   toolCalls,
 } from "vitest-evals";
-import {
-  createRefundAgent,
-  queryRefundModel,
-  type RefundCase,
-} from "../src/refundAgent";
+import { createRefundAgent, type RefundCase } from "../src/refundAgent";
 
 const outputJudge = StructuredOutputJudge();
 
@@ -23,7 +19,6 @@ describeEval(
       toolReplay: {
         lookupInvoice: true,
       },
-      query: queryRefundModel,
     }),
     judges: [ToolCallJudge()],
   },

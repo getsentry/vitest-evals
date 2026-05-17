@@ -77,26 +77,23 @@ const harness = aiSdkHarness({
 });
 ```
 
-`run` executes the system under test. `query` is optional and exists only when
-judges should reuse the same AI SDK provider setup or credentials for a
-separate judge-model call; it does not receive the app tools or runtime.
+`run` executes the system under test. Judges are separate `createJudge(...)`
+objects; when they need the same AI SDK provider setup or credentials, share
+that app-local client directly with the judge instead of putting a judge model
+call on the harness.
 
 ```ts
-const harness = aiSdkHarness({
-  tools,
-  run: ({ input, runtime }) =>
-    generateText({
-      model: openai("gpt-4o-mini"),
-      prompt: input,
-      tools: runtime.tools,
+const FactualityJudge = createJudge("FactualityJudge", async (ctx) => {
+  const verdict = await generateText({
+    model: openai("gpt-4o-mini"),
+    prompt: formatJudgePrompt({
+      input: ctx.input,
+      output: ctx.output,
     }),
-  query: (input, options) =>
-    generateText({
-      model: openai("gpt-4o-mini"),
-      system: options?.system,
-      prompt: input,
-      abortSignal: options?.signal,
-    }).then((result) => result.text),
+    abortSignal: ctx.signal,
+  });
+
+  return parseJudgeVerdict(verdict.text);
 });
 ```
 

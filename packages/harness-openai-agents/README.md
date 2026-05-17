@@ -79,20 +79,18 @@ const harness = openaiAgentsHarness({
 });
 ```
 
-`run` executes the OpenAI agent under test. `query` is optional and exists only
-when judges should reuse the same provider setup or credentials for a separate
-judge-model call; it must not call the app agent under test or expose its
-tools.
+`run` executes the OpenAI agent under test. Judges are separate
+`createJudge(...)` objects; when they need the same provider setup or
+credentials, share that app-local runner or model provider directly with the
+judge instead of putting a judge model call on the harness.
 
 ```ts
-const harness = openaiAgentsHarness({
-  agent: () => createClassifierAgent(),
-  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  query: (input, options) =>
-    queryJudgeModel(input, {
-      system: options?.system,
-      signal: options?.signal,
-    }),
+const ClassificationJudge = createJudge("ClassificationJudge", async (ctx) => {
+  const result = await judgeRunner.run(judgeAgent, formatJudgePrompt(ctx), {
+    signal: ctx.signal,
+  });
+
+  return parseJudgeVerdict(resolveResultText(result));
 });
 ```
 

@@ -37,18 +37,22 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-`run` executes the Pi agent under test. `query` is optional and exists only
-when judges should reuse the same provider setup or credentials for a separate
-judge-model call; it must not call the Pi agent under test or expose its tools.
+`run` executes the Pi agent under test. Judges are separate
+`createJudge(...)` objects; when they need the same provider setup or
+credentials, share that app-local provider helper directly with the judge
+instead of putting a judge model call on the harness.
 
 ```ts
-const harness = piAiHarness({
-  agent: () => createRefundAgent(),
-  query: (input, options) =>
-    queryRefundJudgeModel(input, {
-      system: options?.system,
-      signal: options?.signal,
+const RefundRubricJudge = createJudge("RefundRubricJudge", async (ctx) => {
+  const verdict = await queryRefundJudgeModel({
+    prompt: formatJudgePrompt({
+      input: ctx.input,
+      output: ctx.output,
     }),
+    signal: ctx.signal,
+  });
+
+  return parseJudgeVerdict(verdict);
 });
 ```
 
