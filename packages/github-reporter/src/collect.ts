@@ -57,7 +57,7 @@ export function collectEvalReport(
   const failures = cases.filter((testCase) => testCase.status === "failed");
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
-    .filter((score): score is number => typeof score === "number");
+    .filter((score): score is number => isFiniteNumber(score));
   const usage = sumUsage(cases);
   const durationMs = resolveRunDuration(input);
 
@@ -151,7 +151,7 @@ function getEvalMeta(value: unknown): EvalMeta | undefined {
     scores: Array.isArray(value.scores)
       ? value.scores.filter(isRecord).map(normalizeScore)
       : undefined,
-    avgScore: typeof value.avgScore === "number" ? value.avgScore : undefined,
+    avgScore: numberField(value.avgScore),
     output: value.output,
     thresholdFailed:
       typeof value.thresholdFailed === "boolean"
@@ -164,7 +164,7 @@ function normalizeScore(score: Record<string, unknown>): EvalScore {
   const metadata = isRecord(score.metadata) ? score.metadata : undefined;
   return {
     name: typeof score.name === "string" ? score.name : undefined,
-    score: typeof score.score === "number" ? score.score : null,
+    score: numberField(score.score) ?? null,
     metadata,
   };
 }
@@ -214,9 +214,11 @@ function getUsage(value: Record<string, unknown>): UsageSummary {
 }
 
 function numberField(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  return isFiniteNumber(value) ? value : undefined;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function collectToolCalls(session: HarnessRunMeta["session"] | undefined) {

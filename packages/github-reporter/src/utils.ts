@@ -46,7 +46,7 @@ export function formatNumber(value: number) {
 }
 
 export function formatScore(value: number | null | undefined) {
-  if (value == null || Number.isNaN(value)) {
+  if (value == null || !Number.isFinite(value)) {
     return "n/a";
   }
   return value.toFixed(2);

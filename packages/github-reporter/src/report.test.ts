@@ -147,6 +147,24 @@ describe("collectEvalReport", () => {
       },
     });
   });
+
+  test("ignores non-finite eval scores", () => {
+    const json = structuredClone(sampleJson);
+    const evalMeta = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .eval;
+    evalMeta.avgScore = Number.POSITIVE_INFINITY;
+    evalMeta.scores[0].score = Number.POSITIVE_INFINITY;
+
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(report.score).toBeUndefined();
+    expect(report.failures[0]?.eval?.avgScore).toBeUndefined();
+    expect(report.failures[0]?.eval?.scores[0]?.score).toBeNull();
+    expect(renderJobSummary(report)).not.toContain("Infinity");
+    expect(renderWorkflowCommands(report)[0]).toContain("score n/a");
+  });
 });
 
 describe("normalizePathForGitHub", () => {
@@ -198,19 +216,55 @@ describe("formatDuration", () => {
 });
 
 describe("renderJobSummary", () => {
-  test("renders compact ASCII markdown without failure tables", () => {
+  test("renders the summary table before result details", () => {
     const report = collectEvalReport(sampleJson, {
       workspace: "/repo",
     });
     const summary = renderJobSummary(report);
 
-    expect(summary).toContain("## vitest-evals");
-    expect(summary).toContain("Status: failed");
-    expect(summary).toContain("Score: avg 0.20, min 0.20");
-    expect(summary).toContain("1. refund agent > rejects fraud");
-    expect(summary).toContain("Reason:");
-    expect(summary).toContain("```text");
+    expect(summary).toContain("# vitest-evals");
+    expect(summary).toContain("## Results");
+    expect(summary.indexOf("| Metric | Value |")).toBeLessThan(
+      summary.indexOf("## Results"),
+    );
+    expect(summary).toContain("### Failures");
+    expect(summary).toContain("<details>");
+    expect(summary).toContain(
+      "<summary>1. refund agent &gt; rejects fraud - StructuredOutputJudge - 0.20</summary>",
+    );
+    expect(summary).toContain("| Metric | Value |");
+    expect(summary).toContain("| Status | failed |");
+    expect(summary).toContain("| Tests | 1 passed, 1 failed, 2 total |");
+    expect(summary).toContain("| Evals | 0 passed, 1 failed, 1 total |");
+    expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
+    expect(summary).toContain("Score distribution");
+    expect(summary.indexOf("Score distribution")).toBeLessThan(
+      summary.indexOf("## Results"),
+    );
+    expect(summary).toContain("20-39%  | #################### 1");
+    expect(summary).not.toContain("### Details");
     expect(summary).not.toContain("| Test |");
+
+    const details = summary.match(/<details>[\s\S]*?<\/details>/)?.[0] ?? "";
+    expect(details.match(/```/g)).toHaveLength(2);
+    expect(details).toContain("```text\nResult\n------");
+    expect(details).toContain("Case      1. refund agent > rejects fraud");
+    expect(details).toContain("Location  apps/demo/evals/refund.eval.ts:42");
+    expect(details).toContain("Usage     1,220 tokens, 2 tools, 4.1s");
+    expect(details).toContain("Reason\n------");
+    expect(details).toContain("Expected status=approved, got status=denied");
+    expect(details).toContain("Judge                  Score");
+    expect(details).toContain("StructuredOutputJudge  0.20");
+    expect(details).toContain("Final Output\n------------");
+    expect(details).toContain('"reason": "invoice is not refundable"');
+    expect(details).toContain("Tool           Status");
+    expect(details).toContain(
+      "createRefund   error: skipped: invoice not refundable",
+    );
+    expect(details).not.toContain("Scores\n------");
+    expect(details).not.toContain("Tool Calls\n----------");
+    expect(details).not.toContain("Reason:\n\n```text");
+    expect(details).not.toContain("Final:\n\n```text");
   });
 
   test("surfaces non-eval failures without pretending the run passed", () => {
@@ -253,10 +307,22 @@ describe("renderJobSummary", () => {
       }),
     );
 
-    expect(summary).toContain("Status: failed");
-    expect(summary).toContain("Evals: 0 passed, 0 failed, 0 total");
-    expect(summary).toContain("Other Failures: 1 non-eval test failure");
+    expect(summary).toContain("| Status | failed |");
+    expect(summary).toContain("| Evals | 0 passed, 0 failed, 0 total |");
+    expect(summary).toContain("| Other Failures | 1 non-eval test failure |");
+    expect(summary).toContain("## Results");
     expect(summary).toContain("No eval metadata was found");
+  });
+
+  test("escapes table cell control characters", () => {
+    const report = collectEvalReport(sampleJson, {
+      workspace: "/repo",
+    });
+    report.status = "failed \\ | escaped" as typeof report.status;
+
+    expect(renderJobSummary(report)).toContain(
+      String.raw`| Status | failed \\ \| escaped |`,
+    );
   });
 });
 
