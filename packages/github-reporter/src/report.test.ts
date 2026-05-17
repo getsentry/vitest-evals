@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { renderWorkflowCommands } from "./annotations";
+import { parseCliArgs } from "./cli-options";
 import { collectEvalReport } from "./collect";
 import { publishCheckRun } from "./github";
 import { renderJobSummary } from "./summary";
 import type { VitestJsonReport } from "./types";
-import { normalizePathForGitHub } from "./utils";
+import { formatDuration, normalizePathForGitHub } from "./utils";
 
 const sampleJson: VitestJsonReport = {
   numFailedTests: 1,
@@ -159,6 +160,36 @@ describe("normalizePathForGitHub", () => {
   });
 });
 
+describe("parseCliArgs", () => {
+  test("accepts a positional JSON report path", () => {
+    expect(parseCliArgs(["custom-results.json"], {})).toMatchObject({
+      jsonPath: "custom-results.json",
+    });
+  });
+
+  test("uses the default JSON report path when no path is provided", () => {
+    expect(parseCliArgs([], {})).toMatchObject({
+      jsonPath: "vitest-results.json",
+    });
+  });
+
+  test("lets CLI paths override environment defaults", () => {
+    expect(
+      parseCliArgs(["custom-results.json"], {
+        VITEST_EVALS_JSON_REPORT: "env-results.json",
+      }),
+    ).toMatchObject({
+      jsonPath: "custom-results.json",
+    });
+  });
+});
+
+describe("formatDuration", () => {
+  test("carries rounded seconds into minutes", () => {
+    expect(formatDuration(119_500)).toBe("2m 0s");
+  });
+});
+
 describe("renderJobSummary", () => {
   test("renders compact ASCII markdown without failure tables", () => {
     const report = collectEvalReport(sampleJson, {
@@ -299,6 +330,42 @@ describe("publishCheckRun", () => {
         ],
       },
     });
+  });
+
+  test("caps Check Run summary at GitHub's summary length limit", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 125,
+      }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const report = collectEvalReport(sampleJson, {
+      workspace: "/repo",
+    });
+    report.failures[0]!.primaryFailure = {
+      ...report.failures[0]!.primaryFailure,
+      reason: "x".repeat(70_000),
+    };
+
+    await publishCheckRun(report, {
+      token: "token",
+      repository: "getsentry/vitest-evals",
+      sha: "abc123",
+      maxReasonChars: 70_000,
+    });
+
+    const [, request] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { body: string },
+    ];
+    const body = JSON.parse(request.body);
+    expect(body.output.summary).toHaveLength(64_000);
+    expect(
+      body.output.summary.endsWith("\n\n[truncated for GitHub Check Run]\n"),
+    ).toBe(true);
   });
 
   test("uses a non-eval failure title for failed runs without eval failures", async () => {

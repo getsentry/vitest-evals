@@ -25,6 +25,8 @@ export type PublishCheckRunResult =
 
 const DEFAULT_CHECK_NAME = "vitest-evals";
 const MAX_CHECK_SUMMARY_LENGTH = 64_000;
+const CHECK_SUMMARY_TRUNCATION_SUFFIX =
+  "\n\n[truncated for GitHub Check Run]\n";
 
 /** Publishes the eval report to a GitHub Check Run when configuration allows it. */
 export async function publishCheckRun(
@@ -139,5 +141,7 @@ function truncateCheckSummary(summary: string) {
     return summary;
   }
 
-  return `${summary.slice(0, MAX_CHECK_SUMMARY_LENGTH - 34).trimEnd()}\n\n[truncated for GitHub Check Run]\n`;
+  return `${summary
+    .slice(0, MAX_CHECK_SUMMARY_LENGTH - CHECK_SUMMARY_TRUNCATION_SUFFIX.length)
+    .trimEnd()}${CHECK_SUMMARY_TRUNCATION_SUFFIX}`;
 }

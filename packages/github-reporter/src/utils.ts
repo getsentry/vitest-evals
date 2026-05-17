@@ -63,8 +63,9 @@ export function formatDuration(ms: number | undefined) {
   if (seconds < 60) {
     return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
   }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
 }
 
