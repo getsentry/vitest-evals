@@ -272,7 +272,7 @@ describe("renderWorkflowCommands", () => {
     });
 
     expect(renderWorkflowCommands(report)).toEqual([
-      "::error file=apps/demo/evals/refund.eval.ts,line=42,column=3,title=vitest-evals::refund agent > rejects fraud - score 0.20 - StructuredOutputJudge - bad value: expected, got 20%25",
+      "::error file=apps/demo/evals/refund.eval.ts,line=42,col=3,title=vitest-evals::refund agent > rejects fraud - score 0.20 - StructuredOutputJudge - bad value: expected, got 20%25",
     ]);
   });
 

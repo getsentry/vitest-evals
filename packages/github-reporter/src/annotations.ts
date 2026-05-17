@@ -47,7 +47,7 @@ export function renderWorkflowCommands(
         properties: {
           file: testCase.displayFile,
           line: String(testCase.location.line),
-          column: String(testCase.location.column),
+          col: String(testCase.location.column),
           title: "vitest-evals",
         },
         message: formatWorkflowMessage(testCase),
