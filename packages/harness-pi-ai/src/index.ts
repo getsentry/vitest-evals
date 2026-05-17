@@ -2,11 +2,12 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessPrompt,
+  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
+  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -223,8 +224,8 @@ interface PiAiHarnessBaseOptions<
     TResult,
     TTools
   >;
-  prompt?: HarnessPrompt;
   name?: string;
+  query?: HarnessQuery;
 }
 
 export interface PiAiHarnessWithToolsOptions<
@@ -356,8 +357,43 @@ export function piAiHarness<
     TMetadata,
     TResult,
     TTools
+  > & {
+    query: HarnessQuery;
+  },
+): QueryableHarness<TInput, TMetadata>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: PiAiHarnessWithToolsOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools
   >,
 ): Harness<TInput, TMetadata>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+>(
+  options: PiAiHarnessInferredToolsOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult
+  > & {
+    query: HarnessQuery;
+  },
+): QueryableHarness<TInput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -377,10 +413,9 @@ export function piAiHarness<
   >,
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> {
-  return {
+): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+  const harness: Harness<TInput, TMetadata> = {
     name: options.name ?? "pi-ai",
-    prompt: options.prompt ?? missingHarnessPrompt(options.name ?? "pi-ai"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -419,6 +454,13 @@ export function piAiHarness<
       );
     },
   };
+
+  return options.query
+    ? {
+        ...harness,
+        query: options.query,
+      }
+    : harness;
 }
 
 async function executePiHarnessRun<
@@ -740,14 +782,6 @@ function hasPiAiRunMethod<
   return (
     "run" in agent && typeof (agent as { run?: unknown }).run === "function"
   );
-}
-
-function missingHarnessPrompt(name: string): HarnessPrompt {
-  return async () => {
-    throw new Error(
-      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
-    );
-  };
 }
 
 function isPiAiToolset(value: unknown): value is PiAiToolset {

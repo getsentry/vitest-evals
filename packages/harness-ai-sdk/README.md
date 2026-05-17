@@ -29,6 +29,12 @@ const harness = aiSdkHarness({
   toolReplay: {
     lookupInvoice: true,
   },
+  query: (input, options) =>
+    generateText({
+      model: openai("gpt-4o-mini"),
+      system: options?.system,
+      prompt: input,
+    }).then((result) => result.text),
   run: ({ input, runtime }) =>
     generateText({
       model: openai("gpt-4o-mini"),
@@ -77,21 +83,9 @@ const harness = aiSdkHarness({
 });
 ```
 
-Add `prompt` when rubric or factuality judges need a model call through
-`JudgeContext.harness.prompt`:
-
-```ts
-const harness = aiSdkHarness({
-  tools,
-  run: ({ input, runtime }) => createRefundAgent().run(input, runtime),
-  prompt: (input, options) =>
-    generateText({
-      model: openai("gpt-4o-mini"),
-      system: options?.system,
-      prompt: input,
-    }).then((result) => result.text),
-});
-```
+`run` executes the system under test. `query` is optional and exists only when
+judges should reuse the same AI SDK provider setup or credentials for a
+separate judge-model call; it does not receive the app tools or runtime.
 
 The adapter infers:
 

@@ -17,7 +17,7 @@ import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "@vitest-evals/h
 ```ts
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
-  prompt: promptJudgeModel,
+  query: queryJudgeModel,
 });
 ```
 
@@ -29,7 +29,7 @@ If the agent needs a custom entrypoint:
 ```ts
 const harness = piAiHarness({
   createAgent: () => createRefundAgent(),
-  prompt: promptJudgeModel,
+  query: queryJudgeModel,
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
   normalize: {
     output: ({ result }) => result.decision,
@@ -43,7 +43,7 @@ const harness = piAiHarness({
 |--------|-------------|
 | `agent` | Existing instance used for runs. |
 | `createAgent` | Factory for a fresh per-run agent; receives `{ input, context }`. |
-| `prompt` | Required prompt seam for judges. |
+| `query` | Optional judge-model helper; only include it when real shared provider setup or credentials exist. |
 | `run` | Optional custom execution; omitted when the agent exposes `run(input, runtime)`. |
 | `tools` | Optional explicit `PiAiToolset`; use when the agent hides its tool surface. |
 | `normalize.output` | Optional domain output selector; defaults to `output`, `decision`, `result`, then `final`. |
@@ -84,7 +84,7 @@ const harness = piAiHarness({
 
 | Case | Prefer |
 |------|--------|
-| Conventional agent with `run(input, runtime)` | `createAgent` plus `prompt` |
+| Conventional agent with `run(input, runtime)` | `agent` or `createAgent` |
 | Existing agent method named differently | Add `run` |
 | Hidden tool surface | Add explicit `tools` |
 | Wrapped result with domain object | Add `normalize.output` |

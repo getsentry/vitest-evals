@@ -14,6 +14,7 @@ import {
   type HarnessContext,
   type HarnessRun,
   type NormalizedSession,
+  type QueryableHarness,
 } from "./index";
 
 type RefundEvalMetadata = {
@@ -68,18 +69,21 @@ const runSpy = vi.fn(
   },
 );
 
-const promptSpy = vi.fn(async (input: string) => `judge prompt: ${input}`);
-const customJudgePromptSpy = vi.fn(async (_input: string) => ({ score: 1 }));
-
 const harness: Harness<string, RefundEvalMetadata> = {
   name: "pi-ai",
-  prompt: promptSpy,
   run: runSpy,
+};
+
+const querySpy = vi.fn(async (input: string) => `judge query: ${input}`);
+
+const queryableHarness: QueryableHarness<string, RefundEvalMetadata> = {
+  ...harness,
+  query: querySpy,
 };
 
 const customHarness = {
   ...harness,
-  judgePrompt: customJudgePromptSpy,
+  label: "custom-harness",
 };
 
 const judgeSpy = vi.fn(
@@ -96,8 +100,7 @@ const thresholdJudgeSpy = vi.fn(
 
 beforeEach(() => {
   runSpy.mockClear();
-  promptSpy.mockClear();
-  customJudgePromptSpy.mockClear();
+  querySpy.mockClear();
   judgeSpy.mockClear();
   thresholdJudgeSpy.mockClear();
 });
@@ -187,19 +190,6 @@ describeEval(
   },
 );
 
-test("createHarness prompt fails only when a judge asks for it", async () => {
-  const promptlessHarness = createHarness({
-    name: "promptless",
-    run: async () => ({
-      output: "approved",
-    }),
-  });
-
-  await expect(promptlessHarness.prompt("score output")).rejects.toThrow(
-    "promptless harness did not configure prompt()",
-  );
-});
-
 test("createHarness drops non-normalized lightweight tool call fields", async () => {
   const lightweightHarness = createHarness({
     name: "custom-app",
@@ -236,6 +226,55 @@ test("createHarness drops non-normalized lightweight tool call fields", async ()
       },
     },
   ]);
+});
+
+test("createHarness serializes Error objects in lightweight errors", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "denied",
+      errors: [new TypeError("agent failed")],
+    }),
+  });
+
+  const result = await lightweightHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.errors).toEqual([
+    {
+      type: "TypeError",
+      message: "agent failed",
+    },
+  ]);
+});
+
+test("createHarness exposes a judge query helper only when configured", async () => {
+  const query = vi.fn(async (input: string) => `judge: ${input}`);
+  const queryable = createHarness({
+    name: "custom-app",
+    query,
+    run: async () => ({
+      output: "approved",
+    }),
+  });
+  const plain = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+    }),
+  });
+
+  await expect(queryable.query("score refund")).resolves.toBe(
+    "judge: score refund",
+  );
+  expect(query).toHaveBeenCalledWith("score refund");
+  expect("query" in plain).toBe(false);
 });
 
 describeEval("harness mode", { harness }, (it) => {
@@ -329,57 +368,45 @@ describeEval(
 );
 
 describeEval(
-  "harness mode with automatic judge prompt",
+  "harness mode with automatic judge query",
   {
-    harness,
+    harness: queryableHarness,
     judges: [
-      async ({
-        harness: configuredHarness,
-        metadata,
-      }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
-        const promptOutput = await configuredHarness.prompt("score refund", {
-          system: "grade the refund decision",
+      async ({ harness: configuredHarness }) => {
+        const assessment = await configuredHarness.query("score refund", {
+          system: "Judge whether the refund output is correct.",
         });
 
         return {
-          score:
-            configuredHarness === harness &&
-            metadata.expectedStatus === "approved" &&
-            promptOutput === "judge prompt: score refund"
-              ? 1
-              : 0,
+          score: assessment === "judge query: score refund" ? 1 : 0,
         };
       },
     ],
   },
   (it) => {
-    it("passes the configured harness prompt to automatic judges", async ({
-      run,
-    }) => {
+    it("lets judges query a separate judge model helper", async ({ run }) => {
       await run("Refund invoice inv_123", {
         metadata: {
-          name: "refund request with prompt judge",
+          name: "refund request with judge query",
           expectedStatus: "approved",
         },
       });
 
-      expect(promptSpy).toHaveBeenCalledWith("score refund", {
-        system: "grade the refund decision",
+      expect(querySpy).toHaveBeenCalledWith("score refund", {
+        system: "Judge whether the refund output is correct.",
       });
     });
   },
 );
 
 describeEval(
-  "harness mode with custom harness judge helpers",
+  "harness mode with custom harness context",
   {
     harness: customHarness,
     judges: [
       async ({ harness: configuredHarness }) => {
-        const verdict = await configuredHarness.judgePrompt("score refund");
-
         return {
-          score: verdict.score,
+          score: configuredHarness.label === "custom-harness" ? 1 : 0,
         };
       },
     ],
@@ -394,8 +421,6 @@ describeEval(
           expectedStatus: "approved",
         },
       });
-
-      expect(customJudgePromptSpy).toHaveBeenCalledWith("score refund");
     });
   },
 );
@@ -496,7 +521,7 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
   }) => {
     const result = await run("Refund invoice inv_123", {
       metadata: {
-        name: "refund request with explicit prompt judge",
+        name: "refund request with explicit typed harness judge",
         expectedStatus: "approved",
       },
     });
@@ -505,15 +530,10 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
         harness: configuredHarness,
         metadata,
       }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
-        const promptOutput = await configuredHarness.prompt(
-          "score explicit refund",
-        );
-
         return {
           score:
             configuredHarness === harness &&
-            metadata.expectedStatus === "approved" &&
-            promptOutput === "judge prompt: score explicit refund"
+            metadata.expectedStatus === "approved"
               ? 1
               : 0,
         };
@@ -527,11 +547,10 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
         harness,
         metadata: {
           expectedStatus: "approved",
-          name: "refund request with explicit prompt judge",
+          name: "refund request with explicit typed harness judge",
         },
       }),
     );
-    expect(promptSpy).toHaveBeenCalledWith("score explicit refund");
   });
 
   it("uses the current test run context for raw explicit judge values", async ({
@@ -553,8 +572,6 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
         session,
         toolCalls: judgeToolCalls,
       }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
-        const promptOutput = await configuredHarness.prompt(inputValue);
-
         return {
           score:
             configuredHarness === harness &&
@@ -563,7 +580,7 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
             session === result.session &&
             judgeToolCalls[0]?.name === "lookupInvoice" &&
             metadata.expectedStatus === "approved" &&
-            promptOutput === "judge prompt: Refund invoice inv_123"
+            inputValue === "Refund invoice inv_123"
               ? 1
               : 0,
         };
@@ -647,7 +664,6 @@ describeEval(
   {
     harness: {
       name: "flaky-harness",
-      prompt: promptSpy,
       run: vi
         .fn<(input: string, context: HarnessContext) => Promise<HarnessRun>>()
         .mockResolvedValueOnce({
@@ -777,13 +793,11 @@ test("toSatisfyJudge accepts explicit harness context for raw values", async () 
       inputValue,
       metadata,
     }: JudgeContext<string, RefundEvalMetadata, typeof harness>) => {
-      const promptOutput = await configuredHarness.prompt(inputValue);
-
       return {
         score:
           configuredHarness === harness &&
-          metadata.expectedStatus === "approved" &&
-          promptOutput === "judge prompt: Refund invoice inv_123"
+          inputValue === "Refund invoice inv_123" &&
+          metadata.expectedStatus === "approved"
             ? 1
             : 0,
       };

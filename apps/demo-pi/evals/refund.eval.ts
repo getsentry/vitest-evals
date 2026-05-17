@@ -8,7 +8,7 @@ import {
 } from "vitest-evals";
 import {
   createRefundAgent,
-  promptRefundModel,
+  queryRefundModel,
   type RefundCase,
 } from "../src/refundAgent";
 
@@ -23,7 +23,7 @@ describeEval(
       toolReplay: {
         lookupInvoice: true,
       },
-      prompt: promptRefundModel,
+      query: queryRefundModel,
     }),
     judges: [ToolCallJudge()],
   },

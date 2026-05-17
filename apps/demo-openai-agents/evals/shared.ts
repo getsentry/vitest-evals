@@ -5,7 +5,7 @@ import {
   createRefundAgent,
   createRefundRunner,
   parseRefundDecision,
-  promptRefundModel,
+  queryRefundModel,
   resolveResultText,
   type RefundCase,
 } from "../src/refundAgent";
@@ -13,7 +13,7 @@ import {
 export const refundHarness = openaiAgentsHarness({
   agent: () => createRefundAgent(),
   runner: () => createRefundRunner(),
-  prompt: promptRefundModel,
+  query: queryRefundModel,
   runOptions: {
     maxTurns: 5,
   },

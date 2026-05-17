@@ -15,17 +15,28 @@ Every judge receives:
 | `toolCalls` | Flattened calls from `run.session`. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
-| `harness` | Suite harness, including `prompt(...)`. |
+| `harness` | Suite harness; queryable only when typed with `QueryableHarness`. |
 
 ## Custom Judge Pattern
 
 ```ts
-import { namedJudge, type JudgeContext } from "vitest-evals";
+import {
+  namedJudge,
+  type JudgeContext,
+  type QueryableHarness,
+} from "vitest-evals";
+
+type EvalHarness = QueryableHarness<string, CaseMeta>;
 
 const FactualityJudge = namedJudge(
   "FactualityJudge",
-  async ({ harness, input, output, metadata }: JudgeContext<string, CaseMeta>) => {
-    const verdict = await harness.prompt(formatRubric({ input, output }), {
+  async ({
+    harness,
+    input,
+    output,
+    metadata,
+  }: JudgeContext<string, CaseMeta, EvalHarness>) => {
+    const verdict = await harness.query(formatRubric({ input, output }), {
       system: "Grade the answer against the rubric.",
       metadata: { expectedStatus: metadata.expectedStatus },
     });
@@ -45,7 +56,7 @@ const FactualityJudge = namedJudge(
 | Only one assertion needs the judge | `await expect(result).toSatisfyJudge(Judge)` |
 | Judge needs structured app output | Read `ctx.run.output` |
 | Judge needs canonical text | Read `ctx.output` |
-| Judge needs the model setup | Call `ctx.harness.prompt(...)` |
+| Judge needs shared model setup | Type the harness as `QueryableHarness` and call `ctx.harness.query(...)` |
 
 ## Built-In Judges
 
@@ -67,4 +78,5 @@ const FactualityJudge = namedJudge(
 - Custom judges are wrapped in `namedJudge(...)`.
 - Scores are numbers or `null`; failure behavior is controlled by thresholds.
 - Rationale or parsed judge output is placed under `metadata`.
-- LLM-backed judges use `harness.prompt(...)`, not a separate provider setup hidden inside the test.
+- LLM-backed judges provide the judge prompt/rubric text. Use
+  `harness.query(...)` only when the harness exposes a real query helper.

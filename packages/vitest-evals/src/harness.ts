@@ -63,16 +63,16 @@ export type HarnessRun = {
   errors: Array<Record<string, JsonValue>>;
 };
 
-/** Optional provider-facing hints for harness prompt calls. */
-export type HarnessPromptOptions = {
+/** Optional provider-facing hints for harness query calls. */
+export type HarnessQueryOptions = {
   system?: string;
   metadata?: Record<string, JsonValue>;
 };
 
-/** Provider-agnostic prompt function that judges can reuse from a harness. */
-export type HarnessPrompt = (
+/** Provider-agnostic model query function that judges can reuse from a harness. */
+export type HarnessQuery = (
   input: string,
-  options?: HarnessPromptOptions,
+  options?: HarnessQueryOptions,
 ) => Promise<string>;
 
 export type HarnessRunError = Error & {
@@ -98,12 +98,18 @@ export type Harness<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
-  /** Prompt seam reused by LLM-backed judges. */
-  prompt: HarnessPrompt;
   run: (
     input: TInput,
     context: HarnessContext<TMetadata>,
   ) => Promise<HarnessRun>;
+};
+
+export type QueryableHarness<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = Harness<TInput, TMetadata> & {
+  /** Model query helper for judges; this must not execute the system under test. */
+  query: HarnessQuery;
 };
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -146,10 +152,16 @@ export type CreateHarnessOptions<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
-  prompt?: HarnessPrompt;
   run: (
     args: CreateHarnessRunArgs<TInput, TMetadata>,
   ) => MaybePromise<HarnessResultLike>;
+};
+
+export type CreateQueryableHarnessOptions<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = CreateHarnessOptions<TInput, TMetadata> & {
+  query: HarnessQuery;
 };
 
 function isJsonPrimitive(value: unknown): value is JsonPrimitive {
@@ -239,11 +251,22 @@ export function createHarness<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 >(
-  options: CreateHarnessOptions<TInput, TMetadata>,
-): Harness<TInput, TMetadata> {
-  return {
+  options: CreateQueryableHarnessOptions<TInput, TMetadata>,
+): QueryableHarness<TInput, TMetadata>;
+export function createHarness<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(options: CreateHarnessOptions<TInput, TMetadata>): Harness<TInput, TMetadata>;
+export function createHarness<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(
+  options:
+    | CreateHarnessOptions<TInput, TMetadata>
+    | CreateQueryableHarnessOptions<TInput, TMetadata>,
+): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+  const harness: Harness<TInput, TMetadata> = {
     name: options.name,
-    prompt: options.prompt ?? missingHarnessPrompt(options.name),
     run: async (input, context) => {
       const result = await options.run({
         input,
@@ -257,6 +280,17 @@ export function createHarness<
       return normalizeHarnessRun(input, result, context);
     },
   };
+
+  const query = "query" in options ? options.query : undefined;
+
+  if (query) {
+    return {
+      ...harness,
+      query,
+    };
+  }
+
+  return harness;
 }
 
 /** Normalizes a lightweight harness result into the reporter-facing run shape. */
@@ -316,14 +350,6 @@ export function normalizeHarnessRun<
     ...(result.timings ? { timings: result.timings } : {}),
     ...(artifacts ? { artifacts } : {}),
     errors: normalizeSimpleErrors(result.errors),
-  };
-}
-
-function missingHarnessPrompt(name: string): HarnessPrompt {
-  return async () => {
-    throw new Error(
-      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
-    );
   };
 }
 
@@ -451,7 +477,8 @@ function normalizeSimpleErrors(
     if (
       normalized &&
       typeof normalized === "object" &&
-      !Array.isArray(normalized)
+      !Array.isArray(normalized) &&
+      Object.keys(normalized).length > 0
     ) {
       return normalized;
     }

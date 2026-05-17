@@ -33,7 +33,8 @@ Use the harness-backed API as the only authoring model.
 - Assert on `result.output` for app-facing behavior.
 - Use `result.session` and helpers such as `toolCalls(session)` for trace assertions.
 - Keep `HarnessRun`, `NormalizedSession`, usage, artifacts, and tool records JSON-serializable.
-- Expose `harness.prompt(...)` so LLM-backed judges can reuse the suite's provider and model setup.
+- Expose a real `harness.query(...)` only when LLM-backed judges need to reuse
+  provider setup or credentials; do not add placeholder methods.
 - Put scenario-owned criteria on the input value; put per-run expectations or harness settings in `metadata`.
 - Use `namedJudge(...)` for custom judges that should have stable reporter labels.
 

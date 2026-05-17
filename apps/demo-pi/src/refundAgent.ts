@@ -6,7 +6,7 @@ import {
   type Static,
 } from "@mariozechner/pi-ai";
 import type { PiAiRuntime, PiAiToolset } from "@vitest-evals/harness-pi-ai";
-import type { HarnessPromptOptions } from "vitest-evals";
+import type { HarnessQueryOptions } from "vitest-evals";
 
 export type InvoiceRecord = {
   invoiceId: string;
@@ -215,9 +215,10 @@ export function createRefundAgent(options?: { model?: RefundAgentModel }) {
   return new RefundAgent(options?.model ?? DEFAULT_REFUND_MODEL);
 }
 
-export async function promptRefundModel(
+/** Queries the same provider stack for judges without using the refund agent tools. */
+export async function queryRefundModel(
   input: string,
-  options?: HarnessPromptOptions,
+  options?: HarnessQueryOptions,
 ) {
   const agent = new Agent({
     initialState: {
@@ -234,7 +235,7 @@ export async function promptRefundModel(
   const assistant = getFinalAssistantMessage(agent.state.messages);
   const outputText = assistant ? getAssistantText(assistant) : "";
   if (!outputText) {
-    throw new Error("Prompt model returned an empty response.");
+    throw new Error("Judge query model returned an empty response.");
   }
 
   return outputText;

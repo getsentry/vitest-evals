@@ -135,7 +135,6 @@ describeEval(
   {
     harness: piAiHarness({
       agent: () => createRefundAgent(),
-      prompt: judgePrompt,
       run: ({ agent, input, runtime }) => agent.run(input, runtime),
     }),
   },
@@ -170,7 +169,6 @@ The default path should be close to zero glue for standard apps:
 describeEval("refund agent", {
   harness: piAiHarness({
     agent: () => createRefundAgent(),
-    prompt: judgePrompt,
   }),
 }, (it) => {
   it("approves a refundable invoice", async ({ run }) => {
@@ -189,7 +187,6 @@ entrypoint or custom result shape:
 describeEval("refund agent", {
   harness: piAiHarness({
     agent: () => createRefundAgent(),
-    prompt: judgePrompt,
     run: ({ agent, input, runtime }) => agent.execute(input, runtime),
     normalize: {
       output: ({ result }) => result.decision,

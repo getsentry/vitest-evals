@@ -322,7 +322,7 @@ expect.extend({
  * describeEval("refund agent", {
  *   harness: piAiHarness({
  *     agent: () => createRefundAgent(),
- *     prompt: judgePrompt,
+ *     query: judgeModelQuery,
  *   }),
  *   judges: [ToolCallJudge()],
  * }, (it) => {
@@ -844,12 +844,13 @@ export {
   toolMessages,
   userMessages,
   type CreateHarnessOptions,
+  type CreateQueryableHarnessOptions,
   type CreateHarnessRunArgs,
   type Harness,
   type HarnessContext,
   type HarnessMetadata,
-  type HarnessPrompt,
-  type HarnessPromptOptions,
+  type HarnessQuery,
+  type HarnessQueryOptions,
   type HarnessResultLike,
   type HarnessRun,
   type HarnessRunError,
@@ -858,6 +859,7 @@ export {
   type MaybePromise,
   type NormalizedMessage,
   type NormalizedSession,
+  type QueryableHarness,
   type SimpleHarnessResult,
   type SimpleToolCallRecord,
   type TimingSummary,

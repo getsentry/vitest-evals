@@ -38,8 +38,10 @@ npm install -D @vitest-evals/github-reporter
   scenario payload
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
-- every judge receives `JudgeContext`, including the configured `harness`;
-  LLM-backed judges can call `harness.prompt(...)`
+- every judge receives `JudgeContext` with the normalized run and harness
+  context
+- harnesses may expose a real `query(...)` helper for judges that should reuse
+  the same provider library or credentials without running the app agent
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
@@ -54,7 +56,7 @@ import {
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
-import { createRefundAgent, judgePrompt } from "../src/refundAgent";
+import { createRefundAgent } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";
@@ -88,7 +90,6 @@ describeEval(
   {
     harness: piAiHarness({
       agent: () => createRefundAgent(),
-      prompt: judgePrompt,
     }),
     judges: [FactualityJudge],
   },
@@ -191,9 +192,10 @@ structured domain output mapping.
 
 First-party harness packages are conveniences, not the only supported path. If
 you need to test a full application flow, use `createHarness(...)` to run your
-app through its normal entrypoint and return the app-facing output. Add
-`prompt` only when LLM-backed judges need to call
-`JudgeContext.harness.prompt`.
+app through its normal entrypoint and return the app-facing output. Judges own
+their prompt/rubric text separately from the system under test. When multiple
+judges should reuse the same provider setup or credentials, pass a real
+`query(...)` helper; otherwise the harness simply has no query capability.
 
 ```ts
 import {
@@ -219,7 +221,7 @@ type AppEvalInput = {
 
 const appHarness = createHarness<AppEvalInput>({
   name: "custom-app",
-  prompt: (input, options) => promptJudgeModel(input, options),
+  query: promptJudgeModel,
   run: async ({ input, signal, setArtifact }) => {
     const result = await replayAppEvents(input.events, {
       signal,
@@ -242,7 +244,7 @@ const AppRubricJudge = namedJudge(
   async (
     ctx: JudgeContext<AppEvalInput, Record<string, unknown>, typeof appHarness>,
   ) => {
-    const verdict = await ctx.harness.prompt(
+    const verdict = await ctx.harness.query(
       formatRubricPrompt({
         output: ctx.output,
         criteria: ctx.inputValue.criteria,
@@ -287,17 +289,18 @@ describeEval(
 );
 ```
 
-Use `Harness.run(...)` for the application under test and `Harness.prompt(...)`
-for judge model calls. Calling `ctx.harness.run(...)` from inside a judge runs
-the application a second time, so reserve that for judges that intentionally
-need a second execution. Put criteria on `inputValue` when they are part of the
-scenario itself; use per-run `metadata` for harness configuration or
-expectations that are not part of the scenario payload. `createHarness(...)`
-builds a default user/assistant session from `input`, `output`, and
-`outputText`; return a full `HarnessRun` only when you need exact session
-control.
+Use `Harness.run(...)` for the application under test. If a harness exposes
+`query(...)`, judges can use it as a separate judge-model helper that shares
+provider setup without inheriting the app agent's tools or runtime. Calling
+`ctx.harness.run(...)` from inside a judge runs the application a second time,
+so reserve that for judges that intentionally need a second execution. Put
+criteria on `inputValue` when they are part of the scenario itself; use per-run
+`metadata` for harness configuration or expectations that are not part of the
+scenario payload. `createHarness(...)` builds a default user/assistant session
+from `input`, `output`, and `outputText`; return a full `HarnessRun` only when
+you need exact session control.
 
-Provider setup and rubric parsing stay in your harness and judge. The core
+Provider setup and rubric parsing stay in your judge. The core
 package only requires the judge to return a `JudgeResult` with a score and
 optional metadata.
 
@@ -352,15 +355,16 @@ const FactualityJudge = namedJudge(
 );
 ```
 
-LLM-backed judges can reuse the suite harness prompt by calling
-`harness.prompt(...)`. `vitest-evals` does not prescribe a rubric schema,
-scoring scale, model provider, or parser; those stay in the judge. Calling
-`harness.run(...)` from a judge executes the application again, so use that
-only when a second run is intentional.
+LLM-backed judges should provide their own judge prompt and rubric text.
+`vitest-evals` does not prescribe a rubric schema, scoring scale, model
+provider, or parser; those stay in the judge. When a harness exposes
+`query(...)`, that helper is for the judge model call, not the system under
+test. Calling `harness.run(...)` from a judge executes the application again,
+so use that only when a second run is intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's canonical text output and reuses the
-registered input, metadata, and harness prompt. Inside an eval test,
+registered input and metadata. Inside an eval test,
 matcher calls on registered raw output or session objects reuse that exact run
 context; raw output values are serialized as the judge `output`, so
 `expect(result.output).toSatisfyJudge(judge)` stays concise. Other raw values

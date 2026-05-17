@@ -20,6 +20,7 @@ const harness = piAiHarness({
   toolReplay: {
     lookupInvoice: true,
   },
+  query: queryRefundModel,
 });
 
 describeEval("refund agent", { harness }, (it) => {
@@ -37,8 +38,9 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-Add `prompt` when rubric or factuality judges need the same provider/model setup
-through `JudgeContext.harness.prompt`.
+`run` executes the Pi agent under test. `query` is optional and exists only
+when judges should reuse the same provider setup or credentials for a separate
+judge-model call; it must not call the Pi agent under test or expose its tools.
 
 If the agent already exposes its own tools, the adapter will infer them from
 the agent by default. If your existing Pi Mono agent already exposes its own
@@ -109,7 +111,6 @@ const harness = piAiHarness({
 The adapter provides:
 
 - a runtime/tool injection seam for an existing agent
-- an optional prompt function for LLM-backed judges
 - normalized session capture from emitted events and wrapped tool calls
 - usage/output inference for common `pi-ai`-style result objects
 - opt-in tool replay/recording from harness-level `toolReplay`

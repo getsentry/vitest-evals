@@ -98,7 +98,6 @@ describeEval(
   {
     harness: piAiHarness({
       agent: () => createRefundAgent(),
-      prompt: judgePrompt,
     }),
     judges: [ToolCallJudge()],
   },

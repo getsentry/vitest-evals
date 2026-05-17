@@ -18,10 +18,9 @@ hatches for advanced cases.
   primitive with a larger framework.
 - Prefer one shared contextual API over parallel specialized APIs when callers
   are doing the same kind of work.
-- Keep context objects stable and capability methods mandatory when the surface
-  owns the configuration. Config can accept optional capabilities when only
-  some users need them, but the constructed runtime object should still expose a
-  consistent method that fails clearly if the capability is used.
+- Let strong types express optional capabilities. If only some users need a
+  capability, return a stronger typed object when it is configured instead of
+  adding a dummy placeholder method that fails at runtime.
 - Put capabilities on the object that owns their configuration. Avoid parallel
   context objects with overlapping lifecycle names such as `harness` and
   `runtime`.

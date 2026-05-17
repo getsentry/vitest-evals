@@ -19,14 +19,14 @@ import { generateText, stepCountIs } from "ai";
 
 const harness = aiSdkHarness({
   tools,
-  prompt: (input, options) =>
+  query: (input, options) =>
     generateText({
       model,
       system: options?.system,
       prompt: input,
       temperature: 0,
     }).then((result) => result.text),
-  task: ({ input, runtime }) =>
+  run: ({ input, runtime }) =>
     generateText({
       model,
       prompt: input,
@@ -34,7 +34,9 @@ const harness = aiSdkHarness({
       stopWhen: stepCountIs(5),
       temperature: 0,
     }),
-  output: ({ result }) => parseDomainOutput(result.text),
+  normalize: {
+    output: ({ result }) => parseDomainOutput(result.text),
+  },
 });
 ```
 
@@ -42,13 +44,13 @@ const harness = aiSdkHarness({
 
 | Option | Requirement |
 |--------|-------------|
-| `prompt` | Required prompt seam for judges. |
-| `task` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent`. |
-| `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `task`. |
-| `tools` | Optional AI SDK toolset; wrapped before being passed to the task or agent. |
-| `output` | Optional domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
-| `session` | Optional override when inferred steps or traces are insufficient. |
-| `usage`, `timings`, `errors` | Optional diagnostic overrides. |
+| `query` | Optional judge-model helper; only include it when real shared provider setup or credentials exist. |
+| `run` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent` and `task`. |
+| `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `run` and `task`. |
+| `tools` | Optional AI SDK toolset; wrapped before being passed to the run callback or agent. |
+| `normalize.output` | Optional domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
+| `normalize.session` | Optional override when inferred steps or traces are insufficient. |
+| `normalize.usage`, `normalize.timings`, `normalize.errors` | Optional diagnostic overrides. |
 | `name` | Optional reporter label; defaults to `ai-sdk`. |
 
 Agent factories receive `{ input, context }` before execution so apps can
@@ -74,8 +76,8 @@ derive instructions, metadata, or seeded state without side-channel setup.
 
 | Case | Prefer |
 |------|--------|
-| Direct `generateText(...)` or `generateObject(...)` call | `task` |
+| Direct `generateText(...)` or `generateObject(...)` call | `run` |
 | Existing app wrapper with `run(input, runtime)` | `agent` |
-| Provider result text needs parsing | `output` |
+| Provider result text needs parsing | `normalize.output` |
 | App returns a full normalized run | Return `HarnessRun` and omit overrides. |
-| App returns a run-like domain object | Use `output` and `session` overrides to avoid accidental pass-through. |
+| App returns a run-like domain object | Use `normalize.output` and `normalize.session` overrides to avoid accidental pass-through. |

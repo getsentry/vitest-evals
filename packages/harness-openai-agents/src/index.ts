@@ -2,11 +2,12 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessPrompt,
+  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
+  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -341,8 +342,8 @@ export interface OpenAiAgentsHarnessOptions<
     TResult,
     TContext
   >;
-  prompt?: HarnessPrompt;
   name?: string;
+  query?: HarnessQuery;
 }
 
 type RuntimeToolCapture = {
@@ -370,14 +371,58 @@ export function openaiAgentsHarness<
     TRunner,
     TResult,
     TContext
+  > & {
+    query: HarnessQuery;
+  },
+): QueryableHarness<TInput, TMetadata>;
+export function openaiAgentsHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TRunner = OpenAiAgentsRunner<
+    TAgent,
+    TInput,
+    OpenAiAgentsRuntimeContext<TMetadata>,
+    unknown
   >,
-): Harness<TInput, TMetadata> {
+  TResult = unknown,
+  TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+>(
+  options: OpenAiAgentsHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TRunner,
+    TResult,
+    TContext
+  >,
+): Harness<TInput, TMetadata>;
+export function openaiAgentsHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TRunner = OpenAiAgentsRunner<
+    TAgent,
+    TInput,
+    OpenAiAgentsRuntimeContext<TMetadata>,
+    unknown
+  >,
+  TResult = unknown,
+  TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+>(
+  options: OpenAiAgentsHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TRunner,
+    TResult,
+    TContext
+  >,
+): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
   validateOptions(options);
 
-  return {
+  const harness: Harness<TInput, TMetadata> = {
     name: options.name ?? "openai-agents",
-    prompt:
-      options.prompt ?? missingHarnessPrompt(options.name ?? "openai-agents"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -386,6 +431,13 @@ export function openaiAgentsHarness<
       return executeOpenAiAgentsHarness(options, agent, input, context);
     },
   };
+
+  return options.query
+    ? {
+        ...harness,
+        query: options.query,
+      }
+    : harness;
 }
 
 async function executeOpenAiAgentsHarness<
@@ -835,14 +887,6 @@ function hasRunnerRunMethod<TAgent, TInput, TContext, TResult>(
   runner: unknown,
 ): runner is OpenAiAgentsRunner<TAgent, TInput, TContext, TResult> {
   return hasCallableMethod(runner, "run");
-}
-
-function missingHarnessPrompt(name: string): HarnessPrompt {
-  return async () => {
-    throw new Error(
-      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
-    );
-  };
 }
 
 async function settleRunResult(result: unknown) {

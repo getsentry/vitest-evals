@@ -43,6 +43,7 @@ apps/
 Defines the normalized runtime model:
 
 - `Harness`
+- `QueryableHarness`
 - `HarnessRun`
 - `NormalizedSession`
 - `ToolCallRecord`
@@ -78,8 +79,10 @@ can stay on the harness-first surface while older matching behavior remains
 available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data
-plus the configured `harness`. Rubric and factuality judges can call
-`harness.prompt(...)` when the suite configures a judge model prompt.
+plus the configured `harness`. LLM-backed judges own their prompt and rubric
+text. When a harness is configured with `query(...)`, judges can reuse that
+separate judge-model helper for shared provider setup or credentials without
+running the system under test.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -139,7 +142,7 @@ For each eval test in a harness-backed suite:
 9. The reporter renders the recorded metadata without re-executing the harness.
 
 Explicit `expect(result).toSatisfyJudge(...)` calls use the run's canonical
-text output and reuse registered input, metadata, and harness prompt
+text output and reuse registered input, metadata, and harness context
 when `result` came from the fixture-backed `run(...)`. Inside an eval test,
 calls on registered raw output or session objects reuse that exact run context;
 raw output values are serialized as the judge `output`, and other raw values
@@ -197,8 +200,8 @@ New runtime integrations should be implemented as thin adapter packages that:
 - execute the target runtime through its normal seam
 - capture messages, tool calls, usage, timings, and errors
 - normalize them into `HarnessRun`
-- expose `prompt` only when LLM-backed judges need to reuse provider/model
-  configuration
+- expose `query` only when LLM-backed judges need a real separate model helper
+  for shared provider setup or credentials
 - avoid inventing harness-specific assertion or reporter behavior in userland
 
 ### New Judges

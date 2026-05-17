@@ -18,8 +18,6 @@ type DemoAgent = {
 
 let replayDir: string | undefined;
 
-const judgePrompt = async (input: string) => input;
-
 afterEach(() => {
   vi.unstubAllEnvs();
   if (replayDir) {
@@ -117,11 +115,35 @@ const runResult = {
   ],
 } as const;
 
+test("exposes a judge query helper only when configured", async () => {
+  const query = vi.fn(async (input: string) => `judge: ${input}`);
+  const queryable = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    query,
+    run: async () => runResult,
+  });
+  const plain = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: async () => runResult,
+  });
+
+  await expect(queryable.query("score classification")).resolves.toBe(
+    "judge: score classification",
+  );
+  expect(query).toHaveBeenCalledWith("score classification");
+  expect("query" in plain).toBe(false);
+});
+
 describeEval(
   "openai agents harness adapter",
   {
     harness: openaiAgentsHarness({
-      prompt: judgePrompt,
       agent: {
         name: "classifier",
         model: "gpt-4.1-mini",
@@ -207,10 +229,8 @@ describeEval(
   },
 );
 
-test("exposes prompt and supports custom app output mapping", async () => {
-  const prompt = vi.fn(async (input: string) => `judge: ${input}`);
+test("supports custom app output mapping", async () => {
   const harness = openaiAgentsHarness({
-    prompt,
     createAgent: () => ({
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -238,8 +258,6 @@ test("exposes prompt and supports custom app output mapping", async () => {
     },
   });
 
-  await expect(harness.prompt("score this")).resolves.toBe("judge: score this");
-
   const result = await harness.run(
     "Classify bottle bt_123",
     createHarnessContext({
@@ -247,7 +265,6 @@ test("exposes prompt and supports custom app output mapping", async () => {
     }),
   );
 
-  expect(prompt).toHaveBeenCalledWith("score this");
   expect(result.output).toEqual({
     label: "bourbon",
     confidence: 0.92,
@@ -258,20 +275,6 @@ test("exposes prompt and supports custom app output mapping", async () => {
   expect(result.artifacts).toEqual({
     entrypoint: "custom",
   });
-});
-
-test("prompt is optional until a judge asks for it", async () => {
-  const harness = openaiAgentsHarness({
-    agent: {
-      name: "classifier",
-      model: "gpt-4.1-mini",
-    },
-    run: async () => runResult,
-  });
-
-  await expect(harness.prompt("score this")).rejects.toThrow(
-    "openai-agents harness did not configure prompt()",
-  );
 });
 
 test("passes run input and context to createAgent before tool instrumentation", async () => {
@@ -335,7 +338,6 @@ test("passes run input and context to createAgent before tool instrumentation", 
     }),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     createAgent,
     runner,
     toolReplay: {
@@ -438,7 +440,6 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
     }),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner,
     toolReplay: {
@@ -529,7 +530,6 @@ test("prefers captured local tool results over model-visible output wrappers", a
     })),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -614,7 +614,6 @@ test("preserves explicit null captured local tool results", async () => {
     invoke: vi.fn(async () => null),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -686,7 +685,6 @@ test("errors when replay is configured for unknown OpenAI Agents tools", async (
     run: vi.fn(),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -716,7 +714,6 @@ test("errors when replay is configured for OpenAI Agents tools without invoke", 
     run: vi.fn(),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -766,7 +763,6 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
   });
   const originalTool = agent.tools[0];
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner: {
       run: async (runAgent, _input, runOptions) => {
@@ -902,7 +898,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
     tools: [lookupBottle],
   } satisfies DemoAgent;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner: {
       run: async (runAgent: DemoAgent, _input: string, runOptions) => {
@@ -967,7 +962,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
 
 test("marks failed tool output items as tool call errors", async () => {
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "editor",
       model: "gpt-4.1-mini",
@@ -1030,7 +1024,6 @@ test("attaches partial tool calls when Runner.run errors", async () => {
     }),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",

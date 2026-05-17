@@ -23,6 +23,7 @@ const harness = openaiAgentsHarness({
       modelProvider,
       tracingDisabled: true,
     }),
+  query: queryJudgeModel,
 });
 
 describeEval("classifier agent", { harness }, (it) => {
@@ -80,8 +81,10 @@ const harness = openaiAgentsHarness({
 ```
 
 The older `createAgent({ input, context })` and `createRunner(...)` spellings
-still work for existing tests. Add `prompt` when rubric or factuality judges
-need to call `JudgeContext.harness.prompt`.
+still work for existing tests. `run` executes the OpenAI agent under test.
+`query` is optional and exists only when judges should reuse the same provider
+setup or credentials for a separate judge-model call; it must not call the app
+agent under test or expose its tools.
 
 The adapter provides:
 

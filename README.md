@@ -107,7 +107,7 @@ import {
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
-import { createRefundAgent, judgePrompt } from "../src/refundAgent";
+import { createRefundAgent } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";
@@ -141,7 +141,6 @@ describeEval(
   {
     harness: piAiHarness({
       agent: () => createRefundAgent(),
-      prompt: judgePrompt,
     }),
     judges: [FactualityJudge],
   },
@@ -175,8 +174,10 @@ Harness-backed suites stay close to plain Vitest:
 - tests call `run(...)` explicitly
 - ordinary `expect(...)` assertions stay first-class
 - judges layer in through `expect(...).toSatisfyJudge(...)`
-- every judge receives `JudgeContext`, including the configured harness;
-  LLM-backed judges can call `harness.prompt(...)`
+- every judge receives `JudgeContext` with the normalized run and harness
+  context
+- harnesses may expose a real `query(...)` helper for judges that should reuse
+  the same provider library or credentials without running the app agent
 - scenario-specific judge criteria can live in `inputValue`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
@@ -185,8 +186,7 @@ Harness-backed suites stay close to plain Vitest:
 Built-in judges like `StructuredOutputJudge()` are still available for
 deterministic contract checks, but the more realistic explicit-judge path is a
 custom factuality or rubric judge over `output`, with `JudgeContext` available
-when the judge needs richer run/session data or the suite's configured model
-prompt function.
+when the judge needs richer run/session data.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure the replay mode and directory globally in Vitest, then opt individual

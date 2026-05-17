@@ -113,7 +113,7 @@ export const refundHarness = aiSdkHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: (input, options) =>
+  query: (input, options) =>
     generateText({
       model: anthropic("claude-sonnet-4-5"),
       system: options?.system,

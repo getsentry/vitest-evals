@@ -1,4 +1,5 @@
 import {
+  attachHarnessRunToError,
   hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
@@ -8,17 +9,17 @@ import {
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
-  attachHarnessRunToError,
 } from "vitest-evals/harness";
 import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessPrompt,
+  HarnessQuery,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
   NormalizedSession,
+  QueryableHarness,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -270,8 +271,8 @@ interface AiSdkHarnessBaseOptions<
     TResult,
     TTools
   >;
-  prompt?: HarnessPrompt;
   name?: string;
+  query?: HarnessQuery;
 }
 
 type AiSdkRunnableAgent<
@@ -308,13 +309,38 @@ export function aiSdkHarness<
     TMetadata
   >,
 >(
+  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools> & {
+    query: HarnessQuery;
+  },
+): QueryableHarness<TInput, TMetadata>;
+export function aiSdkHarness<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+>(
   options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> {
+): Harness<TInput, TMetadata>;
+export function aiSdkHarness<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
   validateOptions(options);
 
-  return {
+  const harness: Harness<TInput, TMetadata> = {
     name: options.name ?? "ai-sdk",
-    prompt: options.prompt ?? missingHarnessPrompt(options.name ?? "ai-sdk"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -323,6 +349,13 @@ export function aiSdkHarness<
       return runAiSdkHarness(options, agent, input, context);
     },
   };
+
+  return options.query
+    ? {
+        ...harness,
+        query: options.query,
+      }
+    : harness;
 }
 
 async function runAiSdkHarness<
@@ -449,14 +482,6 @@ async function runAiSdkHarness<
 
     throw attachHarnessRunToError(error, run);
   }
-}
-
-function missingHarnessPrompt(name: string): HarnessPrompt {
-  return async () => {
-    throw new Error(
-      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
-    );
-  };
 }
 
 function hasResultOverrides<
