@@ -7,6 +7,8 @@ Monorepo for the explicit-run `vitest-evals` shape:
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
+- `packages/github-reporter`: GitHub Actions summary, annotation, and optional
+  Check Run publishing from Vitest JSON output
 - `apps/demo-pi`: end-to-end Pi Mono demo evals with an app-local refund agent
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals with app-local refund tools
 - `apps/demo-openai-agents`: end-to-end OpenAI Agents demo evals with
@@ -20,6 +22,7 @@ packages/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
+  github-reporter/
 apps/
   demo-ai-sdk/
   demo-openai-agents/
@@ -55,6 +58,29 @@ tables.
 
 Pull request CI runs the same core safety checks: release config validation,
 lint, typecheck, the CI test suite, and the workspace build.
+
+## GitHub Reporting
+
+For GitHub Actions, emit Vitest JSON and let the GitHub reporter read that file.
+The JSON report preserves `task.meta`, including eval scores, harness runs,
+usage, and tool calls. JUnit can still be emitted alongside it for CI systems
+that expect XML.
+
+```sh
+pnpm exec vitest run apps packages \
+  --config=./vitest.config.ts \
+  --reporter=vitest-evals/reporter \
+  --reporter=json \
+  --outputFile.json=vitest-results.json
+
+pnpm exec vitest-evals-github-report --check-run
+```
+
+The reporter writes a plain ASCII job summary through `GITHUB_STEP_SUMMARY`,
+emits terse annotations for failed evals, and publishes a separate Check Run
+only when `--check-run` is set, `GITHUB_TOKEN` is available, and `checks: write`
+permission is configured.
+See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow.
 
 ## Releases
 

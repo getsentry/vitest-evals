@@ -29,6 +29,7 @@ packages/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
+  github-reporter/
 apps/
   demo-ai-sdk/
   demo-openai-agents/
@@ -102,6 +103,25 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 - tool activity
 - judge sub-results
 - richer failure diagnostics
+
+## GitHub Reporting
+
+`packages/github-reporter` is a post-run reporter for GitHub Actions. It reads
+Vitest's built-in JSON output instead of attaching directly to the Vitest
+reporter lifecycle. That JSON output includes each assertion's `meta` field, so
+it preserves the normalized eval and harness metadata recorded by core.
+
+This split keeps the terminal reporter focused on local output and gives CI a
+stable artifact to process:
+
+1. Vitest runs evals and writes `--reporter=json` to `vitest-results.json`.
+2. The GitHub reporter reads that JSON.
+3. It writes an ASCII job summary to `GITHUB_STEP_SUMMARY`.
+4. It emits terse workflow-command annotations for failed evals.
+5. When explicitly configured, it publishes a separate GitHub Check Run.
+
+JUnit XML can be emitted alongside JSON, but it is not used as the source of
+truth for eval reporting because it does not carry the full harness metadata.
 
 ## Harness Lifecycle
 

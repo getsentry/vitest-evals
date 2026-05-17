@@ -27,6 +27,8 @@ packages/harness-openai-agents/src/
   index.test.ts
 packages/harness-pi-ai/src/
   index.test.ts
+packages/github-reporter/src/
+  report.test.ts
 apps/demo-pi/src/
   refundAgent.test.ts
 apps/demo-openai-agents/src/
@@ -61,6 +63,16 @@ Cover:
 - judge sub-results
 - failure formatting
 - replay/tool metadata when relevant
+
+### GitHub Reporter Changes
+
+Cover:
+
+- Vitest JSON metadata collection
+- ASCII job summary rendering
+- long judge rationale handling without tables
+- workflow-command escaping
+- optional Check Run payloads and missing-configuration fallback
 
 ### Harness Package Changes
 
