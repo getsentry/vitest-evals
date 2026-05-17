@@ -45,8 +45,8 @@ export function formatNumber(value: number) {
   }).format(value);
 }
 
-export function formatScore(value: number | undefined) {
-  if (value === undefined || Number.isNaN(value)) {
+export function formatScore(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) {
     return "n/a";
   }
   return value.toFixed(2);

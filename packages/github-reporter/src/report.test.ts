@@ -182,6 +182,13 @@ describe("parseCliArgs", () => {
       jsonPath: "custom-results.json",
     });
   });
+
+  test("stops parsing after help", () => {
+    expect(parseCliArgs(["--help", "--invalid"], {})).toMatchObject({
+      help: true,
+      jsonPath: "vitest-results.json",
+    });
+  });
 });
 
 describe("formatDuration", () => {
@@ -267,6 +274,19 @@ describe("renderWorkflowCommands", () => {
     expect(renderWorkflowCommands(report)).toEqual([
       "::error file=apps/demo/evals/refund.eval.ts,line=42,column=3,title=vitest-evals::refund agent > rejects fraud - score 0.20 - StructuredOutputJudge - bad value: expected, got 20%25",
     ]);
+  });
+
+  test("uses the canonical score formatter in annotations", () => {
+    const json = structuredClone(sampleJson);
+    const evalMeta = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .eval;
+    evalMeta.avgScore = Number.NaN;
+    evalMeta.scores = [];
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(renderWorkflowCommands(report)[0]).toContain("score n/a");
   });
 });
 

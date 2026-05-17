@@ -3,6 +3,7 @@ import {
   compactLine,
   escapeCommandData,
   escapeCommandProperty,
+  formatScore,
   stringifyValue,
   truncate,
 } from "./utils";
@@ -24,6 +25,10 @@ export type CheckAnnotation = {
 const DEFAULT_MAX_WORKFLOW_ANNOTATIONS = 10;
 const DEFAULT_MAX_CHECK_ANNOTATIONS = 50;
 const MAX_CHECK_FIELD_LENGTH = 64_000;
+
+type AnnotatedEvalCase = EvalCase & {
+  location: { line: number; column: number };
+};
 
 /** Renders GitHub workflow-command annotations for failed eval cases. */
 export function renderWorkflowCommands(
@@ -80,7 +85,7 @@ export function buildCheckAnnotations(
 
 function hasAnnotationLocation(
   testCase: EvalCase,
-): testCase is EvalCase & { location: { line: number; column: number } } {
+): testCase is AnnotatedEvalCase {
   return Boolean(testCase.location);
 }
 
@@ -88,7 +93,7 @@ function formatWorkflowMessage(testCase: EvalCase) {
   const failure = testCase.primaryFailure;
   const parts = [
     testCase.displayName,
-    `score ${formatAnnotationScore(failure?.score ?? testCase.eval?.avgScore)}`,
+    `score ${formatScore(failure?.score ?? testCase.eval?.avgScore)}`,
   ];
 
   if (failure?.judgeName) {
@@ -103,16 +108,12 @@ function formatWorkflowMessage(testCase: EvalCase) {
   return parts.join(" - ");
 }
 
-function formatAnnotationScore(value: number | undefined) {
-  return value === undefined ? "n/a" : value.toFixed(2);
-}
-
-function formatRawDetails(testCase: EvalCase) {
+function formatRawDetails(testCase: AnnotatedEvalCase) {
   const lines = [
     `Test: ${testCase.displayName}`,
-    `Location: ${testCase.displayFile}:${testCase.location?.line ?? 0}`,
+    `Location: ${testCase.displayFile}:${testCase.location.line}`,
     `Harness: ${testCase.harness?.name ?? "n/a"}`,
-    `Score: ${formatAnnotationScore(testCase.primaryFailure?.score ?? testCase.eval?.avgScore)}`,
+    `Score: ${formatScore(testCase.primaryFailure?.score ?? testCase.eval?.avgScore)}`,
     `Judge: ${testCase.primaryFailure?.judgeName ?? "n/a"}`,
     "",
     "Reason:",

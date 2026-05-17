@@ -19,11 +19,6 @@ async function main() {
     console.log(usage());
     return;
   }
-  if (!options.jsonPath) {
-    console.error(usage());
-    process.exitCode = 1;
-    return;
-  }
 
   const json = JSON.parse(
     await readFile(options.jsonPath, "utf8"),
@@ -90,13 +85,19 @@ function usage() {
     "Usage: vitest-evals-github-report [vitest-results.json] [--json <path>]",
     "",
     "Options:",
+    "  --json <path>             Read Vitest JSON report from this path",
     "  --summary <path>          Write job summary markdown to this path",
     "  --no-summary             Disable summary output",
     "  --annotations            Emit GitHub workflow-command annotations",
     "  --no-annotations         Disable workflow-command annotations",
     "  --check-run              Publish a GitHub Check Run when configured",
+    "  --fail-on-check-error    Fail when Check Run publishing fails",
     "  --check-run-id <id>      Update an existing Check Run",
     "  --check-name <name>      Check Run name (default: vitest-evals)",
+    "  --token <token>          GitHub token (default: GITHUB_TOKEN)",
+    "  --repo <owner/repo>      GitHub repository (default: GITHUB_REPOSITORY)",
+    "  --sha <sha>              Git commit SHA (default: GITHUB_SHA)",
+    "  --workspace <path>       Workspace path for relative annotation files",
     "  --max-annotations <n>    Maximum annotations to emit",
     "  --max-failures <n>       Maximum failures to include in details",
   ].join("\n");

@@ -159,9 +159,7 @@ function renderFailureDetails(
   if (testCase.eval?.scores.length) {
     lines.push("Scores:");
     for (const score of testCase.eval.scores) {
-      lines.push(
-        `- ${score.name ?? "Unknown"}: ${formatScore(score.score ?? 0)}`,
-      );
+      lines.push(`- ${score.name ?? "Unknown"}: ${formatScore(score.score)}`);
     }
     lines.push("");
   }

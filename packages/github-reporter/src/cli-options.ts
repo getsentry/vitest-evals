@@ -1,5 +1,5 @@
 export type CliOptions = {
-  jsonPath?: string;
+  jsonPath: string;
   summaryPath?: string;
   summaryEnabled: boolean;
   annotations: boolean;
@@ -16,12 +16,16 @@ export type CliOptions = {
   help: boolean;
 };
 
+type MutableCliOptions = Omit<CliOptions, "jsonPath"> & {
+  jsonPath?: string;
+};
+
 /** Parses GitHub reporter CLI arguments, with explicit arguments taking precedence over environment defaults. */
 export function parseCliArgs(
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): CliOptions {
-  const options: CliOptions = {
+  const options: MutableCliOptions = {
     summaryPath: env.GITHUB_STEP_SUMMARY,
     summaryEnabled: true,
     annotations: env.GITHUB_ACTIONS === "true",
@@ -83,7 +87,7 @@ export function parseCliArgs(
       case "--help":
       case "-h":
         options.help = true;
-        break;
+        return withDefaultJsonPath(options, env);
       default:
         if (!arg.startsWith("-") && !options.jsonPath) {
           options.jsonPath = arg;
@@ -93,9 +97,18 @@ export function parseCliArgs(
     }
   }
 
-  options.jsonPath ??= env.VITEST_EVALS_JSON_REPORT ?? "vitest-results.json";
+  return withDefaultJsonPath(options, env);
+}
 
-  return options;
+function withDefaultJsonPath(
+  options: MutableCliOptions,
+  env: NodeJS.ProcessEnv,
+): CliOptions {
+  return {
+    ...options,
+    jsonPath:
+      options.jsonPath || env.VITEST_EVALS_JSON_REPORT || "vitest-results.json",
+  };
 }
 
 function readValue(args: string[], index: number, flag: string) {

@@ -165,13 +165,7 @@ function normalizeScore(score: Record<string, unknown>): EvalScore {
   return {
     name: typeof score.name === "string" ? score.name : undefined,
     score: typeof score.score === "number" ? score.score : null,
-    metadata: metadata
-      ? {
-          ...metadata,
-          rationale: metadata.rationale,
-          output: metadata.output,
-        }
-      : undefined,
+    metadata,
   };
 }
 
