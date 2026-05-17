@@ -11,8 +11,8 @@ import {
 } from "../src/refundAgent";
 
 export const refundHarness = openaiAgentsHarness({
-  createAgent: () => createRefundAgent(),
-  createRunner: () => createRefundRunner(),
+  agent: () => createRefundAgent(),
+  runner: () => createRefundRunner(),
   prompt: promptRefundModel,
   runOptions: {
     maxTurns: 5,

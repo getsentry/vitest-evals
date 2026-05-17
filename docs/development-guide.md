@@ -133,7 +133,7 @@ package should focus on:
 - executing the target runtime through its normal seam
 - capturing messages, tool calls, usage, timings, and errors
 - returning a normalized `HarnessRun`
-- exposing narrow escape hatches like `run`, `output`, or `session`
+- exposing narrow escape hatches like `run` and grouped `normalize` hooks
 
 Do not push core reporter or assertion behavior into a harness package unless
 the runtime truly requires it.

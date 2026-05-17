@@ -16,11 +16,10 @@ import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 
 describeEval("refund agent", { harness }, (it) => {
@@ -38,7 +37,7 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-`prompt` gives rubric or factuality judges the same provider/model setup
+Add `prompt` when rubric or factuality judges need the same provider/model setup
 through `JudgeContext.harness.prompt`.
 
 If the agent already exposes its own tools, the adapter will infer them from
@@ -48,8 +47,7 @@ seam:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: sharedJudgePrompt,
+  agent: () => createRefundAgent(),
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
 });
 ```
@@ -57,14 +55,15 @@ const harness = piAiHarness({
 If the agent already implements `run(input, runtime)`, you can omit `run` and
 the harness will call that method automatically.
 
-`createAgent` receives the per-run input and harness context before the adapter
-infers and instruments native agent tools. Use that for scenario-specific
+`agent` can be an object or a per-run factory. The factory receives the per-run
+input and harness context before the adapter infers and instruments native
+agent tools. Use that for scenario-specific
 instructions, tool closures, metadata, or seeded artifacts without leaving the
 default replay path:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: ({ input, context }) =>
+  agent: ({ input, context }) =>
     createRefundAgent({
       instructions: buildInstructions(input),
       metadata: context.metadata,
@@ -73,9 +72,11 @@ const harness = piAiHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 ```
+
+The older `createAgent({ input, context })` spelling still works for existing
+tests.
 
 You should not need to configure output/session/usage basics for the normal Pi
 path. Pass your agent and let the adapter infer both the toolset and the
@@ -87,8 +88,7 @@ override:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: sharedJudgePrompt,
+  agent: () => createRefundAgent(),
   tools: hiddenAgentTools,
 });
 ```
@@ -98,8 +98,7 @@ normalization hooks still exist under `normalize`:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createWrappedRefundAgent(),
-  prompt: sharedJudgePrompt,
+  agent: () => createWrappedRefundAgent(),
   run: ({ agent, input, runtime }) => agent.run(input, runtime),
   normalize: {
     output: ({ result }) => result.customDecision,
@@ -110,7 +109,7 @@ const harness = piAiHarness({
 The adapter provides:
 
 - a runtime/tool injection seam for an existing agent
-- a required prompt seam for LLM-backed judges
+- an optional prompt function for LLM-backed judges
 - normalized session capture from emitted events and wrapped tool calls
 - usage/output inference for common `pi-ai`-style result objects
 - opt-in tool replay/recording from harness-level `toolReplay`
@@ -138,11 +137,10 @@ Then opt individual tools into recording/replay from the harness:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 ```
 

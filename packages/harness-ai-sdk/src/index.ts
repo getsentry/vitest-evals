@@ -187,41 +187,13 @@ export interface AiSdkHarnessResultArgs<
   result: TResult;
 }
 
-export type AiSdkHarnessOptions<
-  TAgent = unknown,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
-  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
-    TInput,
-    TMetadata
-  >,
-> = AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> &
-  (
-    | {
-        agent: AgentSource<TAgent, TInput, TMetadata>;
-        task?: never;
-      }
-    | {
-        task: (
-          args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-        ) => MaybePromise<TResult | HarnessRun>;
-        agent?: never;
-      }
-  );
-
-interface AiSdkHarnessBaseOptions<
-  TAgent = unknown,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
-  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
-    TInput,
-    TMetadata
-  >,
-> {
-  tools?: TTools;
-  toolReplay?: AiSdkToolReplayPolicies<TInput, TMetadata>;
+type AiSdkResultOverrides<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> = {
   session?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
   ) => MaybePromise<NormalizedSession>;
@@ -237,7 +209,68 @@ interface AiSdkHarnessBaseOptions<
   errors?: (
     args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
-  prompt: HarnessPrompt;
+};
+
+export interface AiSdkHarnessNormalizeOptions<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> extends AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools> {}
+
+export type AiSdkHarnessOptions<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+> = AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> &
+  (
+    | {
+        agent: AgentSource<TAgent, TInput, TMetadata>;
+        task?: never;
+        run?: never;
+      }
+    | {
+        task: (
+          args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+        ) => MaybePromise<TResult | HarnessRun>;
+        agent?: never;
+        run?: never;
+      }
+    | {
+        run: (
+          args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+        ) => MaybePromise<TResult | HarnessRun>;
+        agent?: never;
+        task?: never;
+      }
+  );
+
+interface AiSdkHarnessBaseOptions<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+> extends AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools> {
+  tools?: TTools;
+  toolReplay?: AiSdkToolReplayPolicies<TInput, TMetadata>;
+  normalize?: AiSdkHarnessNormalizeOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools
+  >;
+  prompt?: HarnessPrompt;
   name?: string;
 }
 
@@ -265,17 +298,6 @@ type AiSdkGeneratableAgent<
   ) => MaybePromise<TResult | HarnessRun>;
 };
 
-type AiSdkResultOverrides<
-  TAgent,
-  TInput,
-  TMetadata extends HarnessMetadata,
-  TResult,
-  TTools extends AiSdkToolset<TInput, TMetadata>,
-> = Pick<
-  AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-  "errors" | "output" | "session" | "timings" | "usage"
->;
-
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -292,7 +314,7 @@ export function aiSdkHarness<
 
   return {
     name: options.name ?? "ai-sdk",
-    prompt: options.prompt,
+    prompt: options.prompt ?? missingHarnessPrompt(options.name ?? "ai-sdk"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -361,34 +383,48 @@ async function runAiSdkHarness<
       TTools
     >;
 
-    const output = options.output
-      ? await options.output(resultArgs)
-      : resolveOutput(result);
-    const usage = options.usage
-      ? await options.usage(resultArgs)
-      : resolveUsage(result, runtimeToolCalls.length);
-    const session = options.session
-      ? await options.session(resultArgs)
-      : resolveSession(
-          input,
-          result,
-          output,
-          replayMetadataByToolCallId,
-          runtimeToolCalls,
-        );
+    const output = options.normalize?.output
+      ? await options.normalize.output(resultArgs)
+      : options.output
+        ? await options.output(resultArgs)
+        : resolveOutput(result);
+    const usage = options.normalize?.usage
+      ? await options.normalize.usage(resultArgs)
+      : options.usage
+        ? await options.usage(resultArgs)
+        : resolveUsage(result, runtimeToolCalls.length);
+    const session = options.normalize?.session
+      ? await options.normalize.session(resultArgs)
+      : options.session
+        ? await options.session(resultArgs)
+        : resolveSession(
+            input,
+            result,
+            output,
+            replayMetadataByToolCallId,
+            runtimeToolCalls,
+          );
+    const timings = options.normalize?.timings
+      ? await options.normalize.timings(resultArgs)
+      : options.timings
+        ? await options.timings(resultArgs)
+        : undefined;
+    const errors = options.normalize?.errors
+      ? await options.normalize.errors(resultArgs)
+      : options.errors
+        ? await options.errors(resultArgs)
+        : resolveHarnessRunErrors(result);
 
     return {
       session,
       output,
       usage,
-      timings: options.timings ? await options.timings(resultArgs) : undefined,
+      timings,
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
           : undefined,
-      errors: options.errors
-        ? await options.errors(resultArgs)
-        : resolveHarnessRunErrors(result),
+      errors,
     };
   } catch (error) {
     const run = {
@@ -415,15 +451,30 @@ async function runAiSdkHarness<
   }
 }
 
+function missingHarnessPrompt(name: string): HarnessPrompt {
+  return async () => {
+    throw new Error(
+      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
+    );
+  };
+}
+
 function hasResultOverrides<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends AiSdkToolset<TInput, TMetadata>,
->(options: AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools>) {
+>(
+  options: AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+) {
   return Boolean(
-    options.output ??
+    options.normalize?.output ??
+      options.normalize?.session ??
+      options.normalize?.usage ??
+      options.normalize?.timings ??
+      options.normalize?.errors ??
+      options.output ??
       options.session ??
       options.usage ??
       options.timings ??
@@ -456,6 +507,10 @@ async function runAgent<
   options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
   args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
 ): Promise<TResult | HarnessRun> {
+  if (options.run) {
+    return options.run(args);
+  }
+
   if (options.task) {
     return options.task(args);
   }
@@ -469,7 +524,7 @@ async function runAgent<
   }
 
   throw new Error(
-    "aiSdkHarness agent must expose run(input, runtime) or generate(input, runtime), or use task() for a custom entrypoint.",
+    "aiSdkHarness agent must expose run(input, runtime) or generate(input, runtime), or use run() for a custom entrypoint.",
   );
 }
 
@@ -482,16 +537,18 @@ function validateOptions<
 >(options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
   const hasAgent = hasAgentSource(options);
   const hasTask = typeof (options as { task?: unknown }).task === "function";
+  const hasRun = typeof (options as { run?: unknown }).run === "function";
+  const entrypoints = [hasAgent, hasTask, hasRun].filter(Boolean).length;
 
-  if (hasAgent && hasTask) {
+  if (entrypoints > 1) {
     throw new Error(
-      "aiSdkHarness accepts either agent or task, not both. Use agent for the zero-glue run(input, runtime) or generate(input, runtime) path, or task for a custom entrypoint.",
+      "aiSdkHarness accepts exactly one of agent, run, or task. Use agent for the zero-glue run(input, runtime) or generate(input, runtime) path, or run for a custom entrypoint.",
     );
   }
 
-  if (!hasAgent && !hasTask) {
+  if (entrypoints === 0) {
     throw new Error(
-      "aiSdkHarness requires either agent or task. Use agent for objects with run(input, runtime) or generate(input, runtime), or task for a custom entrypoint.",
+      "aiSdkHarness requires agent, run, or task. Use agent for objects with run(input, runtime) or generate(input, runtime), or run for a custom entrypoint.",
     );
   }
 }

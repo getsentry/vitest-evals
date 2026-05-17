@@ -38,8 +38,8 @@ npm install -D @vitest-evals/github-reporter
   scenario payload
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
-- every judge receives `JudgeContext`, including the configured `harness` with
-  its required `prompt` function
+- every judge receives `JudgeContext`, including the configured `harness`;
+  LLM-backed judges can call `harness.prompt(...)`
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
@@ -87,7 +87,7 @@ describeEval(
   "refund agent",
   {
     harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
+      agent: () => createRefundAgent(),
       prompt: judgePrompt,
     }),
     judges: [FactualityJudge],
@@ -181,37 +181,31 @@ be inferred automatically. Treat low-level normalization callbacks as an escape
 hatch, not part of the primary authoring path.
 
 For OpenAI Agents SDK apps, use
-`@vitest-evals/harness-openai-agents` with an existing `Agent` or
-`createAgent()` factory and a `Runner` / `createRunner()` callback. The harness
-calls `Runner.run(agent, input, options)` by default and exposes the same
+`@vitest-evals/harness-openai-agents` with an existing `Agent` or an `agent`
+factory and a `Runner` or `runner` factory. The harness calls
+`Runner.run(agent, input, options)` by default and exposes the same
 normalization and replay hooks when the app needs a custom entrypoint or
 structured domain output mapping.
 
 ## Custom App Harnesses
 
 First-party harness packages are conveniences, not the only supported path. If
-you need to test a full application flow, define a harness that runs your app
-through its normal entrypoint and returns a normalized `HarnessRun`. The same
-harness should also expose `prompt`, which LLM-backed judges can reuse through
+you need to test a full application flow, use `createHarness(...)` to run your
+app through its normal entrypoint and return the app-facing output. Add
+`prompt` only when LLM-backed judges need to call
 `JudgeContext.harness.prompt`.
 
 ```ts
 import {
+  createHarness,
   describeEval,
   namedJudge,
   type JudgeContext,
 } from "vitest-evals";
-import {
-  normalizeContent,
-  normalizeMetadata,
-  toJsonValue,
-  type Harness,
-  type HarnessRun,
-} from "vitest-evals/harness";
 
 type AppEvent = {
   type: string;
-  payload: Record<string, unknown>;
+  payload: Record<string, string>;
 };
 
 type AppEvalInput = {
@@ -223,48 +217,25 @@ type AppEvalInput = {
   };
 };
 
-const appHarness: Harness<AppEvalInput> = {
+const appHarness = createHarness<AppEvalInput>({
   name: "custom-app",
   prompt: (input, options) => promptJudgeModel(input, options),
-  run: async (input, context): Promise<HarnessRun> => {
+  run: async ({ input, signal, setArtifact }) => {
     const result = await replayAppEvents(input.events, {
-      signal: context.signal,
+      signal,
     });
-    const output = {
-      replies: result.replies,
-      sideEffects: result.sideEffects,
-    };
+    setArtifact("replyCount", result.replies.length);
 
     return {
-      output: toJsonValue(output),
-      session: {
-        messages: [
-          ...input.events.map((event) => ({
-            role: "user" as const,
-            content: normalizeContent(event),
-          })),
-          ...result.replies.map((reply) => ({
-            role: "assistant" as const,
-            content: normalizeContent(reply.text),
-            metadata: normalizeMetadata({
-              target: reply.target,
-            }),
-          })),
-        ],
-        outputText: result.replies.map((reply) => reply.text).join("\n\n"),
-        metadata: normalizeMetadata({
-          replyCount: result.replies.length,
-        }),
+      output: {
+        replies: result.replies,
+        sideEffects: result.sideEffects,
       },
+      outputText: result.replies.map((reply) => reply.text).join("\n\n"),
       usage: {},
-      artifacts:
-        Object.keys(context.artifacts).length > 0
-          ? context.artifacts
-          : undefined,
-      errors: [],
     };
   },
-};
+});
 
 const AppRubricJudge = namedJudge(
   "AppRubricJudge",
@@ -321,9 +292,10 @@ for judge model calls. Calling `ctx.harness.run(...)` from inside a judge runs
 the application a second time, so reserve that for judges that intentionally
 need a second execution. Put criteria on `inputValue` when they are part of the
 scenario itself; use per-run `metadata` for harness configuration or
-expectations that are not part of the scenario payload. `session.outputText` is
-the canonical text sent to judges, so define it deliberately when your app
-returns structured artifacts.
+expectations that are not part of the scenario payload. `createHarness(...)`
+builds a default user/assistant session from `input`, `output`, and
+`outputText`; return a full `HarnessRun` only when you need exact session
+control.
 
 Provider setup and rubric parsing stay in your harness and judge. The core
 package only requires the judge to return a `JudgeResult` with a score and

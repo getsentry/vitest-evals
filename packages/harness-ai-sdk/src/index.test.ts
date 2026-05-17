@@ -436,6 +436,104 @@ test("default agent run receives wrapped runtime tools", async () => {
   ]);
 });
 
+test("supports run as the custom entrypoint", async () => {
+  const run = vi.fn(async ({ input }: { input: string }) => ({
+    text: "approved",
+    object: {
+      status: "approved",
+      input,
+    },
+  }));
+  const harness = aiSdkHarness({
+    run,
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(run).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+    }),
+  );
+  expect(result.output).toEqual({
+    status: "approved",
+    input: "Refund invoice inv_123",
+  });
+});
+
+test("groups normalization hooks under normalize", async () => {
+  const output = vi.fn(
+    ({ result }: { result: { object: { status: string } } }) => result.object,
+  );
+  const harness = aiSdkHarness({
+    run: async () => ({
+      session: {
+        messages: [],
+      },
+      usage: {
+        totalTokens: 7,
+      },
+      object: {
+        status: "approved",
+      },
+    }),
+    normalize: {
+      output,
+      session: ({ input }) => ({
+        messages: [
+          {
+            role: "user",
+            content: input,
+          },
+          {
+            role: "assistant",
+            content: "approved",
+          },
+        ],
+      }),
+      usage: () => ({
+        totalTokens: 11,
+      }),
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(output).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(result.session.messages).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      content: "approved",
+    },
+  ]);
+  expect(result.usage.totalTokens).toBe(11);
+});
+
+test("prompt is optional until a judge asks for it", async () => {
+  const harness = aiSdkHarness({
+    run: async () => ({
+      text: "approved",
+    }),
+  });
+
+  await expect(harness.prompt("score this run")).rejects.toThrow(
+    "ai-sdk harness did not configure prompt()",
+  );
+});
+
 test("attaches partial runtime tool calls when a task errors", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
     invoiceId,

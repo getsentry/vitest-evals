@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import {
   assistantMessages,
+  createHarness,
   describeEval,
   namedJudge,
   type JudgeContext,
@@ -99,6 +100,142 @@ beforeEach(() => {
   customJudgePromptSpy.mockClear();
   judgeSpy.mockClear();
   thresholdJudgeSpy.mockClear();
+});
+
+describeEval(
+  "createHarness",
+  {
+    harness: createHarness<string, RefundEvalMetadata>({
+      name: "custom-app",
+      run: async ({ input, setArtifact }) => {
+        setArtifact("request", input);
+
+        return {
+          output: {
+            status: "approved",
+          },
+          toolCalls: [
+            {
+              name: "lookupInvoice",
+              arguments: {
+                invoiceId: "inv_123",
+              },
+              result: {
+                refundable: true,
+              },
+            },
+          ],
+          usage: {
+            provider: "test-provider",
+            model: "test-model",
+            inputTokens: 4,
+            outputTokens: 2,
+          },
+          metadata: {
+            scenario: "refund",
+          },
+        };
+      },
+    }),
+  },
+  (it) => {
+    it("normalizes lightweight harness results", async ({ run }) => {
+      const result = await run("Refund invoice inv_123", {
+        metadata: {
+          name: "custom harness result",
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(result.output).toEqual({
+        status: "approved",
+      });
+      expect(result.session).toMatchObject({
+        provider: "test-provider",
+        model: "test-model",
+        metadata: {
+          scenario: "refund",
+        },
+        messages: [
+          {
+            role: "user",
+            content: "Refund invoice inv_123",
+          },
+          {
+            role: "assistant",
+            content: {
+              status: "approved",
+            },
+            toolCalls: [
+              {
+                name: "lookupInvoice",
+                arguments: {
+                  invoiceId: "inv_123",
+                },
+                result: {
+                  refundable: true,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      expect(result.artifacts).toEqual({
+        request: "Refund invoice inv_123",
+      });
+    });
+  },
+);
+
+test("createHarness prompt fails only when a judge asks for it", async () => {
+  const promptlessHarness = createHarness({
+    name: "promptless",
+    run: async () => ({
+      output: "approved",
+    }),
+  });
+
+  await expect(promptlessHarness.prompt("score output")).rejects.toThrow(
+    "promptless harness did not configure prompt()",
+  );
+});
+
+test("createHarness drops non-normalized lightweight tool call fields", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      toolCalls: [
+        {
+          name: "lookupInvoice",
+          arguments: "invoice inv_123",
+          result: undefined,
+          error: undefined,
+          metadata: {
+            replay: "recorded",
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await lightweightHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(toolCalls(result.session)).toEqual([
+    {
+      name: "lookupInvoice",
+      metadata: {
+        replay: "recorded",
+      },
+    },
+  ]);
 });
 
 describeEval("harness mode", { harness }, (it) => {

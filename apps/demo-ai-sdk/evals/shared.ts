@@ -120,7 +120,7 @@ export const refundHarness = aiSdkHarness({
       prompt: input,
       temperature: 0,
     }).then((result) => result.text),
-  task: async ({ input, runtime }) =>
+  run: async ({ input, runtime }) =>
     generateText({
       model: anthropic("claude-sonnet-4-5"),
       system: REFUND_SYSTEM_PROMPT,
@@ -129,7 +129,9 @@ export const refundHarness = aiSdkHarness({
       stopWhen: stepCountIs(5),
       temperature: 0,
     }),
-  output: ({ result }) => parseRefundDecision(result.text),
+  normalize: {
+    output: ({ result }) => parseRefundDecision(result.text),
+  },
 });
 
 export async function assertRefundCase(

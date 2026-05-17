@@ -69,7 +69,7 @@ export type HarnessPromptOptions = {
   metadata?: Record<string, JsonValue>;
 };
 
-/** Provider-agnostic prompt seam that judges can reuse from a harness. */
+/** Provider-agnostic prompt function that judges can reuse from a harness. */
 export type HarnessPrompt = (
   input: string,
   options?: HarnessPromptOptions,
@@ -104,6 +104,52 @@ export type Harness<
     input: TInput,
     context: HarnessContext<TMetadata>,
   ) => Promise<HarnessRun>;
+};
+
+export type MaybePromise<T> = T | Promise<T>;
+
+export type SimpleToolCallRecord = Omit<
+  ToolCallRecord,
+  "arguments" | "result" | "error" | "metadata"
+> & {
+  arguments?: unknown;
+  result?: unknown;
+  error?: unknown;
+  metadata?: Record<string, unknown>;
+};
+
+export type SimpleHarnessResult = {
+  output?: unknown;
+  outputText?: string;
+  messages?: NormalizedMessage[];
+  toolCalls?: SimpleToolCallRecord[];
+  usage?: UsageSummary;
+  timings?: TimingSummary;
+  artifacts?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  errors?: unknown[];
+};
+
+export type HarnessResultLike = HarnessRun | SimpleHarnessResult;
+
+export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
+  input: TInput;
+  context: HarnessContext<TMetadata>;
+  metadata: Readonly<TMetadata>;
+  signal?: AbortSignal;
+  artifacts: HarnessContext<TMetadata>["artifacts"];
+  setArtifact: HarnessContext<TMetadata>["setArtifact"];
+};
+
+export type CreateHarnessOptions<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = {
+  name: string;
+  prompt?: HarnessPrompt;
+  run: (
+    args: CreateHarnessRunArgs<TInput, TMetadata>,
+  ) => MaybePromise<HarnessResultLike>;
 };
 
 function isJsonPrimitive(value: unknown): value is JsonPrimitive {
@@ -186,6 +232,232 @@ export function normalizeMetadata(
 /** Converts arbitrary content into the JSON-safe message content shape. */
 export function normalizeContent(value: unknown): JsonValue {
   return toJsonValue(value) ?? String(value);
+}
+
+/** Creates a harness from the common "run app code and return output" shape. */
+export function createHarness<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(
+  options: CreateHarnessOptions<TInput, TMetadata>,
+): Harness<TInput, TMetadata> {
+  return {
+    name: options.name,
+    prompt: options.prompt ?? missingHarnessPrompt(options.name),
+    run: async (input, context) => {
+      const result = await options.run({
+        input,
+        context,
+        metadata: context.metadata,
+        signal: context.signal,
+        artifacts: context.artifacts,
+        setArtifact: context.setArtifact,
+      });
+
+      return normalizeHarnessRun(input, result, context);
+    },
+  };
+}
+
+/** Normalizes a lightweight harness result into the reporter-facing run shape. */
+export function normalizeHarnessRun<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(
+  input: TInput,
+  result: HarnessResultLike,
+  context?: HarnessContext<TMetadata>,
+): HarnessRun {
+  if (isHarnessRun(result)) {
+    if (
+      context &&
+      Object.keys(context.artifacts).length > 0 &&
+      !result.artifacts
+    ) {
+      return {
+        ...result,
+        artifacts: context.artifacts,
+      };
+    }
+
+    return result;
+  }
+
+  const output = toJsonValue(result.output);
+  const toolCalls = normalizeSimpleToolCalls(result.toolCalls);
+  const outputText = resolveSimpleOutputText(result, output);
+  const usage = result.usage ?? {};
+  const messages =
+    result.messages ??
+    createDefaultSessionMessages({
+      input,
+      output,
+      outputText,
+      toolCalls,
+    });
+  const metadata = result.metadata
+    ? normalizeMetadata(result.metadata)
+    : undefined;
+  const artifacts = normalizeMergedArtifacts(
+    context?.artifacts,
+    result.artifacts,
+  );
+
+  return {
+    session: {
+      messages,
+      ...(outputText !== undefined ? { outputText } : {}),
+      ...(usage.provider ? { provider: usage.provider } : {}),
+      ...(usage.model ? { model: usage.model } : {}),
+      ...(metadata ? { metadata } : {}),
+    },
+    ...(output !== undefined ? { output } : {}),
+    usage,
+    ...(result.timings ? { timings: result.timings } : {}),
+    ...(artifacts ? { artifacts } : {}),
+    errors: normalizeSimpleErrors(result.errors),
+  };
+}
+
+function missingHarnessPrompt(name: string): HarnessPrompt {
+  return async () => {
+    throw new Error(
+      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
+    );
+  };
+}
+
+function resolveSimpleOutputText(
+  result: SimpleHarnessResult,
+  output: JsonValue | undefined,
+) {
+  if (result.outputText !== undefined) {
+    return result.outputText;
+  }
+
+  return typeof output === "string" ? output : undefined;
+}
+
+function createDefaultSessionMessages<TInput>({
+  input,
+  output,
+  outputText,
+  toolCalls: normalizedToolCalls,
+}: {
+  input: TInput;
+  output: JsonValue | undefined;
+  outputText: string | undefined;
+  toolCalls: ToolCallRecord[];
+}): NormalizedMessage[] {
+  const messages: NormalizedMessage[] = [
+    {
+      role: "user",
+      content: normalizeContent(input),
+    },
+  ];
+  const assistantContent = output ?? outputText;
+
+  if (assistantContent !== undefined || normalizedToolCalls.length > 0) {
+    messages.push({
+      role: "assistant",
+      ...(assistantContent !== undefined
+        ? { content: normalizeContent(assistantContent) }
+        : {}),
+      ...(normalizedToolCalls.length > 0
+        ? { toolCalls: normalizedToolCalls }
+        : {}),
+    });
+  }
+
+  return messages;
+}
+
+function normalizeSimpleToolCalls(
+  calls: SimpleToolCallRecord[] | undefined,
+): ToolCallRecord[] {
+  return (calls ?? []).map((call) => {
+    const {
+      arguments: rawArguments,
+      result: rawResult,
+      error: rawError,
+      metadata: rawMetadata,
+      ...toolCall
+    } = call;
+    const args = normalizeToolCallArguments(rawArguments);
+    const result = toJsonValue(rawResult);
+    const error = normalizeToolCallError(rawError);
+    const metadata = rawMetadata ? normalizeMetadata(rawMetadata) : undefined;
+
+    return {
+      ...toolCall,
+      ...(args ? { arguments: args } : {}),
+      ...(result !== undefined ? { result } : {}),
+      ...(error ? { error } : {}),
+      ...(metadata ? { metadata } : {}),
+    };
+  });
+}
+
+function normalizeToolCallArguments(
+  value: unknown,
+): Record<string, JsonValue> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = toJsonValue(value);
+  return normalized &&
+    typeof normalized === "object" &&
+    !Array.isArray(normalized)
+    ? normalized
+    : undefined;
+}
+
+function normalizeToolCallError(
+  value: unknown,
+): ToolCallRecord["error"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const serialized = serializeError(value);
+  const { message, type, ...details } = serialized;
+
+  return {
+    ...details,
+    message: typeof message === "string" ? message : String(message),
+    ...(typeof type === "string" ? { type } : {}),
+  };
+}
+
+function normalizeMergedArtifacts(
+  contextArtifacts: Record<string, JsonValue> | undefined,
+  resultArtifacts: Record<string, unknown> | undefined,
+) {
+  const artifacts = {
+    ...(contextArtifacts ?? {}),
+    ...(resultArtifacts ? normalizeRecord(resultArtifacts) : {}),
+  };
+
+  return Object.keys(artifacts).length > 0 ? artifacts : undefined;
+}
+
+function normalizeSimpleErrors(
+  errors: unknown[] | undefined,
+): Array<Record<string, JsonValue>> {
+  return (errors ?? []).map((error) => {
+    const normalized = toJsonValue(error);
+
+    if (
+      normalized &&
+      typeof normalized === "object" &&
+      !Array.isArray(normalized)
+    ) {
+      return normalized;
+    }
+
+    return serializeError(error);
+  });
 }
 
 /** Flattens every recorded tool call from a normalized session. */

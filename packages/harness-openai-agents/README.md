@@ -17,13 +17,12 @@ import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
 import { describeEval, toolCalls } from "vitest-evals";
 
 const harness = openaiAgentsHarness({
-  createAgent: () => createClassifierAgent(),
-  createRunner: () =>
+  agent: () => createClassifierAgent(),
+  runner: () =>
     new Runner({
       modelProvider,
       tracingDisabled: true,
     }),
-  prompt: sharedJudgePrompt,
 });
 
 describeEval("classifier agent", { harness }, (it) => {
@@ -48,9 +47,8 @@ If your application has a custom entrypoint, wire it directly:
 
 ```ts
 const harness = openaiAgentsHarness({
-  createAgent: () => createClassifierAgent(),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
+  agent: () => createClassifierAgent(),
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   run: ({ agent, input, runner, runOptions }) =>
     runBottleClassifier({ agent, runner, input, runOptions }),
   normalize: {
@@ -60,36 +58,35 @@ const harness = openaiAgentsHarness({
 });
 ```
 
-`createAgent` receives the per-run input and harness context before the
-adapter instruments local function tools. Use that when an agent needs
+`agent` and `runner` can be objects or per-run factories. An `agent` factory
+receives the per-run input and harness context before the adapter instruments
+local function tools. Use that when an agent needs
 scenario-specific tool closures, instructions, seeded artifacts, or metadata
 while staying on the native replay path:
 
 ```ts
 const harness = openaiAgentsHarness({
-  createAgent: ({ input, context }) =>
+  agent: ({ input, context }) =>
     createClassifierAgent({
       bottleId: parseBottleId(input),
       metadata: context.metadata,
       setArtifact: context.setArtifact,
     }),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {
     lookup_bottle: true,
   },
 });
 ```
 
-The required `prompt` callback is passed to harness-backed judges as
-`JudgeContext.harness.prompt`, so rubric or factuality judges can share the
-same provider/model setup as the suite harness.
+The older `createAgent({ input, context })` and `createRunner(...)` spellings
+still work for existing tests. Add `prompt` when rubric or factuality judges
+need to call `JudgeContext.harness.prompt`.
 
 The adapter provides:
 
 - native `Runner.run(agent, input, options)` execution
-- support for existing agents or per-run `createAgent({ input, context })`
-  factories
+- support for existing agents/runners or per-run `agent` and `runner` factories
 - a `run` escape hatch for app-specific entrypoints
 - normalized assistant output, messages, tool calls, tool results, usage,
   timings, errors, and replay-friendly metadata
@@ -129,9 +126,8 @@ const lookupBottle = tool({
 });
 
 const harness = openaiAgentsHarness({
-  createAgent: () => new Agent({ name: "classifier", tools: [lookupBottle] }),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
+  agent: () => new Agent({ name: "classifier", tools: [lookupBottle] }),
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {
     lookup_bottle: true,
   },

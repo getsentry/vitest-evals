@@ -32,6 +32,13 @@ import type {
 } from "vitest-evals/replay";
 
 type MaybePromise<T> = T | Promise<T>;
+type AgentSource<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> =
+  | TAgent
+  | ((args: PiAiCreateAgentArgs<TInput, TMetadata>) => MaybePromise<TAgent>);
 type AnyPiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -204,7 +211,7 @@ interface PiAiHarnessBaseOptions<
     TMetadata
   >,
 > {
-  agent?: TAgent;
+  agent?: AgentSource<TAgent, TInput, TMetadata>;
   createAgent?: (
     args: PiAiCreateAgentArgs<TInput, TMetadata>,
   ) => MaybePromise<TAgent>;
@@ -216,7 +223,7 @@ interface PiAiHarnessBaseOptions<
     TResult,
     TTools
   >;
-  prompt: HarnessPrompt;
+  prompt?: HarnessPrompt;
   name?: string;
 }
 
@@ -373,7 +380,7 @@ export function piAiHarness<
 ): Harness<TInput, TMetadata> {
   return {
     name: options.name ?? "pi-ai",
-    prompt: options.prompt,
+    prompt: options.prompt ?? missingHarnessPrompt(options.name ?? "pi-ai"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -535,7 +542,7 @@ async function resolveAgent<
   args: PiAiCreateAgentArgs<TInput, TMetadata>,
 ) {
   if (options.agent !== undefined) {
-    return options.agent;
+    return resolveAgentSource(options.agent, args);
   }
 
   if (options.createAgent) {
@@ -545,6 +552,29 @@ async function resolveAgent<
   throw new Error(
     "piAiHarness requires either an agent instance or a createAgent() function.",
   );
+}
+
+async function resolveAgentSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+  args: PiAiCreateAgentArgs<TInput, TMetadata>,
+): Promise<TAgent> {
+  if (isAgentFactory(agent)) {
+    return agent(args);
+  }
+
+  return agent;
+}
+
+function isAgentFactory<TAgent, TInput, TMetadata extends HarnessMetadata>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+): agent is (
+  args: PiAiCreateAgentArgs<TInput, TMetadata>,
+) => MaybePromise<TAgent> {
+  return typeof agent === "function" && !hasPiAiRunMethod(agent);
 }
 
 function hasResultOverrides<
@@ -703,13 +733,21 @@ function hasPiAiRunMethod<
 >(
   agent: unknown,
 ): agent is PiAiRunnableAgent<TInput, TMetadata, TResult, TTools> {
-  if (!agent || typeof agent !== "object") {
+  if (!agent || (typeof agent !== "object" && typeof agent !== "function")) {
     return false;
   }
 
   return (
     "run" in agent && typeof (agent as { run?: unknown }).run === "function"
   );
+}
+
+function missingHarnessPrompt(name: string): HarnessPrompt {
+  return async () => {
+    throw new Error(
+      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
+    );
+  };
 }
 
 function isPiAiToolset(value: unknown): value is PiAiToolset {

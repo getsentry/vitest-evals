@@ -84,6 +84,93 @@ test("exposes the configured prompt on the harness", async () => {
   expect(prompt).toHaveBeenCalledWith("score refund");
 });
 
+test("prompt is optional until a judge asks for it", async () => {
+  const harness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      decision: {
+        status: "approved",
+      },
+    }),
+  });
+
+  await expect(harness.prompt("score refund")).rejects.toThrow(
+    "pi-ai harness did not configure prompt()",
+  );
+});
+
+test("accepts agent as a factory", async () => {
+  const agent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      return {
+        id: "refund-agent",
+      };
+    },
+  );
+  const run = vi.fn(
+    async ({
+      agent,
+      context,
+      runtime,
+    }: {
+      agent: { id: string };
+      context: HarnessContext<DemoMetadata>;
+      runtime: DemoRuntime;
+    }) => {
+      context.setArtifact("agentId", agent.id);
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        decision: {
+          status: "approved",
+        },
+      };
+    },
+  );
+  const artifacts: Record<string, JsonValue> = {};
+  const harness = piAiHarness({
+    agent,
+    run,
+    tools,
+  });
+
+  const result = await harness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts,
+    setArtifact: vi.fn((name: string, value: JsonValue) => {
+      artifacts[name] = value;
+    }),
+  });
+
+  expect(agent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+    }),
+  );
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(result.artifacts).toEqual({
+    preparedInput: "Refund invoice inv_123",
+    agentId: "refund-agent",
+  });
+});
+
 describeEval(
   "pi-ai harness adapter",
   {

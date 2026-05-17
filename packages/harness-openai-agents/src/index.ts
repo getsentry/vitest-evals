@@ -98,6 +98,39 @@ export interface OpenAiAgentsHarnessRunArgs<
   runOptions: OpenAiAgentsRunOptions<TContext>;
 }
 
+type AgentSource<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> =
+  | TAgent
+  | ((
+      args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
+    ) => MaybePromise<TAgent>);
+
+type RunnerSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TRunner,
+  TResult,
+  TContext,
+> =
+  | TRunner
+  | ((
+      args: Omit<
+        OpenAiAgentsHarnessRunArgs<
+          TAgent,
+          TInput,
+          TMetadata,
+          TRunner,
+          TResult,
+          TContext
+        >,
+        "runner"
+      >,
+    ) => MaybePromise<TRunner>);
+
 export interface OpenAiAgentsHarnessResultArgs<
   TAgent,
   TInput,
@@ -256,11 +289,11 @@ export interface OpenAiAgentsHarnessOptions<
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
 > {
-  agent?: TAgent;
+  agent?: AgentSource<TAgent, TInput, TMetadata>;
   createAgent?: (
     args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
   ) => MaybePromise<TAgent>;
-  runner?: TRunner;
+  runner?: RunnerSource<TAgent, TInput, TMetadata, TRunner, TResult, TContext>;
   createRunner?: (
     args: Omit<
       OpenAiAgentsHarnessRunArgs<
@@ -308,7 +341,7 @@ export interface OpenAiAgentsHarnessOptions<
     TResult,
     TContext
   >;
-  prompt: HarnessPrompt;
+  prompt?: HarnessPrompt;
   name?: string;
 }
 
@@ -343,7 +376,8 @@ export function openaiAgentsHarness<
 
   return {
     name: options.name ?? "openai-agents",
-    prompt: options.prompt,
+    prompt:
+      options.prompt ?? missingHarnessPrompt(options.name ?? "openai-agents"),
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -561,21 +595,6 @@ function validateOptions<
     );
   }
 
-  if (typeof options.agent === "function") {
-    throw new Error(
-      "openaiAgentsHarness agent must be an Agent instance. Use createAgent() for agent factories.",
-    );
-  }
-
-  if (
-    typeof options.runner === "function" &&
-    !hasCallableMethod(options.runner, "run")
-  ) {
-    throw new Error(
-      "openaiAgentsHarness runner must be a Runner instance. Use createRunner() for runner factories.",
-    );
-  }
-
   if (!options.run && !options.runner && !options.createRunner) {
     throw new Error(
       "openaiAgentsHarness requires runner/createRunner for Runner.run(agent, input, options), or run() for a custom entrypoint.",
@@ -601,17 +620,40 @@ async function resolveAgent<
   >,
   args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
 ) {
-  if (options.createAgent) {
-    return options.createAgent(args);
+  if (options.agent !== undefined) {
+    return resolveAgentSource(options.agent, args);
   }
 
-  if (options.agent !== undefined) {
-    return options.agent;
+  if (options.createAgent) {
+    return options.createAgent(args);
   }
 
   throw new Error(
     "openaiAgentsHarness requires either an agent instance or createAgent().",
   );
+}
+
+async function resolveAgentSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+  args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
+): Promise<TAgent> {
+  if (isAgentFactory(agent)) {
+    return agent(args);
+  }
+
+  return agent;
+}
+
+function isAgentFactory<TAgent, TInput, TMetadata extends HarnessMetadata>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+): agent is (
+  args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
+) => MaybePromise<TAgent> {
+  return typeof agent === "function" && !hasCallableMethod(agent, "run");
 }
 
 async function resolveRunner<
@@ -647,10 +689,63 @@ async function resolveRunner<
   }
 
   if (options.runner !== undefined) {
-    return options.runner;
+    return resolveRunnerSource(options.runner, args);
   }
 
   return undefined;
+}
+
+async function resolveRunnerSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TRunner,
+  TResult,
+  TContext,
+>(
+  runner: RunnerSource<TAgent, TInput, TMetadata, TRunner, TResult, TContext>,
+  args: Omit<
+    OpenAiAgentsHarnessRunArgs<
+      TAgent,
+      TInput,
+      TMetadata,
+      TRunner,
+      TResult,
+      TContext
+    >,
+    "runner"
+  >,
+): Promise<TRunner> {
+  if (isRunnerFactory(runner)) {
+    return runner(args);
+  }
+
+  return runner;
+}
+
+function isRunnerFactory<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TRunner,
+  TResult,
+  TContext,
+>(
+  runner: RunnerSource<TAgent, TInput, TMetadata, TRunner, TResult, TContext>,
+): runner is (
+  args: Omit<
+    OpenAiAgentsHarnessRunArgs<
+      TAgent,
+      TInput,
+      TMetadata,
+      TRunner,
+      TResult,
+      TContext
+    >,
+    "runner"
+  >,
+) => MaybePromise<TRunner> {
+  return typeof runner === "function" && !hasRunnerRunMethod(runner);
 }
 
 async function resolveRunOptions<
@@ -740,6 +835,14 @@ function hasRunnerRunMethod<TAgent, TInput, TContext, TResult>(
   runner: unknown,
 ): runner is OpenAiAgentsRunner<TAgent, TInput, TContext, TResult> {
   return hasCallableMethod(runner, "run");
+}
+
+function missingHarnessPrompt(name: string): HarnessPrompt {
+  return async () => {
+    throw new Error(
+      `${name} harness did not configure prompt(). LLM-backed judges require a prompt function.`,
+    );
+  };
 }
 
 async function settleRunResult(result: unknown) {

@@ -13,7 +13,7 @@ type ScoredRefundCase = RefundCase & {
 };
 
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },

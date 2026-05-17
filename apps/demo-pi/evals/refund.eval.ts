@@ -19,7 +19,7 @@ describeEval(
   {
     skipIf: () => !process.env.ANTHROPIC_API_KEY,
     harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
+      agent: () => createRefundAgent(),
       toolReplay: {
         lookupInvoice: true,
       },

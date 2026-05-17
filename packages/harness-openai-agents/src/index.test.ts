@@ -260,6 +260,20 @@ test("exposes prompt and supports custom app output mapping", async () => {
   });
 });
 
+test("prompt is optional until a judge asks for it", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: async () => runResult,
+  });
+
+  await expect(harness.prompt("score this")).rejects.toThrow(
+    "openai-agents harness did not configure prompt()",
+  );
+});
+
 test("passes run input and context to createAgent before tool instrumentation", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-openai-agents-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
@@ -801,32 +815,68 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
   ]);
 });
 
-test("rejects implicit agent and runner factories", () => {
-  expect(() =>
-    openaiAgentsHarness({
-      prompt: judgePrompt,
-      agent: (() => ({
+test("accepts agent and runner as factories", async () => {
+  const agent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      return {
         name: "classifier",
         model: "gpt-4.1-mini",
-      })) as unknown as DemoAgent,
-      runner: {
-        run: async () => ({}),
-      },
-    }),
-  ).toThrow("Use createAgent() for agent factories");
+      };
+    },
+  );
+  const runnerRun = vi.fn(
+    async (_agent: DemoAgent, _input: string, runOptions) => {
+      expect(runOptions?.context).toMatchObject({
+        metadata: {
+          scenario: "peated",
+        },
+      });
+      return runResult;
+    },
+  );
+  const runner = vi.fn(() => ({
+    run: runnerRun,
+  }));
+  const harness = openaiAgentsHarness({
+    agent,
+    runner,
+  });
 
-  expect(() =>
-    openaiAgentsHarness({
-      prompt: judgePrompt,
-      agent: {
-        name: "classifier",
-        model: "gpt-4.1-mini",
-      },
-      runner: (() => ({
-        run: async () => ({}),
-      })) as unknown as { run: () => Promise<unknown> },
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "peated",
     }),
-  ).toThrow("Use createRunner() for runner factories");
+  );
+
+  expect(agent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Classify bottle bt_123",
+    }),
+  );
+  expect(runner).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Classify bottle bt_123",
+      runOptions: expect.objectContaining({
+        stream: false,
+      }),
+    }),
+  );
+  expect(runnerRun).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "classified",
+    category: "bourbon",
+  });
+  expect(result.artifacts).toEqual({
+    preparedInput: "Classify bottle bt_123",
+  });
 });
 
 test("keeps tool capture isolated across overlapping runs", async () => {

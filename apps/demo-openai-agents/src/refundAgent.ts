@@ -148,7 +148,7 @@ export function createRefundRunner() {
   });
 }
 
-/** Uses the same OpenAI Agents stack as a provider-agnostic judge prompt seam. */
+/** Uses the same OpenAI Agents stack for provider-agnostic judge prompts. */
 export async function promptRefundModel(
   input: string,
   options?: HarnessPromptOptions,

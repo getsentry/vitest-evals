@@ -78,8 +78,8 @@ can stay on the harness-first surface while older matching behavior remains
 available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data
-plus the configured `harness` and its required `prompt(...)` method. That keeps
-rubric and factuality judges on the same API as deterministic judges.
+plus the configured `harness`. Rubric and factuality judges can call
+`harness.prompt(...)` when the suite configures a judge model prompt.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -157,16 +157,16 @@ behavior only.
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
-result objects, while still allowing custom `run`, `session`, `output`, and
-`usage` overrides.
+result objects, while still allowing a custom `run` entrypoint and grouped
+`normalize` overrides.
 
 ### `@vitest-evals/harness-openai-agents`
 
 Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
-normalized run/session shape. It accepts an existing agent or `createAgent()`
-factory, supports custom app entrypoints, normalizes `RunResult` output,
-messages, usage, tool calls, tool results, errors, trace metadata, and records
-replay metadata for opt-in local function tools.
+normalized run/session shape. It accepts existing agents/runners or per-run
+`agent`/`runner` factories, supports custom app entrypoints, normalizes
+`RunResult` output, messages, usage, tool calls, tool results, errors, trace
+metadata, and records replay metadata for opt-in local function tools.
 
 ### `@vitest-evals/harness-pi-ai`
 
@@ -197,8 +197,8 @@ New runtime integrations should be implemented as thin adapter packages that:
 - execute the target runtime through its normal seam
 - capture messages, tool calls, usage, timings, and errors
 - normalize them into `HarnessRun`
-- expose `prompt` so the same provider/model configuration can be reused by
-  LLM-backed judges
+- expose `prompt` only when LLM-backed judges need to reuse provider/model
+  configuration
 - avoid inventing harness-specific assertion or reporter behavior in userland
 
 ### New Judges
