@@ -74,7 +74,7 @@ async function main() {
 
 function warn(message: string) {
   if (process.env.GITHUB_ACTIONS === "true") {
-    console.error(`::warning::${escapeCommandData(message)}`);
+    console.log(`::warning::${escapeCommandData(message)}`);
     return;
   }
   console.error(`Warning: ${message}`);
