@@ -16,7 +16,11 @@ import {
 
 const appHarness: QueryableHarness<AppInput, AppMetadata> = {
   name: "app",
-  query: (input, options) => queryJudgeModel(input, options),
+  query: (input, options) =>
+    queryJudgeModel(input, {
+      system: options?.system,
+      signal: options?.signal,
+    }),
   run: async (input, context): Promise<HarnessRun> => {
     const appResult = await runApp(input, {
       signal: context.signal,

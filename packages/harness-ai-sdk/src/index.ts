@@ -233,14 +233,6 @@ export type AiSdkHarnessOptions<
   (
     | {
         agent: AgentSource<TAgent, TInput, TMetadata>;
-        task?: never;
-        run?: never;
-      }
-    | {
-        task: (
-          args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-        ) => MaybePromise<TResult | HarnessRun>;
-        agent?: never;
         run?: never;
       }
     | {
@@ -248,7 +240,6 @@ export type AiSdkHarnessOptions<
           args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
         ) => MaybePromise<TResult | HarnessRun>;
         agent?: never;
-        task?: never;
       }
   );
 
@@ -261,7 +252,7 @@ interface AiSdkHarnessBaseOptions<
     TInput,
     TMetadata
   >,
-> extends AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools> {
+> {
   tools?: TTools;
   toolReplay?: AiSdkToolReplayPolicies<TInput, TMetadata>;
   normalize?: AiSdkHarnessNormalizeOptions<
@@ -418,35 +409,25 @@ async function runAiSdkHarness<
 
     const output = options.normalize?.output
       ? await options.normalize.output(resultArgs)
-      : options.output
-        ? await options.output(resultArgs)
-        : resolveOutput(result);
+      : resolveOutput(result);
     const usage = options.normalize?.usage
       ? await options.normalize.usage(resultArgs)
-      : options.usage
-        ? await options.usage(resultArgs)
-        : resolveUsage(result, runtimeToolCalls.length);
+      : resolveUsage(result, runtimeToolCalls.length);
     const session = options.normalize?.session
       ? await options.normalize.session(resultArgs)
-      : options.session
-        ? await options.session(resultArgs)
-        : resolveSession(
-            input,
-            result,
-            output,
-            replayMetadataByToolCallId,
-            runtimeToolCalls,
-          );
+      : resolveSession(
+          input,
+          result,
+          output,
+          replayMetadataByToolCallId,
+          runtimeToolCalls,
+        );
     const timings = options.normalize?.timings
       ? await options.normalize.timings(resultArgs)
-      : options.timings
-        ? await options.timings(resultArgs)
-        : undefined;
+      : undefined;
     const errors = options.normalize?.errors
       ? await options.normalize.errors(resultArgs)
-      : options.errors
-        ? await options.errors(resultArgs)
-        : resolveHarnessRunErrors(result);
+      : resolveHarnessRunErrors(result);
 
     return {
       session,
@@ -498,12 +479,7 @@ function hasResultOverrides<
       options.normalize?.session ??
       options.normalize?.usage ??
       options.normalize?.timings ??
-      options.normalize?.errors ??
-      options.output ??
-      options.session ??
-      options.usage ??
-      options.timings ??
-      options.errors,
+      options.normalize?.errors,
   );
 }
 
@@ -536,10 +512,6 @@ async function runAgent<
     return options.run(args);
   }
 
-  if (options.task) {
-    return options.task(args);
-  }
-
   if (hasAiSdkRunMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
     return args.agent.run(args.input, args.runtime);
   }
@@ -561,19 +533,18 @@ function validateOptions<
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
   const hasAgent = hasAgentSource(options);
-  const hasTask = typeof (options as { task?: unknown }).task === "function";
   const hasRun = typeof (options as { run?: unknown }).run === "function";
-  const entrypoints = [hasAgent, hasTask, hasRun].filter(Boolean).length;
+  const entrypoints = [hasAgent, hasRun].filter(Boolean).length;
 
   if (entrypoints > 1) {
     throw new Error(
-      "aiSdkHarness accepts exactly one of agent, run, or task. Use agent for the zero-glue run(input, runtime) or generate(input, runtime) path, or run for a custom entrypoint.",
+      "aiSdkHarness accepts exactly one of agent or run. Use agent for the zero-glue run(input, runtime) or generate(input, runtime) path, or run for a custom entrypoint.",
     );
   }
 
   if (entrypoints === 0) {
     throw new Error(
-      "aiSdkHarness requires agent, run, or task. Use agent for objects with run(input, runtime) or generate(input, runtime), or run for a custom entrypoint.",
+      "aiSdkHarness requires agent or run. Use agent for objects with run(input, runtime) or generate(input, runtime), or run for a custom entrypoint.",
     );
   }
 }

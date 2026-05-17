@@ -9,7 +9,7 @@ type DemoMetadata = {
   scenario?: string;
 };
 
-const createAgent = vi.fn(() => ({
+const agentFactory = vi.fn(() => ({
   id: "refund-agent",
 }));
 
@@ -164,7 +164,7 @@ describeEval(
   "pi-ai harness adapter",
   {
     harness: piAiHarness({
-      createAgent,
+      agent: agentFactory,
       run: runAgent,
       tools,
     }),
@@ -173,7 +173,7 @@ describeEval(
     it("runs the harness explicitly", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
 
-      expect(createAgent).toHaveBeenCalledTimes(1);
+      expect(agentFactory).toHaveBeenCalledTimes(1);
       expect(runAgent).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({
         status: "approved",
@@ -203,7 +203,7 @@ describeEval(
   "pi-ai harness wraps native agent tools",
   {
     harness: piAiHarness({
-      createAgent: () => {
+      agent: () => {
         const nativeTools = [
           {
             name: "lookupInvoice",
@@ -309,7 +309,7 @@ describeEval(
   "pi-ai harness wraps native tools even with an explicit tool override",
   {
     harness: piAiHarness({
-      createAgent: () => {
+      agent: () => {
         const nativeTools = [
           {
             name: "lookupInvoice",
@@ -390,7 +390,7 @@ describeEval(
   "pi-ai harness reapplies native tool instrumentation after reset",
   {
     harness: piAiHarness({
-      createAgent: () => {
+      agent: () => {
         const createNativeTool = () => ({
           name: "lookupInvoice",
           execute: async (
@@ -482,7 +482,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets and native tools together",
   {
     harness: piAiHarness({
-      createAgent: () => {
+      agent: () => {
         const toolset = {
           lookupInvoice: {
             execute: async ({ invoiceId }: { invoiceId: string }) => ({
@@ -599,7 +599,7 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -716,7 +716,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets from existing agents",
   {
     harness: piAiHarness({
-      createAgent: () => {
+      agent: () => {
         const toolset = {
           lookupInvoice: {
             execute: async ({ invoiceId }: { invoiceId: string }) => ({
@@ -771,7 +771,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
     refundable: true,
   }));
   const harness = piAiHarness({
-    createAgent: () => {
+    agent: () => {
       const toolset = {
         lookupInvoice: {
           execute: lookupInvoice,
@@ -824,7 +824,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
 
 test("supports normalize.output as a low-level escape hatch", async () => {
   const normalizedHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     run: async () => ({
       customDecision: {
         status: "approved",
@@ -858,7 +858,7 @@ test("supports normalize.output as a low-level escape hatch", async () => {
 
 test("applies normalize overrides to HarnessRun-shaped results", async () => {
   const normalizedHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     run: async () => ({
       session: {
         messages: [
@@ -920,7 +920,7 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
 
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute: async ({ invoiceId }: { invoiceId: string }) => {
@@ -1005,7 +1005,7 @@ test("replays native agent tools without breaking the agent-facing result", asyn
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -1170,7 +1170,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
   );
 
   const harness = piAiHarness({
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -1215,7 +1215,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
   expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
 });
 
-test("passes run input and context to createAgent before native tool instrumentation", async () => {
+test("passes run input and context to agent factory before native tool instrumentation", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-native-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
   vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
@@ -1275,7 +1275,7 @@ test("passes run input and context to createAgent before native tool instrumenta
     },
   );
   const harness = piAiHarness({
-    createAgent: createContextualAgent,
+    agent: createContextualAgent,
     toolReplay: {
       lookupInvoice: true,
     },
@@ -1345,7 +1345,7 @@ test("records and replays opt-in tools in auto mode", async () => {
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute,
@@ -1427,7 +1427,7 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
   }));
 
   const harness = piAiHarness<{ id: string }, string, DemoMetadata>({
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
@@ -1474,7 +1474,7 @@ test("errors when strict mode is missing a recording", async () => {
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute,

@@ -2,6 +2,7 @@ import type {
   Harness,
   HarnessMetadata,
   HarnessRun,
+  QueryableHarness,
   ToolCallRecord,
 } from "../harness";
 
@@ -38,9 +39,20 @@ export interface JudgeContext<
   metadata: Readonly<TMetadata>;
   run: HarnessRun;
   session: HarnessRun["session"];
+  signal?: AbortSignal;
   /** Harness associated with this judge context. */
   harness: THarness;
 }
+
+/** Judge context for judges that query a separate model through the harness. */
+export type QueryableJudgeContext<
+  TInput = unknown,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends QueryableHarness<TInput, TMetadata> = QueryableHarness<
+    TInput,
+    TMetadata
+  >,
+> = JudgeContext<TInput, TMetadata, THarness>;
 
 /** Convenience helper for judges that accept explicit per-call params. */
 export type JudgeOptions<

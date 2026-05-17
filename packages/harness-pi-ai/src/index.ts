@@ -212,10 +212,7 @@ interface PiAiHarnessBaseOptions<
     TMetadata
   >,
 > {
-  agent?: AgentSource<TAgent, TInput, TMetadata>;
-  createAgent?: (
-    args: PiAiCreateAgentArgs<TInput, TMetadata>,
-  ) => MaybePromise<TAgent>;
+  agent: AgentSource<TAgent, TInput, TMetadata>;
   toolReplay?: PiAiToolReplayPolicies<TInput, TMetadata>;
   normalize?: PiAiHarnessNormalizeOptions<
     TAgent,
@@ -414,6 +411,8 @@ export function piAiHarness<
 >(
   options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
 ): Harness<TInput, TMetadata> | QueryableHarness<TInput, TMetadata> {
+  validateOptions(options);
+
   const harness: Harness<TInput, TMetadata> = {
     name: options.name ?? "pi-ai",
     run: async (input, context) => {
@@ -461,6 +460,20 @@ export function piAiHarness<
         query: options.query,
       }
     : harness;
+}
+
+function validateOptions<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends PiAiToolset<TInput, TMetadata>,
+>(options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
+  if (options.agent === undefined) {
+    throw new Error(
+      "piAiHarness requires agent. Pass an agent instance or an agent factory.",
+    );
+  }
 }
 
 async function executePiHarnessRun<
@@ -583,17 +596,7 @@ async function resolveAgent<
   options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
   args: PiAiCreateAgentArgs<TInput, TMetadata>,
 ) {
-  if (options.agent !== undefined) {
-    return resolveAgentSource(options.agent, args);
-  }
-
-  if (options.createAgent) {
-    return options.createAgent(args);
-  }
-
-  throw new Error(
-    "piAiHarness requires either an agent instance or a createAgent() function.",
-  );
+  return resolveAgentSource(options.agent, args);
 }
 
 async function resolveAgentSource<

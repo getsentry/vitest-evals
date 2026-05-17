@@ -15,6 +15,7 @@ Every judge receives:
 | `toolCalls` | Flattened calls from `run.session`. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
+| `signal` | Abort signal from the eval run when available. |
 | `harness` | Suite harness; queryable only when typed with `QueryableHarness`. |
 
 ## Custom Judge Pattern
@@ -22,11 +23,8 @@ Every judge receives:
 ```ts
 import {
   namedJudge,
-  type JudgeContext,
-  type QueryableHarness,
+  type QueryableJudgeContext,
 } from "vitest-evals";
-
-type EvalHarness = QueryableHarness<string, CaseMeta>;
 
 const FactualityJudge = namedJudge(
   "FactualityJudge",
@@ -35,10 +33,12 @@ const FactualityJudge = namedJudge(
     input,
     output,
     metadata,
-  }: JudgeContext<string, CaseMeta, EvalHarness>) => {
+    signal,
+  }: QueryableJudgeContext<string, CaseMeta>) => {
     const verdict = await harness.query(formatRubric({ input, output }), {
       system: "Grade the answer against the rubric.",
       metadata: { expectedStatus: metadata.expectedStatus },
+      signal,
     });
 
     return parseVerdict(verdict);
@@ -56,7 +56,7 @@ const FactualityJudge = namedJudge(
 | Only one assertion needs the judge | `await expect(result).toSatisfyJudge(Judge)` |
 | Judge needs structured app output | Read `ctx.run.output` |
 | Judge needs canonical text | Read `ctx.output` |
-| Judge needs shared model setup | Type the harness as `QueryableHarness` and call `ctx.harness.query(...)` |
+| Judge needs shared model setup | Type the context as `QueryableJudgeContext` and call `ctx.harness.query(...)` |
 
 ## Built-In Judges
 

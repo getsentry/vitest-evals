@@ -19,3 +19,8 @@ Keep policy docs small:
 - explain the intent briefly
 - state the default rule clearly
 - call out only the meaningful exceptions
+
+Current policies:
+
+- [API design](api-design.md)
+- [Code comments](code-comments.md)

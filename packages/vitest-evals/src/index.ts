@@ -49,6 +49,7 @@ type RegisteredJudgeRunContext = {
   inputValue: unknown;
   metadata: HarnessMetadata;
   run: HarnessRun;
+  signal?: AbortSignal;
 };
 
 type InternalEvalFixtures = {
@@ -233,7 +234,13 @@ const evalTest = test
             }
 
             setHarnessMeta(task, resolvedHarness.name, partialRun);
-            recordJudgeRunContext(partialRun, resolvedHarness, input, metadata);
+            recordJudgeRunContext(
+              partialRun,
+              resolvedHarness,
+              input,
+              metadata,
+              signal,
+            );
           }
 
           throw error;
@@ -244,7 +251,7 @@ const evalTest = test
         }
 
         setHarnessMeta(task, resolvedHarness.name, run);
-        recordJudgeRunContext(run, resolvedHarness, input, metadata);
+        recordJudgeRunContext(run, resolvedHarness, input, metadata, signal);
 
         if (automaticJudges.length > 0) {
           await applyAutomaticJudges(
@@ -255,6 +262,7 @@ const evalTest = test
             input,
             metadata,
             run,
+            signal,
           );
         }
 
@@ -388,6 +396,7 @@ async function applyAutomaticJudges<
   input: TInput,
   metadata: TMetadata,
   run: HarnessRun,
+  signal?: AbortSignal,
 ) {
   const output = formatJudgeTextOutput(run);
   const runToolCalls = toolCalls(run.session);
@@ -401,6 +410,7 @@ async function applyAutomaticJudges<
         metadata,
         run,
         session: run.session,
+        signal,
         harness,
       } as JudgeContext<TInput, TMetadata, THarness>;
 
@@ -454,12 +464,14 @@ function recordJudgeRunContext<TInput, TMetadata extends HarnessMetadata>(
   harness: Harness<TInput, TMetadata>,
   inputValue: TInput,
   metadata: TMetadata,
+  signal?: AbortSignal,
 ) {
   const context = {
     harness,
     inputValue,
     metadata,
     run,
+    signal,
   };
 
   recordJudgeRunContextObject(run, context);
@@ -570,6 +582,7 @@ function buildJudgeAssertionOptions<
     task,
   );
   const harness = options.harness ?? registeredContext?.harness;
+  const signal = options.signal ?? registeredContext?.signal;
   const metadata = (options.metadata ??
     registeredContext?.metadata ??
     {}) as JudgeAssertionMetadata<TJudgeOptions>;
@@ -608,6 +621,7 @@ function buildJudgeAssertionOptions<
     metadata,
     run,
     session: options.session ?? run.session,
+    signal,
     toolCalls: options.toolCalls ?? toolCalls(run.session),
     harness,
   } as unknown as TJudgeOptions;
@@ -880,4 +894,5 @@ export type {
   JudgeFn,
   JudgeOptions,
   JudgeResult,
+  QueryableJudgeContext,
 } from "./judges/types";

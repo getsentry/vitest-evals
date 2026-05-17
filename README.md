@@ -174,8 +174,8 @@ Harness-backed suites stay close to plain Vitest:
 - tests call `run(...)` explicitly
 - ordinary `expect(...)` assertions stay first-class
 - judges layer in through `expect(...).toSatisfyJudge(...)`
-- every judge receives `JudgeContext` with the normalized run and harness
-  context
+- every judge receives `JudgeContext` with the normalized run, harness context,
+  and run abort signal when available
 - harnesses may expose a real `query(...)` helper for judges that should reuse
   the same provider library or credentials without running the app agent
 - scenario-specific judge criteria can live in `inputValue`; use `metadata` for

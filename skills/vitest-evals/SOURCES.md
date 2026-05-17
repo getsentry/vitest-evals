@@ -24,7 +24,7 @@
 | `packages/vitest-evals/src/judges/*` | high | high | judge context, built-in judge options, metadata behavior | Keep examples judge-first. |
 | `packages/vitest-evals/src/replay.ts` | high | high | replay modes, env vars, recording shape, cache key behavior | Use for shared replay guidance. |
 | `packages/harness-ai-sdk/README.md` and `src/index.ts` | high | high | AI SDK harness options, normalization, replay constraints | Keep option names exact. |
-| `packages/harness-ai-sdk/src/index.test.ts` | high | high | edge cases for agent/task entrypoints, partial runs, output and tool normalization, replay errors | Use as failure/workaround evidence. |
+| `packages/harness-ai-sdk/src/index.test.ts` | high | high | edge cases for agent/run entrypoints, partial runs, output and tool normalization, replay errors | Use as failure/workaround evidence. |
 | `packages/harness-pi-ai/README.md` and `src/index.ts` | high | high | Pi harness options, tool inference, event sink, normalization, replay | Keep option names exact. |
 | `packages/harness-pi-ai/src/index.test.ts` | high | high | edge cases for native tools, reset, inferred tools, normalize overrides, partial runs, replay | Use as failure/workaround evidence. |
 | `apps/demo-ai-sdk/evals/*` and `apps/demo-ai-sdk/evals/shared.ts` | medium | high | realistic AI SDK suite shape and output parsing | Treat provider keys as app-local setup. |

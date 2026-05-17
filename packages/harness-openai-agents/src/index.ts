@@ -277,7 +277,7 @@ export interface OpenAiAgentsHarnessNormalizeOptions<
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
 }
 
-export interface OpenAiAgentsHarnessOptions<
+type OpenAiAgentsHarnessBaseOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -289,35 +289,8 @@ export interface OpenAiAgentsHarnessOptions<
   >,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
-> {
-  agent?: AgentSource<TAgent, TInput, TMetadata>;
-  createAgent?: (
-    args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
-  ) => MaybePromise<TAgent>;
-  runner?: RunnerSource<TAgent, TInput, TMetadata, TRunner, TResult, TContext>;
-  createRunner?: (
-    args: Omit<
-      OpenAiAgentsHarnessRunArgs<
-        TAgent,
-        TInput,
-        TMetadata,
-        TRunner,
-        TResult,
-        TContext
-      >,
-      "runner"
-    >,
-  ) => MaybePromise<TRunner>;
-  run?: (
-    args: OpenAiAgentsHarnessRunArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<TResult | HarnessRun>;
+> = {
+  agent: AgentSource<TAgent, TInput, TMetadata>;
   runOptions?:
     | OpenAiAgentsRunOptions<TContext>
     | ((
@@ -344,7 +317,84 @@ export interface OpenAiAgentsHarnessOptions<
   >;
   name?: string;
   query?: HarnessQuery;
-}
+};
+
+type OpenAiAgentsRunFn<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TRunner,
+  TResult,
+  TContext,
+> = (
+  args: OpenAiAgentsHarnessRunArgs<
+    TAgent,
+    TInput,
+    TMetadata,
+    TRunner,
+    TResult,
+    TContext
+  >,
+) => MaybePromise<TResult | HarnessRun>;
+
+export type OpenAiAgentsHarnessOptions<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TRunner = OpenAiAgentsRunner<
+    TAgent,
+    TInput,
+    OpenAiAgentsRuntimeContext<TMetadata>,
+    unknown
+  >,
+  TResult = unknown,
+  TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+> = OpenAiAgentsHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TRunner,
+  TResult,
+  TContext
+> &
+  (
+    | {
+        runner: RunnerSource<
+          TAgent,
+          TInput,
+          TMetadata,
+          TRunner,
+          TResult,
+          TContext
+        >;
+        run?: OpenAiAgentsRunFn<
+          TAgent,
+          TInput,
+          TMetadata,
+          TRunner,
+          TResult,
+          TContext
+        >;
+      }
+    | {
+        run: OpenAiAgentsRunFn<
+          TAgent,
+          TInput,
+          TMetadata,
+          TRunner,
+          TResult,
+          TContext
+        >;
+        runner?: RunnerSource<
+          TAgent,
+          TInput,
+          TMetadata,
+          TRunner,
+          TResult,
+          TContext
+        >;
+      }
+  );
 
 type RuntimeToolCapture = {
   calls: ToolCallRecord[];
@@ -626,30 +676,15 @@ function validateOptions<
     TContext
   >,
 ) {
-  const hasAgent = options.agent !== undefined;
-  const hasCreateAgent = typeof options.createAgent === "function";
-
-  if (hasAgent && hasCreateAgent) {
+  if (options.agent === undefined) {
     throw new Error(
-      "openaiAgentsHarness accepts either agent or createAgent(), not both.",
+      "openaiAgentsHarness requires agent. Pass an agent instance or an agent factory.",
     );
   }
 
-  if (!hasAgent && !hasCreateAgent) {
+  if (!options.run && !options.runner) {
     throw new Error(
-      "openaiAgentsHarness requires either an agent instance or createAgent().",
-    );
-  }
-
-  if (options.runner && options.createRunner) {
-    throw new Error(
-      "openaiAgentsHarness accepts either runner or createRunner(), not both.",
-    );
-  }
-
-  if (!options.run && !options.runner && !options.createRunner) {
-    throw new Error(
-      "openaiAgentsHarness requires runner/createRunner for Runner.run(agent, input, options), or run() for a custom entrypoint.",
+      "openaiAgentsHarness requires runner for Runner.run(agent, input, options), or run() for a custom entrypoint.",
     );
   }
 }
@@ -672,17 +707,7 @@ async function resolveAgent<
   >,
   args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
 ) {
-  if (options.agent !== undefined) {
-    return resolveAgentSource(options.agent, args);
-  }
-
-  if (options.createAgent) {
-    return options.createAgent(args);
-  }
-
-  throw new Error(
-    "openaiAgentsHarness requires either an agent instance or createAgent().",
-  );
+  return resolveAgentSource(options.agent, args);
 }
 
 async function resolveAgentSource<
@@ -736,10 +761,6 @@ async function resolveRunner<
     "runner"
   >,
 ) {
-  if (options.createRunner) {
-    return options.createRunner(args);
-  }
-
   if (options.runner !== undefined) {
     return resolveRunnerSource(options.runner, args);
   }
@@ -879,7 +900,7 @@ async function runAgent<
   }
 
   throw new Error(
-    "openaiAgentsHarness requires runner/createRunner for the default Runner.run path, or run() for a custom entrypoint.",
+    "openaiAgentsHarness requires runner for the default Runner.run path, or run() for a custom entrypoint.",
   );
 }
 

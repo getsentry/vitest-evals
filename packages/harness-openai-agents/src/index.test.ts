@@ -231,7 +231,7 @@ describeEval(
 
 test("supports custom app output mapping", async () => {
   const harness = openaiAgentsHarness({
-    createAgent: () => ({
+    agent: () => ({
       name: "classifier",
       model: "gpt-4.1-mini",
     }),
@@ -277,13 +277,13 @@ test("supports custom app output mapping", async () => {
   });
 });
 
-test("passes run input and context to createAgent before tool instrumentation", async () => {
+test("passes run input and context to agent factory before tool instrumentation", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-openai-agents-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
   vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
 
   let createdTool: OpenAiAgentsTool<string, DemoMetadata> | undefined;
-  const createAgent = vi.fn(
+  const agentFactory = vi.fn(
     ({
       input,
       context,
@@ -338,7 +338,7 @@ test("passes run input and context to createAgent before tool instrumentation", 
     }),
   };
   const harness = openaiAgentsHarness({
-    createAgent,
+    agent: agentFactory,
     runner,
     toolReplay: {
       lookupBottle: true,
@@ -352,7 +352,7 @@ test("passes run input and context to createAgent before tool instrumentation", 
     }),
   );
 
-  expect(createAgent).toHaveBeenCalledWith(
+  expect(agentFactory).toHaveBeenCalledWith(
     expect.objectContaining({
       input: "Classify bottle bt_123",
       context: expect.objectContaining({

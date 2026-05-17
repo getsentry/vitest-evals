@@ -20,7 +20,6 @@ const harness = piAiHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  query: queryRefundModel,
 });
 
 describeEval("refund agent", { harness }, (it) => {
@@ -41,6 +40,17 @@ describeEval("refund agent", { harness }, (it) => {
 `run` executes the Pi agent under test. `query` is optional and exists only
 when judges should reuse the same provider setup or credentials for a separate
 judge-model call; it must not call the Pi agent under test or expose its tools.
+
+```ts
+const harness = piAiHarness({
+  agent: () => createRefundAgent(),
+  query: (input, options) =>
+    queryRefundJudgeModel(input, {
+      system: options?.system,
+      signal: options?.signal,
+    }),
+});
+```
 
 If the agent already exposes its own tools, the adapter will infer them from
 the agent by default. If your existing Pi Mono agent already exposes its own
@@ -76,9 +86,6 @@ const harness = piAiHarness({
   },
 });
 ```
-
-The older `createAgent({ input, context })` spelling still works for existing
-tests.
 
 You should not need to configure output/session/usage basics for the normal Pi
 path. Pass your agent and let the adapter infer both the toolset and the

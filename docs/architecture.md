@@ -78,11 +78,11 @@ These are judge-shaped adapters over the legacy comparison logic so new suites
 can stay on the harness-first surface while older matching behavior remains
 available.
 
-All judges receive `JudgeContext`, which carries normalized run/session data
-plus the configured `harness`. LLM-backed judges own their prompt and rubric
-text. When a harness is configured with `query(...)`, judges can reuse that
-separate judge-model helper for shared provider setup or credentials without
-running the system under test.
+All judges receive `JudgeContext`, which carries normalized run/session data,
+the configured `harness`, and the run abort signal when Vitest provides one.
+LLM-backed judges own their prompt and rubric text. When a harness is
+configured with `query(...)`, judges can reuse that separate judge-model helper
+for shared provider setup or credentials without running the system under test.
 
 ### `packages/vitest-evals/src/legacy/*`
 

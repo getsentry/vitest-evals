@@ -135,6 +135,10 @@ package should focus on:
 - returning a normalized `HarnessRun`
 - exposing narrow escape hatches like `run` and grouped `normalize` hooks
 
+Follow [API design policy](../policies/api-design.md): prefer one public
+spelling per concept, value-or-factory inputs for lifecycle choices, and strong
+types for optional capabilities such as queryable harnesses.
+
 Do not push core reporter or assertion behavior into a harness package unless
 the runtime truly requires it.
 

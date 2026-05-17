@@ -15,4 +15,5 @@ export type {
   JudgeFn,
   JudgeOptions,
   JudgeResult,
+  QueryableJudgeContext,
 } from "./types";

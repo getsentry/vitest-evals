@@ -38,8 +38,8 @@ npm install -D @vitest-evals/github-reporter
   scenario payload
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
-- every judge receives `JudgeContext` with the normalized run and harness
-  context
+- every judge receives `JudgeContext` with the normalized run, harness context,
+  and run abort signal when available
 - harnesses may expose a real `query(...)` helper for judges that should reuse
   the same provider library or credentials without running the app agent
 - explicit judge assertions use
@@ -202,7 +202,7 @@ import {
   createHarness,
   describeEval,
   namedJudge,
-  type JudgeContext,
+  type QueryableJudgeContext,
 } from "vitest-evals";
 
 type AppEvent = {
@@ -241,9 +241,7 @@ const appHarness = createHarness<AppEvalInput>({
 
 const AppRubricJudge = namedJudge(
   "AppRubricJudge",
-  async (
-    ctx: JudgeContext<AppEvalInput, Record<string, unknown>, typeof appHarness>,
-  ) => {
+  async (ctx: QueryableJudgeContext<AppEvalInput>) => {
     const verdict = await ctx.harness.query(
       formatRubricPrompt({
         output: ctx.output,
@@ -253,6 +251,7 @@ const AppRubricJudge = namedJudge(
         metadata: {
           judge: "AppRubricJudge",
         },
+        signal: ctx.signal,
       },
     );
 
@@ -373,7 +372,8 @@ manually-created runs or values outside an eval context, pass any required
 `inputValue`, `metadata`, or `harness` in matcher options. Structured or
 programmatic result checks should usually assert on `result.output` directly.
 When a judge needs richer normalized context or the configured suite harness,
-type it with `JudgeContext`.
+type it with `JudgeContext`; use `QueryableJudgeContext` when the judge calls
+`ctx.harness.query(...)`.
 
 When you only need deterministic contract checks, built-ins such as
 `StructuredOutputJudge()` and `ToolCallJudge()` are still available. The primary

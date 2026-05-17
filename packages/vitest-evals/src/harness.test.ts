@@ -347,6 +347,7 @@ describeEval(
               status: "approved",
             },
           }),
+          signal: expect.any(AbortSignal),
         }),
       );
       expect(task.meta.eval).toEqual({
@@ -372,9 +373,10 @@ describeEval(
   {
     harness: queryableHarness,
     judges: [
-      async ({ harness: configuredHarness }) => {
+      async ({ harness: configuredHarness, signal }) => {
         const assessment = await configuredHarness.query("score refund", {
           system: "Judge whether the refund output is correct.",
+          signal,
         });
 
         return {
@@ -394,6 +396,7 @@ describeEval(
 
       expect(querySpy).toHaveBeenCalledWith("score refund", {
         system: "Judge whether the refund output is correct.",
+        signal: expect.any(AbortSignal),
       });
     });
   },
@@ -498,6 +501,7 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
           expectedStatus: "approved",
           name: "refund request with explicit judge matcher",
         },
+        signal: expect.any(AbortSignal),
       }),
     );
     expect(task.meta.eval).toEqual({

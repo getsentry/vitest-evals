@@ -181,7 +181,7 @@ describeEval(
   "ai-sdk harness adapter",
   {
     harness: aiSdkHarness({
-      task: async () => ({
+      run: async () => ({
         ...generateTextLikeResult,
         object: {
           status: "approved",
@@ -534,7 +534,7 @@ test("groups normalization hooks under normalize", async () => {
   expect(result.usage.totalTokens).toBe(11);
 });
 
-test("attaches partial runtime tool calls when a task errors", async () => {
+test("attaches partial runtime tool calls when custom run errors", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
     invoiceId,
     refundable: true,
@@ -548,7 +548,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",
@@ -613,7 +613,7 @@ test("attaches partial runtime tool calls when a task errors", async () => {
   ]);
 });
 
-test("omits empty runtime tool error content when a task errors", async () => {
+test("omits empty runtime tool error content when custom run errors", async () => {
   const harness = aiSdkHarness({
     tools: {
       lookupInvoice: {
@@ -628,7 +628,7 @@ test("omits empty runtime tool error content when a task errors", async () => {
         },
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",
@@ -693,7 +693,7 @@ test("preserves explicit null runtime tool results", async () => {
         execute: async () => null,
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",
@@ -759,7 +759,7 @@ test("preserves explicit null runtime tool results", async () => {
 
 test("marks step-derived tool messages as errors when the tool call failed", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       text: "done",
       steps: [
         {
@@ -878,7 +878,7 @@ test("keeps runtime-only tool calls when SDK steps are also present", async () =
         execute,
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_prefetch",
@@ -983,23 +983,23 @@ test("creates a fresh agent for each explicit run", async () => {
       status: "approved",
     },
   }));
-  const createAgent = vi.fn(() => ({
+  const agentFactory = vi.fn(() => ({
     run,
   }));
   const harness = aiSdkHarness({
-    agent: createAgent,
+    agent: agentFactory,
   });
   const context = createHarnessContext({});
 
   await harness.run("Refund invoice inv_123", context);
   await harness.run("Refund invoice inv_123", context);
 
-  expect(createAgent).toHaveBeenCalledTimes(2);
+  expect(agentFactory).toHaveBeenCalledTimes(2);
   expect(run).toHaveBeenCalledTimes(2);
 });
 
 test("passes run input and context to agent factories", async () => {
-  const createAgent = vi.fn(
+  const agentFactory = vi.fn(
     ({
       input,
       context,
@@ -1023,7 +1023,7 @@ test("passes run input and context to agent factories", async () => {
     },
   );
   const harness = aiSdkHarness({
-    agent: createAgent,
+    agent: agentFactory,
   });
   const context = createHarnessContext({
     scenario: "refund",
@@ -1031,7 +1031,7 @@ test("passes run input and context to agent factories", async () => {
 
   const result = await harness.run("Refund invoice inv_123", context);
 
-  expect(createAgent).toHaveBeenCalledWith(
+  expect(agentFactory).toHaveBeenCalledWith(
     expect.objectContaining({
       input: "Refund invoice inv_123",
       context: expect.objectContaining({
@@ -1087,7 +1087,7 @@ test("normalizes domain results that resemble harness runs", async () => {
     }),
   );
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       session: {
         messages: [],
       },
@@ -1099,8 +1099,10 @@ test("normalizes domain results that resemble harness runs", async () => {
         status: "approved",
       },
     }),
-    output,
-    session,
+    normalize: {
+      output,
+      session,
+    },
   });
 
   const run = await harness.run(
@@ -1130,7 +1132,7 @@ test("normalizes domain results that resemble harness runs", async () => {
 
 test("aggregates per-step usage when total usage is missing", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       text: "approved",
       steps: [
         {
@@ -1213,7 +1215,7 @@ test("aggregates per-step usage when total usage is missing", async () => {
 
 test("normalizes arrays and empty objects without dropping positions", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       object: {
         values: [1, undefined, { skipped: undefined }, 3],
         empty: {},
@@ -1301,7 +1303,7 @@ test("normalizes arrays and empty objects without dropping positions", async () 
 
 test("preserves empty root tool arguments and omits zero tool usage", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       steps: [
         {
           stepNumber: 0,
@@ -1367,7 +1369,7 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
   expect(toolCalls(run.session)[0].arguments).toEqual({});
 
   const noToolHarness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       steps: [
         {
           stepNumber: 0,
@@ -1400,7 +1402,7 @@ test("preserves empty root tool arguments and omits zero tool usage", async () =
 
 test("uses invalid tool call details as the normalized error", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       steps: [
         {
           stepNumber: 0,
@@ -1459,7 +1461,7 @@ test("uses invalid tool call details as the normalized error", async () => {
 
 test("omits undefined step-normalized arguments and results", async () => {
   const harness = aiSdkHarness({
-    task: async () => ({
+    run: async () => ({
       steps: [
         {
           stepNumber: 0,
@@ -1537,7 +1539,7 @@ test("records and replays opt-in tools in auto mode", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       const lookupInvoice = runtime.tools.lookupInvoice;
       const toolInput = {
         invoiceId: "inv_123",
@@ -1682,7 +1684,7 @@ test("does not opt into replay from tool definitions", async () => {
         execute,
       },
     } as unknown as AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",
@@ -1729,7 +1731,7 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
         execute: vi.fn(async () => streamOutput()),
       },
     } as unknown as AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.streamRefund.execute?.(
         {
           invoiceId: "inv_123",
@@ -1776,7 +1778,7 @@ test("errors when strict mode is missing a recording", async () => {
         execute,
       },
     } satisfies AiSdkToolset<string, DemoMetadata>,
-    task: async ({ runtime }) => {
+    run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
           invoiceId: "inv_123",

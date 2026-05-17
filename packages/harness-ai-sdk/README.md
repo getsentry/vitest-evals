@@ -29,12 +29,6 @@ const harness = aiSdkHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  query: (input, options) =>
-    generateText({
-      model: openai("gpt-4o-mini"),
-      system: options?.system,
-      prompt: input,
-    }).then((result) => result.text),
   run: ({ input, runtime }) =>
     generateText({
       model: openai("gpt-4o-mini"),
@@ -86,6 +80,25 @@ const harness = aiSdkHarness({
 `run` executes the system under test. `query` is optional and exists only when
 judges should reuse the same AI SDK provider setup or credentials for a
 separate judge-model call; it does not receive the app tools or runtime.
+
+```ts
+const harness = aiSdkHarness({
+  tools,
+  run: ({ input, runtime }) =>
+    generateText({
+      model: openai("gpt-4o-mini"),
+      prompt: input,
+      tools: runtime.tools,
+    }),
+  query: (input, options) =>
+    generateText({
+      model: openai("gpt-4o-mini"),
+      system: options?.system,
+      prompt: input,
+      abortSignal: options?.signal,
+    }).then((result) => result.text),
+});
+```
 
 The adapter infers:
 

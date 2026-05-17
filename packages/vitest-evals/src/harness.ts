@@ -67,6 +67,7 @@ export type HarnessRun = {
 export type HarnessQueryOptions = {
   system?: string;
   metadata?: Record<string, JsonValue>;
+  signal?: AbortSignal;
 };
 
 /** Provider-agnostic model query function that judges can reuse from a harness. */
