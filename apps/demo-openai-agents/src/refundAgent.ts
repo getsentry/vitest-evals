@@ -164,6 +164,7 @@ export async function queryRefundModel(
   });
   const result = await runner.run(agent, input, {
     maxTurns: 2,
+    signal: options?.signal,
   });
   const outputText = resolveResultText(result);
 

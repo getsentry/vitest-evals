@@ -118,6 +118,7 @@ export const refundHarness = aiSdkHarness({
       model: anthropic("claude-sonnet-4-5"),
       system: options?.system,
       prompt: input,
+      abortSignal: options?.signal,
       temperature: 0,
     }).then((result) => result.text),
   run: async ({ input, runtime }) =>
