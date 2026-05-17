@@ -1,0 +1,171 @@
+name: GitHub Reporter Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/github-reporter-smoke.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/github-reporter/**"
+  pull_request:
+    paths:
+      - ".github/workflows/github-reporter-smoke.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/github-reporter/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke test GitHub reporter CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      # pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        name: Install pnpm
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build reporter
+        run: pnpm --filter @vitest-evals/github-reporter run build
+
+      - name: Create fake Vitest JSON report
+        run: |
+          mkdir -p tmp/github-reporter-smoke
+          cat > tmp/github-reporter-smoke/vitest-results.json <<JSON
+          {
+            "numFailedTests": 1,
+            "numPassedTests": 0,
+            "numPendingTests": 0,
+            "numTodoTests": 0,
+            "numTotalTests": 1,
+            "startTime": 1000,
+            "success": false,
+            "testResults": [
+              {
+                "name": "$GITHUB_WORKSPACE/apps/demo/evals/smoke.eval.ts",
+                "status": "failed",
+                "message": "",
+                "startTime": 1000,
+                "endTime": 2500,
+                "assertionResults": [
+                  {
+                    "ancestorTitles": ["smoke eval"],
+                    "fullName": "smoke eval reports a failed judge",
+                    "title": "reports a failed judge",
+                    "status": "failed",
+                    "duration": 1500,
+                    "failureMessages": ["Score: 0.10 below threshold: 1.00"],
+                    "location": {
+                      "line": 12,
+                      "column": 5
+                    },
+                    "tags": [],
+                    "meta": {
+                      "eval": {
+                        "avgScore": 0.1,
+                        "thresholdFailed": true,
+                        "output": {
+                          "status": "denied"
+                        },
+                        "scores": [
+                          {
+                            "name": "SmokeJudge",
+                            "score": 0.1,
+                            "metadata": {
+                              "rationale": "expected approved but got denied"
+                            }
+                          }
+                        ]
+                      },
+                      "harness": {
+                        "name": "smoke-harness",
+                        "run": {
+                          "output": {
+                            "status": "denied"
+                          },
+                          "usage": {
+                            "totalTokens": 42,
+                            "toolCalls": 1
+                          },
+                          "timings": {
+                            "totalMs": 1200
+                          },
+                          "session": {
+                            "messages": [
+                              {
+                                "role": "assistant",
+                                "toolCalls": [
+                                  {
+                                    "name": "lookupInvoice",
+                                    "durationMs": 7
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          "errors": []
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+
+      - name: Run and assert reporter in GitHub Actions mode
+        run: |
+          set -euo pipefail
+          node packages/github-reporter/dist/cli.js \
+            tmp/github-reporter-smoke/vitest-results.json \
+            --annotations \
+            --check-run \
+            --repo getsentry/vitest-evals \
+            --sha "$GITHUB_SHA" \
+            --workspace "$GITHUB_WORKSPACE" \
+            > tmp/github-reporter-smoke/stdout.txt \
+            2> tmp/github-reporter-smoke/stderr.txt
+
+          grep -F "## vitest-evals" "$GITHUB_STEP_SUMMARY"
+          grep -F "Status: failed" "$GITHUB_STEP_SUMMARY"
+          grep -F "Score: avg 0.10, min 0.10" "$GITHUB_STEP_SUMMARY"
+          grep -F "Usage: 42 tokens, 1 tool" "$GITHUB_STEP_SUMMARY"
+          grep -F "smoke eval > reports a failed judge" "$GITHUB_STEP_SUMMARY"
+          grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::smoke eval > reports a failed judge - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
+          grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt
+          if grep -F "::warning::" tmp/github-reporter-smoke/stderr.txt; then
+            echo "warning workflow command was emitted on stderr"
+            exit 1
+          fi
