@@ -105,6 +105,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vitest-evals
 
+  packages/github-reporter:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(vite@7.0.6(@types/node@25.5.0)(yaml@2.8.0))
+
   packages/harness-ai-sdk:
     devDependencies:
       ai:
@@ -607,10 +613,12 @@ packages:
   '@mariozechner/pi-agent-core@0.67.68':
     resolution: {integrity: sha512-anwFuzeUL7Qjbyih4DWY7w1zrOTrBxaz1L6+duLUuuzpHOun0EiP4KWIGTXPT5oJA7ZaeRNTyXJ7PlWfGQG33g==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-agent-core instead going forward
 
   '@mariozechner/pi-ai@0.67.68':
     resolution: {integrity: sha512-DWWQmcb3IV3mbGXmzYBScfKA6kA52n/stY029eiBikrIxVT7DGLG6n7KSvTA2R4qBSgi1iFL3nGHtwxmtIn6Lg==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-ai instead going forward
     hasBin: true
 
   '@mistralai/mistralai@2.2.0':

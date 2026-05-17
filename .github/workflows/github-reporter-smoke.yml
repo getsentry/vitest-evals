@@ -1,0 +1,335 @@
+name: GitHub Reporter Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/github-reporter-smoke.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/github-reporter/**"
+  pull_request:
+    paths:
+      - ".github/workflows/github-reporter-smoke.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "packages/github-reporter/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke test GitHub reporter CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      # pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        name: Install pnpm
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build reporter
+        run: pnpm --filter @vitest-evals/github-reporter run build
+
+      - name: Create fake Vitest JSON report
+        run: |
+          mkdir -p tmp/github-reporter-smoke
+          node <<'NODE'
+          const { writeFileSync } = require("node:fs");
+
+          const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
+          const file = `${workspace}/apps/demo/evals/smoke.eval.ts`;
+          const cases = [
+            {
+              title: "rejects fraud",
+              status: "failed",
+              line: 12,
+              duration: 1500,
+              score: 0.1,
+              judge: "SmokeJudge",
+              rationale: "expected approved but got denied",
+              output: { status: "denied" },
+              usage: { totalTokens: 42, toolCalls: 1, estimatedCost: 0.0011 },
+              timingMs: 1200,
+              toolCalls: [{ name: "lookupInvoice", durationMs: 7 }],
+            },
+            {
+              title: "returns wrong refund amount",
+              status: "failed",
+              line: 28,
+              duration: 900,
+              score: 0.35,
+              judge: "AmountJudge",
+              rationale: "expected amount=5000, got amount=499",
+              output: { status: "approved", amount: 499 },
+              usage: { totalTokens: 120, toolCalls: 2, estimatedCost: 0.0042 },
+              timingMs: 1800,
+              toolCalls: [
+                { name: "lookupInvoice", durationMs: 9 },
+                {
+                  name: "createRefund",
+                  durationMs: 31,
+                  error: { message: "amount mismatch" },
+                },
+              ],
+              errors: [{ message: "refund ledger rejected amount" }],
+              extraScores: [{ name: "JsonShapeJudge", score: 1 }],
+            },
+            {
+              title: "flags missing receipt",
+              status: "passed",
+              line: 44,
+              duration: 320,
+              score: 0.22,
+              judge: "PolicyJudge",
+              output: { status: "needs_review" },
+              usage: { totalTokens: 80, estimatedCost: 0.0018 },
+              timingMs: 610,
+            },
+            {
+              title: "keeps customer tone",
+              status: "passed",
+              line: 61,
+              duration: 480,
+              score: 0.45,
+              judge: "ToneJudge",
+              output: { tone: "calm" },
+              usage: { totalTokens: 95, toolCalls: 1, estimatedCost: 0.002 },
+              timingMs: 740,
+              toolCalls: [{ name: "loadCustomer", durationMs: 11 }],
+            },
+            {
+              title: "explains partial refund",
+              status: "passed",
+              line: 78,
+              duration: 510,
+              score: 0.58,
+              judge: "ExplanationJudge",
+              output: { status: "approved", amount: 2500 },
+              usage: { totalTokens: 110, estimatedCost: 0.0024 },
+              timingMs: 860,
+            },
+            {
+              title: "asks for clarification",
+              status: "passed",
+              line: 95,
+              duration: 430,
+              score: 0.62,
+              judge: "ClarificationJudge",
+              output: { status: "needs_more_info" },
+              usage: { totalTokens: 130, toolCalls: 1, estimatedCost: 0.003 },
+              timingMs: 920,
+              toolCalls: [{ name: "readPolicy", durationMs: 5 }],
+            },
+            {
+              title: "uses order lookup",
+              status: "passed",
+              line: 112,
+              duration: 700,
+              score: 0.74,
+              judge: "ToolUseJudge",
+              output: { status: "approved", amount: 1800 },
+              usage: { totalTokens: 155, toolCalls: 2, estimatedCost: 0.0037 },
+              timingMs: 1100,
+              toolCalls: [
+                { name: "lookupOrder", durationMs: 8 },
+                { name: "lookupPayment", durationMs: 14 },
+              ],
+            },
+            {
+              title: "approves standard refund",
+              status: "passed",
+              line: 129,
+              duration: 360,
+              score: 0.86,
+              judge: "RefundJudge",
+              output: { status: "approved", amount: 1200 },
+              usage: { totalTokens: 170, toolCalls: 1, estimatedCost: 0.004 },
+              timingMs: 990,
+              toolCalls: [{ name: "createRefund", durationMs: 22 }],
+            },
+            {
+              title: "denies expired claim",
+              status: "passed",
+              line: 146,
+              duration: 390,
+              score: 0.95,
+              judge: "PolicyJudge",
+              output: { status: "denied" },
+              usage: { totalTokens: 190, toolCalls: 1, estimatedCost: 0.0045 },
+              timingMs: 1040,
+              toolCalls: [{ name: "readPolicy", durationMs: 6 }],
+            },
+            {
+              title: "handles duplicate request",
+              status: "passed",
+              line: 163,
+              duration: 410,
+              score: 1,
+              judge: "DuplicateJudge",
+              output: { status: "denied", reason: "duplicate" },
+              usage: { totalTokens: 210, estimatedCost: 0.005 },
+              timingMs: 1150,
+            },
+          ];
+
+          const assertionResults = cases.map((testCase) => ({
+            ancestorTitles: ["refund eval"],
+            fullName: `refund eval ${testCase.title}`,
+            title: testCase.title,
+            status: testCase.status,
+            duration: testCase.duration,
+            failureMessages:
+              testCase.status === "failed"
+                ? [`Score: ${testCase.score.toFixed(2)} below threshold: 1.00`]
+                : [],
+            location: {
+              line: testCase.line,
+              column: 5,
+            },
+            tags: [],
+            meta: {
+              eval: {
+                avgScore: testCase.score,
+                thresholdFailed: testCase.status === "failed",
+                output: testCase.output,
+                scores: [
+                  {
+                    name: testCase.judge,
+                    score: testCase.score,
+                    metadata: testCase.rationale
+                      ? { rationale: testCase.rationale }
+                      : undefined,
+                  },
+                  ...(testCase.extraScores ?? []),
+                ],
+              },
+              harness: {
+                name: "smoke-harness",
+                run: {
+                  output: testCase.output,
+                  usage: testCase.usage,
+                  timings: {
+                    totalMs: testCase.timingMs,
+                  },
+                  session: {
+                    messages: [
+                      {
+                        role: "assistant",
+                        toolCalls: testCase.toolCalls ?? [],
+                      },
+                    ],
+                  },
+                  errors: testCase.errors ?? [],
+                },
+              },
+            },
+          }));
+          const failedCount = cases.filter(
+            (testCase) => testCase.status === "failed",
+          ).length;
+          const passedCount = cases.length - failedCount;
+
+          const report = {
+            numFailedTests: failedCount,
+            numPassedTests: passedCount,
+            numPendingTests: 0,
+            numTodoTests: 0,
+            numTotalTests: cases.length,
+            startTime: 1000,
+            success: false,
+            testResults: [
+              {
+                name: file,
+                status: "failed",
+                message: "",
+                startTime: 1000,
+                endTime: 8000,
+                assertionResults,
+              },
+            ],
+          };
+
+          writeFileSync(
+            "tmp/github-reporter-smoke/vitest-results.json",
+            `${JSON.stringify(report, null, 2)}\n`,
+          );
+          NODE
+
+      - name: Run and assert reporter in GitHub Actions mode
+        run: |
+          set -euo pipefail
+          node packages/github-reporter/dist/cli.js \
+            tmp/github-reporter-smoke/vitest-results.json \
+            --annotations \
+            --check-run \
+            --repo getsentry/vitest-evals \
+            --sha "$GITHUB_SHA" \
+            --workspace "$GITHUB_WORKSPACE" \
+            > tmp/github-reporter-smoke/stdout.txt \
+            2> tmp/github-reporter-smoke/stderr.txt
+
+          grep -F "# vitest-evals" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Metric | Value |" "$GITHUB_STEP_SUMMARY"
+          grep -F "Score distribution" "$GITHUB_STEP_SUMMARY"
+          grep -F "0-19%   | #######              1" "$GITHUB_STEP_SUMMARY"
+          grep -F "20-39%  | #############        2" "$GITHUB_STEP_SUMMARY"
+          grep -F "40-59%  | #############        2" "$GITHUB_STEP_SUMMARY"
+          grep -F "60-79%  | #############        2" "$GITHUB_STEP_SUMMARY"
+          grep -F "80-100% | #################### 3" "$GITHUB_STEP_SUMMARY"
+          grep -F "## Results" "$GITHUB_STEP_SUMMARY"
+          grep -F "### Failures" "$GITHUB_STEP_SUMMARY"
+          grep -F "refund eval &gt; rejects fraud" "$GITHUB_STEP_SUMMARY"
+          grep -F "refund eval &gt; returns wrong refund amount" "$GITHUB_STEP_SUMMARY"
+          grep -F "Result" "$GITHUB_STEP_SUMMARY"
+          grep -F "Reason" "$GITHUB_STEP_SUMMARY"
+          grep -F "expected approved but got denied" "$GITHUB_STEP_SUMMARY"
+          grep -F "expected amount=5000, got amount=499" "$GITHUB_STEP_SUMMARY"
+          grep -F "Judge       Score" "$GITHUB_STEP_SUMMARY"
+          grep -F "SmokeJudge  0.10" "$GITHUB_STEP_SUMMARY"
+          grep -F "AmountJudge     0.35" "$GITHUB_STEP_SUMMARY"
+          grep -F "Harness Errors" "$GITHUB_STEP_SUMMARY"
+          grep -F "refund ledger rejected amount" "$GITHUB_STEP_SUMMARY"
+          grep -F "Final Output" "$GITHUB_STEP_SUMMARY"
+          grep -F "Tool           Status  Duration" "$GITHUB_STEP_SUMMARY"
+          grep -F "lookupInvoice  ok      7ms" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Status | failed |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Tests | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"
+          grep -F '| Usage | 1,302 tokens, 9 tools, $0.0317 |' "$GITHUB_STEP_SUMMARY"
+          grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
+          grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=28,col=5,title=vitest-evals::refund eval > returns wrong refund amount - score 0.35 - AmountJudge - expected amount=5000, got amount=499" tmp/github-reporter-smoke/stdout.txt
+          grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt
+          if grep -F "::warning::" tmp/github-reporter-smoke/stderr.txt; then
+            echo "warning workflow command was emitted on stderr"
+            exit 1
+          fi

@@ -18,6 +18,12 @@ npm install -D @vitest-evals/harness-ai-sdk
 npm install -D @vitest-evals/harness-openai-agents
 ```
 
+For GitHub Actions summaries and annotations, install the JSON post-processor:
+
+```sh
+npm install -D @vitest-evals/github-reporter
+```
+
 ## Core Model
 
 - `describeEval(...)` binds exactly one harness to a suite
@@ -134,6 +140,24 @@ describeEval("refund agent", { harness }, (it) => {
   });
 });
 ```
+
+## GitHub Actions Reporting
+
+Use Vitest JSON as the eval report artifact. It preserves the `meta` field that
+contains eval scores and normalized harness runs.
+
+```sh
+vitest run evals \
+  --reporter=vitest-evals/reporter \
+  --reporter=json \
+  --outputFile.json=vitest-results.json
+
+vitest-evals-github-report
+```
+
+The GitHub reporter writes a job summary when `GITHUB_STEP_SUMMARY` is present,
+emits short failure annotations in Actions, and can publish a separate Check Run
+with `--check-run` when `checks: write` permission is configured.
 
 ## Existing Agents
 

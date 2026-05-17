@@ -33,6 +33,7 @@ When changing behavior, decide first which surface you are touching:
 
 - root harness/judge API
 - reporter output
+- GitHub JSON post-processing output
 - a first-party harness package
 - legacy scorer compatibility
 
@@ -80,6 +81,19 @@ Owns:
 - adapting `pi-ai` style agents into `HarnessRun`
 - wrapped tool runtime injection
 - tool replay/VCR behavior
+
+### `packages/github-reporter`
+
+Owns:
+
+- reading Vitest JSON reports that include eval task metadata
+- rendering GitHub Actions job summaries
+- rendering workflow-command annotations
+- optional GitHub Check Run publishing
+
+Keep this package file/artifact based. Do not make it depend on Vitest's live
+reporter lifecycle unless the JSON contract stops carrying the metadata core
+needs.
 
 ## Demo Apps
 
@@ -152,6 +166,7 @@ pnpm evals
 For targeted work, prefer narrow verification:
 
 - reporter changes: run reporter tests
+- GitHub reporter changes: run `packages/github-reporter/src/report.test.ts`
 - harness changes: run the relevant harness package tests
 - demo app changes: run `pnpm evals` or a filtered app eval command
 - legacy changes: run the moved tests under `packages/vitest-evals/src/legacy`
