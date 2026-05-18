@@ -117,13 +117,12 @@ export type EvalReport = {
   failures: EvalCase[];
 };
 
-/** Aggregated usage values shown in reporter output. */
+/** Aggregated usage values collected from eval metadata. */
 export type UsageSummary = {
   inputTokens?: number;
   outputTokens?: number;
   reasoningTokens?: number;
   totalTokens?: number;
-  estimatedCost?: number;
   toolCalls?: number;
 };
 

@@ -53,6 +53,11 @@ The normalized session is intentionally JSON-serializable so it can be
 persisted, attached to errors, and emitted by reporters without custom
 serialization logic.
 
+`UsageSummary` is intentionally limited to stable usage units such as tokens,
+tool counts, retries, provider, and model. Provider-specific cost estimates are
+not normalized because pricing semantics vary by runtime and can be stale; if a
+harness needs to retain them, store them under `usage.metadata`.
+
 ### `packages/vitest-evals/src/index.ts`
 
 Defines the harness-first public API:
@@ -110,19 +115,21 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 
 ## GitHub Reporting
 
-`packages/github-reporter` is a post-run reporter for GitHub Actions. It reads
-Vitest's built-in JSON output instead of attaching directly to the Vitest
-reporter lifecycle. That JSON output includes each assertion's `meta` field, so
-it preserves the normalized eval and harness metadata recorded by core.
+`packages/github-reporter` is the implementation behind the native
+`getsentry/vitest-evals` GitHub Action. It reads Vitest's
+built-in JSON output instead of attaching directly to the Vitest reporter
+lifecycle. That JSON output includes each assertion's `meta` field, so it
+preserves the normalized eval and harness metadata recorded by core.
 
 This split keeps the terminal reporter focused on local output and gives CI a
 stable artifact to process:
 
 1. Vitest runs evals and writes `--reporter=json` to `vitest-results.json`.
-2. The GitHub reporter reads that JSON.
-3. It writes an ASCII job summary to `GITHUB_STEP_SUMMARY`.
-4. It emits terse workflow-command annotations for failed evals.
-5. When explicitly configured, it publishes a separate GitHub Check Run.
+2. The GitHub reporter action reads one or more JSON result files.
+3. It merges sharded reports when multiple result files are provided.
+4. It writes an ASCII job summary to `GITHUB_STEP_SUMMARY`.
+5. It emits terse workflow-command annotations for failed evals.
+6. When explicitly configured, it publishes a separate GitHub Check Run.
 
 JUnit XML can be emitted alongside JSON, but it is not used as the source of
 truth for eval reporting because it does not carry the full harness metadata.

@@ -68,7 +68,9 @@ Cover:
 
 Cover:
 
+- native action input parsing when the workflow-facing contract changes
 - Vitest JSON metadata collection
+- sharded report merging when multiple JSON files are accepted
 - ASCII job summary rendering
 - long judge rationale handling without tables
 - workflow-command escaping

@@ -1,0 +1,87 @@
+name: Update GitHub Reporter Action Tag
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Ensure source release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          SOURCE_TAG="v${VERSION}-src"
+          ARTIFACT_SUBJECT="Build github-reporter action for $RELEASE_TAG"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+
+          while [ "$(git show -s --format=%s "$SOURCE_SHA")" = "$ARTIFACT_SUBJECT" ]; do
+            SOURCE_SHA="$(git rev-parse "$SOURCE_SHA^")"
+            echo "Detected existing artifact commit. Walking back to $SOURCE_SHA for $SOURCE_TAG"
+          done
+
+          if git rev-parse "$SOURCE_TAG^{commit}" >/dev/null 2>&1; then
+            EXISTING_SHA="$(git rev-parse "$SOURCE_TAG^{commit}")"
+            if [ "$EXISTING_SHA" = "$SOURCE_SHA" ]; then
+              echo "Source tag $SOURCE_TAG already points to $SOURCE_SHA"
+              exit 0
+            fi
+
+            echo "::error::Source tag $SOURCE_TAG points to $EXISTING_SHA, expected $SOURCE_SHA"
+            exit 1
+          fi
+
+          echo "Creating source tag $SOURCE_TAG on $SOURCE_SHA"
+          git tag "$SOURCE_TAG" "$SOURCE_SHA"
+          git push origin "refs/tags/$SOURCE_TAG"
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build action bundle
+        run: pnpm build:action
+
+      - name: Commit bundle and update tags
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          MAJOR="v${VERSION%%.*}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -f github-reporter/dist/action/index.js
+
+          git diff --cached --quiet || git commit -m "Build github-reporter action for $RELEASE_TAG"
+
+          git tag -fa "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+          git push -f origin "$RELEASE_TAG"
+
+          if [[ "$VERSION" != *-* ]]; then
+            git tag -fa "$MAJOR" -m "Update $MAJOR to $RELEASE_TAG"
+            git push -f origin "$MAJOR"
+          fi

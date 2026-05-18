@@ -50,7 +50,9 @@ Harness adapters should:
 - keep the stored session JSON-serializable
 - normalize tool calls into `ToolCallRecord`
 - preserve the application-facing result separately in `run.output`
-- attach provider/model and usage data when available
+- attach provider/model and stable usage data when available
+- keep provider-specific cost estimates in `usage.metadata`, not as normalized
+  usage fields
 - attach replay/cache metadata in the tool record metadata rather than in
   provider-specific side channels
 

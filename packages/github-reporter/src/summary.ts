@@ -1,4 +1,4 @@
-import type { EvalCase, EvalReport, UsageSummary } from "./types";
+import type { EvalCase, EvalReport } from "./types";
 import {
   compactLine,
   escapeFence,
@@ -100,11 +100,6 @@ function renderSummaryTable(report: EvalReport, nonEvalFailures: number) {
 
   if (report.score) {
     rows.push(["Score", formatScoreSummary(report.score)]);
-  }
-
-  const usage = formatUsage(report.usage);
-  if (usage) {
-    rows.push(["Usage", usage]);
   }
 
   if (nonEvalFailures > 0) {
@@ -361,22 +356,6 @@ function renderAsciiTable(headers: string[], rows: string[][]) {
     widths.map((width) => "-".repeat(width)).join("  "),
     ...rows.map(renderRow),
   ];
-}
-
-function formatUsage(usage: Required<UsageSummary>) {
-  const parts: string[] = [];
-  if (usage.totalTokens > 0) {
-    parts.push(`${formatNumber(usage.totalTokens)} tokens`);
-  }
-  if (usage.toolCalls > 0) {
-    parts.push(
-      `${formatNumber(usage.toolCalls)} tool${usage.toolCalls === 1 ? "" : "s"}`,
-    );
-  }
-  if (usage.estimatedCost > 0) {
-    parts.push(`$${usage.estimatedCost.toFixed(4)}`);
-  }
-  return parts.join(", ");
 }
 
 function formatCaseUsage(testCase: EvalCase) {

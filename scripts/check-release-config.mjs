@@ -18,6 +18,27 @@ function collectCraftPackages() {
   return collectMatches(readFile(".craft.yml"), /^\s*id:\s*"([^"]+)"/gm);
 }
 
+function assertGitHubTargetFiltersArtifacts() {
+  const craftConfig = readFile(".craft.yml");
+  const githubTarget = craftConfig.match(
+    /^\s*-\s*name:\s*github\b[\s\S]*?(?=^\s*-\s*name:|(?![\s\S]))/m,
+  )?.[0];
+
+  if (!githubTarget) {
+    console.error(
+      "Release config check failed: .craft.yml must define a github target for root action tags.",
+    );
+    process.exit(1);
+  }
+
+  if (!/^\s*includeNames:\s*\/\^\$\/\s*$/m.test(githubTarget)) {
+    console.error(
+      "Release config check failed: the github target must keep includeNames: /^$/ so package artifacts are not uploaded as GitHub release assets.",
+    );
+    process.exit(1);
+  }
+}
+
 function collectBumpPackages() {
   const packageFiles = collectMatches(
     readFile("scripts/bump-release-versions.mjs"),
@@ -63,6 +84,8 @@ const sources = [
 ];
 
 const [expectedSource, ...otherSources] = sources;
+
+assertGitHubTargetFiltersArtifacts();
 
 if (expectedSource.packages.length === 0) {
   console.error(

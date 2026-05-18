@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-import { appendFile, readFile } from "node:fs/promises";
 import { parseCliArgs } from "./cli-options";
-import { collectEvalReport } from "./collect";
-import { publishCheckRun } from "./github";
-import { renderWorkflowCommands } from "./annotations";
-import { renderJobSummary } from "./summary";
-import type { VitestJsonReport } from "./types";
+import { publishEvalReport } from "./report";
 import { escapeCommandData } from "./utils";
 
 main().catch((error) => {
@@ -20,55 +15,28 @@ async function main() {
     return;
   }
 
-  const json = JSON.parse(
-    await readFile(options.jsonPath, "utf8"),
-  ) as VitestJsonReport;
-  const report = collectEvalReport(json, {
+  const result = await publishEvalReport({
+    resultPatterns: options.resultPatterns,
+    cwd: options.workspace ?? process.env.GITHUB_WORKSPACE ?? process.cwd(),
     workspace:
       options.workspace ?? process.env.GITHUB_WORKSPACE ?? process.cwd(),
-  });
-  const summary = renderJobSummary(report, {
+    summaryEnabled: options.summaryEnabled,
+    summaryPath: options.summaryPath,
+    annotations: options.annotations,
+    checkRun: options.checkRun,
+    checkRunId: options.checkRunId,
+    checkName: options.checkName,
+    failOnCheckError: options.failOnCheckError,
+    maxAnnotations: options.maxAnnotations,
     maxFailures: options.maxFailures,
+    repository: options.repository,
+    sha: options.sha,
+    token: options.token,
+    warn,
   });
 
-  if (options.summaryEnabled) {
-    if (options.summaryPath) {
-      await appendFile(options.summaryPath, `${summary}\n`);
-    } else {
-      console.log(summary);
-    }
-  }
-
-  if (options.annotations) {
-    for (const command of renderWorkflowCommands(report, {
-      maxAnnotations: options.maxAnnotations,
-    })) {
-      console.log(command);
-    }
-  }
-
-  if (options.checkRun) {
-    try {
-      const result = await publishCheckRun(report, {
-        checkRunId: options.checkRunId,
-        maxAnnotations: options.maxAnnotations,
-        maxFailures: options.maxFailures,
-        name: options.checkName,
-        repository: options.repository,
-        sha: options.sha,
-        token: options.token,
-      });
-
-      if (result.status === "skipped") {
-        warn(`GitHub Check Run skipped: ${result.reason}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (options.failOnCheckError) {
-        throw error;
-      }
-      warn(message);
-    }
+  if (options.failOnFailures && result.report.status === "failed") {
+    process.exitCode = 1;
   }
 }
 
@@ -82,15 +50,16 @@ function warn(message: string) {
 
 function usage() {
   return [
-    "Usage: vitest-evals-github-report [vitest-results.json] [--json <path>]",
+    "Usage: vitest-evals-github-report [vitest-results.json ...] [--json <path>]",
     "",
     "Options:",
-    "  --json <path>             Read Vitest JSON report from this path",
+    "  --json <path>             Read a Vitest JSON report from this path or glob",
     "  --summary <path>          Write job summary markdown to this path",
     "  --no-summary             Disable summary output",
     "  --annotations            Emit GitHub workflow-command annotations",
     "  --no-annotations         Disable workflow-command annotations",
     "  --check-run              Publish a GitHub Check Run when configured",
+    "  --fail-on-failures       Exit non-zero when the combined report failed",
     "  --fail-on-check-error    Fail when Check Run publishing fails",
     "  --check-run-id <id>      Update an existing Check Run",
     "  --check-name <name>      Check Run name (default: vitest-evals)",

@@ -40,7 +40,6 @@ export type UsageSummary = {
   outputTokens?: number;
   reasoningTokens?: number;
   totalTokens?: number;
-  estimatedCost?: number;
   toolCalls?: number;
   retries?: number;
   metadata?: Record<string, JsonValue>;

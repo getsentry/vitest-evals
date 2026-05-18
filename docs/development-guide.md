@@ -87,13 +87,16 @@ Owns:
 Owns:
 
 - reading Vitest JSON reports that include eval task metadata
+- the native `getsentry/vitest-evals` action implementation
+- merging sharded JSON reports into one combined report
 - rendering GitHub Actions job summaries
 - rendering workflow-command annotations
 - optional GitHub Check Run publishing
 
-Keep this package file/artifact based. Do not make it depend on Vitest's live
-reporter lifecycle unless the JSON contract stops carrying the metadata core
-needs.
+Keep this package file/artifact based. The public GitHub surface is the action,
+so workflow docs should show `uses: getsentry/vitest-evals@v0`
+instead of package CLI commands. Do not make it depend on Vitest's live reporter
+lifecycle unless the JSON contract stops carrying the metadata core needs.
 
 ## Demo Apps
 

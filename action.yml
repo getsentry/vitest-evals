@@ -1,0 +1,61 @@
+name: "vitest-evals GitHub Reporter"
+description: "Publish vitest-evals results to GitHub Actions summaries, annotations, and checks"
+author: "Functional Software, Inc."
+
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  results:
+    description: "Vitest JSON result files to report. Supports paths, * and ** globs, and newline-separated entries."
+    required: false
+    default: "vitest-results.json"
+  publish-summary:
+    description: "Write a GitHub Actions job summary."
+    required: false
+    default: "true"
+  publish-annotations:
+    description: "Emit GitHub workflow annotations for failed evals."
+    required: false
+    default: "true"
+  publish-check:
+    description: "Publish a GitHub Check Run for the combined report."
+    required: false
+    default: "false"
+  check-name:
+    description: "Name of the GitHub Check Run."
+    required: false
+    default: "vitest-evals"
+  github-token:
+    description: "GitHub token used for Check Run publishing."
+    required: false
+    default: "${{ github.token }}"
+  fail-on-failures:
+    description: "Fail the action when the combined eval report failed."
+    required: false
+    default: "false"
+  max-annotations:
+    description: "Maximum number of failure annotations to publish. Check Run annotations are capped at 50."
+    required: false
+  max-failures:
+    description: "Maximum number of detailed failures to include in summaries and checks."
+    required: false
+
+outputs:
+  status:
+    description: "Combined report status: passed or failed."
+  results-count:
+    description: "Number of Vitest JSON result files included."
+  evals-total:
+    description: "Total eval cases included in the report."
+  evals-failed:
+    description: "Failed eval cases included in the report."
+  score-average:
+    description: "Average eval score across the combined report."
+  check-url:
+    description: "URL of the published GitHub Check Run, when available."
+
+runs:
+  using: "node24"
+  main: "github-reporter/dist/action/index.js"

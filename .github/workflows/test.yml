@@ -7,8 +7,9 @@ on:
 
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  checks: write
+  pull-requests: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       # pnpm/action-setup@v4
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
@@ -60,6 +61,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build GitHub reporter action
+        run: pnpm build:action
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4

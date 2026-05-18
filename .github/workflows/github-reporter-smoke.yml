@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/github-reporter-smoke.yml"
+      - "action.yml"
+      - "github-reporter/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -12,6 +14,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/github-reporter-smoke.yml"
+      - "action.yml"
+      - "github-reporter/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -23,7 +27,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Smoke test GitHub reporter CLI
+    name: Smoke test GitHub reporter
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -31,7 +35,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       # pnpm/action-setup@v4
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
@@ -59,6 +63,9 @@ jobs:
       - name: Build reporter
         run: pnpm --filter @vitest-evals/github-reporter run build
 
+      - name: Build reporter action
+        run: pnpm build:action
+
       - name: Create fake Vitest JSON report
         run: |
           mkdir -p tmp/github-reporter-smoke
@@ -77,7 +84,7 @@ jobs:
               judge: "SmokeJudge",
               rationale: "expected approved but got denied",
               output: { status: "denied" },
-              usage: { totalTokens: 42, toolCalls: 1, estimatedCost: 0.0011 },
+              usage: { totalTokens: 42, toolCalls: 1 },
               timingMs: 1200,
               toolCalls: [{ name: "lookupInvoice", durationMs: 7 }],
             },
@@ -90,7 +97,7 @@ jobs:
               judge: "AmountJudge",
               rationale: "expected amount=5000, got amount=499",
               output: { status: "approved", amount: 499 },
-              usage: { totalTokens: 120, toolCalls: 2, estimatedCost: 0.0042 },
+              usage: { totalTokens: 120, toolCalls: 2 },
               timingMs: 1800,
               toolCalls: [
                 { name: "lookupInvoice", durationMs: 9 },
@@ -111,7 +118,7 @@ jobs:
               score: 0.22,
               judge: "PolicyJudge",
               output: { status: "needs_review" },
-              usage: { totalTokens: 80, estimatedCost: 0.0018 },
+              usage: { totalTokens: 80 },
               timingMs: 610,
             },
             {
@@ -122,7 +129,7 @@ jobs:
               score: 0.45,
               judge: "ToneJudge",
               output: { tone: "calm" },
-              usage: { totalTokens: 95, toolCalls: 1, estimatedCost: 0.002 },
+              usage: { totalTokens: 95, toolCalls: 1 },
               timingMs: 740,
               toolCalls: [{ name: "loadCustomer", durationMs: 11 }],
             },
@@ -134,7 +141,7 @@ jobs:
               score: 0.58,
               judge: "ExplanationJudge",
               output: { status: "approved", amount: 2500 },
-              usage: { totalTokens: 110, estimatedCost: 0.0024 },
+              usage: { totalTokens: 110 },
               timingMs: 860,
             },
             {
@@ -145,7 +152,7 @@ jobs:
               score: 0.62,
               judge: "ClarificationJudge",
               output: { status: "needs_more_info" },
-              usage: { totalTokens: 130, toolCalls: 1, estimatedCost: 0.003 },
+              usage: { totalTokens: 130, toolCalls: 1 },
               timingMs: 920,
               toolCalls: [{ name: "readPolicy", durationMs: 5 }],
             },
@@ -157,7 +164,7 @@ jobs:
               score: 0.74,
               judge: "ToolUseJudge",
               output: { status: "approved", amount: 1800 },
-              usage: { totalTokens: 155, toolCalls: 2, estimatedCost: 0.0037 },
+              usage: { totalTokens: 155, toolCalls: 2 },
               timingMs: 1100,
               toolCalls: [
                 { name: "lookupOrder", durationMs: 8 },
@@ -172,7 +179,7 @@ jobs:
               score: 0.86,
               judge: "RefundJudge",
               output: { status: "approved", amount: 1200 },
-              usage: { totalTokens: 170, toolCalls: 1, estimatedCost: 0.004 },
+              usage: { totalTokens: 170, toolCalls: 1 },
               timingMs: 990,
               toolCalls: [{ name: "createRefund", durationMs: 22 }],
             },
@@ -184,7 +191,7 @@ jobs:
               score: 0.95,
               judge: "PolicyJudge",
               output: { status: "denied" },
-              usage: { totalTokens: 190, toolCalls: 1, estimatedCost: 0.0045 },
+              usage: { totalTokens: 190, toolCalls: 1 },
               timingMs: 1040,
               toolCalls: [{ name: "readPolicy", durationMs: 6 }],
             },
@@ -196,7 +203,7 @@ jobs:
               score: 1,
               judge: "DuplicateJudge",
               output: { status: "denied", reason: "duplicate" },
-              usage: { totalTokens: 210, estimatedCost: 0.005 },
+              usage: { totalTokens: 210 },
               timingMs: 1150,
             },
           ];
@@ -325,7 +332,10 @@ jobs:
           grep -F "| Tests | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"
-          grep -F '| Usage | 1,302 tokens, 9 tools, $0.0317 |' "$GITHUB_STEP_SUMMARY"
+          if grep -F "| Usage |" "$GITHUB_STEP_SUMMARY"; then
+            echo "top-level usage row should not be shown"
+            exit 1
+          fi
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=28,col=5,title=vitest-evals::refund eval > returns wrong refund amount - score 0.35 - AmountJudge - expected amount=5000, got amount=499" tmp/github-reporter-smoke/stdout.txt
           grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt
@@ -333,3 +343,30 @@ jobs:
             echo "warning workflow command was emitted on stderr"
             exit 1
           fi
+
+      - name: Run reporter action
+        id: reporter_action
+        uses: ./
+        with:
+          results: tmp/github-reporter-smoke/vitest-results.json
+          publish-summary: false
+          publish-check: true
+          github-token: ""
+          fail-on-failures: false
+
+      - name: Assert reporter action outputs
+        env:
+          ACTION_STATUS: ${{ steps.reporter_action.outputs.status }}
+          ACTION_RESULTS_COUNT: ${{ steps.reporter_action.outputs['results-count'] }}
+          ACTION_EVALS_TOTAL: ${{ steps.reporter_action.outputs['evals-total'] }}
+          ACTION_EVALS_FAILED: ${{ steps.reporter_action.outputs['evals-failed'] }}
+          ACTION_SCORE_AVERAGE: ${{ steps.reporter_action.outputs['score-average'] }}
+          ACTION_CHECK_URL: ${{ steps.reporter_action.outputs['check-url'] }}
+        run: |
+          set -euo pipefail
+          test "$ACTION_STATUS" = "failed"
+          test "$ACTION_RESULTS_COUNT" = "1"
+          test "$ACTION_EVALS_TOTAL" = "10"
+          test "$ACTION_EVALS_FAILED" = "2"
+          test "$ACTION_SCORE_AVERAGE" = "0.59"
+          test -z "$ACTION_CHECK_URL"

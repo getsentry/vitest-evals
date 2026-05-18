@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r --if-present run build",
+    "build:action": "pnpm --filter @vitest-evals/github-reporter run build:action",
     "evals": "node ./scripts/run-workspace-evals.mjs",
     "evals:verbose": "node ./scripts/run-workspace-evals.mjs -v",
     "evals:fail": "node ./scripts/run-workspace-evals.mjs --fail",
