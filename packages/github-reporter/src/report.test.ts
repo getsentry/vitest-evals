@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -338,6 +338,46 @@ describe("publishEvalReport", () => {
         summaryEnabled: false,
       }),
     ).rejects.toThrow(`Failed to read eval result file ${resultFile}`);
+  });
+
+  test("forwards summary detail limits when publishing reports", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-report-"));
+    const resultFile = join(directory, "vitest-results.json");
+    const summaryFile = join(directory, "summary.md");
+    const json = structuredClone(sampleJson);
+    const assertion = json.testResults[0]?.assertionResults[0];
+    if (!assertion) {
+      throw new Error("sample assertion missing");
+    }
+
+    const evalMeta = (assertion.meta as any).eval;
+    const harnessRun = (assertion.meta as any).harness.run;
+    evalMeta.scores[0].metadata.rationale = "abcdefghijklmnopqrstuvwxyz";
+    evalMeta.output = {
+      value: "abcdefghijklmnopqrstuvwxyz",
+    };
+    harnessRun.session.messages[0].toolCalls.push({
+      name: "notifyCustomer",
+      durationMs: 4,
+    });
+
+    await writeFile(resultFile, `${JSON.stringify(json)}\n`);
+
+    await publishEvalReport({
+      resultPatterns: [resultFile],
+      summaryPath: summaryFile,
+      maxReasonChars: 20,
+      maxOutputChars: 30,
+      maxToolCalls: 1,
+    });
+
+    const summary = await readFile(summaryFile, "utf8");
+
+    expect(summary).toContain("abcde... [truncated]");
+    expect(summary).not.toContain('"value": "abcdefghijklmnopqrstuvwxyz"');
+    expect(summary).toContain("lookupInvoice  ok");
+    expect(summary).not.toContain("createRefund");
+    expect(summary).toContain("2 more tool calls omitted");
   });
 });
 

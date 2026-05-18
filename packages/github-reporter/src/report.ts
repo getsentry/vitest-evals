@@ -57,6 +57,9 @@ export async function publishEvalReport(
   const report = mergeEvalReports(reports);
   const summary = renderJobSummary(report, {
     maxFailures: options.maxFailures,
+    maxOutputChars: options.maxOutputChars,
+    maxReasonChars: options.maxReasonChars,
+    maxToolCalls: options.maxToolCalls,
   });
 
   if (options.summaryEnabled !== false) {
@@ -82,6 +85,9 @@ export async function publishEvalReport(
         checkRunId: options.checkRunId,
         maxAnnotations: options.maxAnnotations,
         maxFailures: options.maxFailures,
+        maxOutputChars: options.maxOutputChars,
+        maxReasonChars: options.maxReasonChars,
+        maxToolCalls: options.maxToolCalls,
         name: options.checkName,
         repository: options.repository,
         sha: options.sha,

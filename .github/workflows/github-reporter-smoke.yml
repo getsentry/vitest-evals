@@ -66,6 +66,12 @@ jobs:
       - name: Build reporter action
         run: pnpm build:action
 
+      - name: Assert reporter action bundle
+        run: |
+          set -euo pipefail
+          grep -F 'main: "github-reporter/dist/action/index.js"' action.yml
+          test -s github-reporter/dist/action/index.js
+
       - name: Create fake Vitest JSON report
         run: |
           mkdir -p tmp/github-reporter-smoke
