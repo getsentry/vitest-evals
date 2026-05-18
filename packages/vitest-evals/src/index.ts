@@ -66,24 +66,26 @@ type HarnessInput<THarness extends Harness<any, any, any>> =
   THarness extends Harness<infer TInput, any, any> ? TInput : unknown;
 
 type HarnessMetadataFor<THarness extends Harness<any, any, any>> =
-  THarness extends Harness<any, infer TMetadata, any>
+  THarness extends Harness<any, any, infer TMetadata>
     ? TMetadata
     : HarnessMetadata;
 
 type HarnessOutput<THarness extends Harness<any, any, any>> =
-  THarness extends Harness<any, any, infer TOutput> ? TOutput : JsonValue;
+  THarness extends Harness<any, infer TOutput, any>
+    ? TOutput
+    : JsonValue | undefined;
 
 declare const evalHarnessRunBrand: unique symbol;
 
 /** Harness run returned by the fixture-backed `run(...)` API. */
 export type EvalHarnessRun<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata> = Harness<
     TInput,
-    TMetadata,
-    TOutput
+    TOutput,
+    TMetadata
   >,
 > = HarnessRun<TOutput> & {
   readonly [evalHarnessRunBrand]: {
@@ -104,52 +106,52 @@ export interface EvalRunOptions<
 /** Explicit harness execution primitive exposed to each eval test. */
 export type EvalRun<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata> = Harness<
     TInput,
-    TMetadata,
-    TOutput
+    TOutput,
+    TMetadata
   >,
 > = (
   input: TInput,
   options?: EvalRunOptions<TMetadata>,
-) => Promise<EvalHarnessRun<TInput, TMetadata, TOutput, THarness>>;
+) => Promise<EvalHarnessRun<TInput, TOutput, TMetadata, THarness>>;
 
 /** Fixture-backed Vitest context exposed inside `describeEval(...)` tests. */
 export interface EvalTestContext<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata> = Harness<
     TInput,
-    TMetadata,
-    TOutput
+    TOutput,
+    TMetadata
   >,
 > {
-  run: EvalRun<TInput, TMetadata, TOutput, THarness>;
+  run: EvalRun<TInput, TOutput, TMetadata, THarness>;
 }
 
 export type EvalTestAPI<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata> = Harness<
     TInput,
-    TMetadata,
-    TOutput
+    TOutput,
+    TMetadata
   >,
-> = TestAPI<EvalTestContext<TInput, TMetadata, TOutput, THarness>>;
+> = TestAPI<EvalTestContext<TInput, TOutput, TMetadata, THarness>>;
 
 /** Suite-level configuration for a harness-backed eval block. */
 export interface DescribeEvalOptions<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput> = Harness<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata> = Harness<
     TInput,
-    TMetadata,
-    TOutput
+    TOutput,
+    TMetadata
   >,
 > {
   /** Harness used for every explicit `run(...)` call in the suite. */
@@ -183,8 +185,8 @@ type JudgeAssertionHarness<
   ? Exclude<THarness, undefined>
   : Harness<
       JudgeAssertionInput<TJudgeOptions>,
-      JudgeAssertionMetadata<TJudgeOptions>,
-      JudgeAssertionOutput<TJudgeOptions>
+      JudgeAssertionOutput<TJudgeOptions>,
+      JudgeAssertionMetadata<TJudgeOptions>
     >;
 
 type JudgeAssertionReservedKey =
@@ -208,8 +210,8 @@ type JudgeAssertionArgs<
 
 type MatcherOutput<TReceived> = TReceived extends EvalHarnessRun<
   any,
-  any,
   infer TOutput,
+  any,
   any
 >
   ? TOutput
@@ -236,7 +238,7 @@ export type JudgeAssertionOptions<
   output?: JudgeAssertionOutput<TJudgeOptions>;
   metadata?: JudgeAssertionMetadata<TJudgeOptions>;
   toolCalls?: ToolCallRecord[];
-  run?: HarnessRun;
+  run?: HarnessRun<JudgeAssertionOutput<TJudgeOptions>>;
   session?: HarnessRun["session"];
   harness?: JudgeAssertionHarness<TJudgeOptions>;
   /** Passing threshold for the explicit matcher. `null` records the score without failing. */
@@ -283,8 +285,8 @@ const evalTest = test
       return async (input: unknown, options?: EvalRunOptions) => {
         const resolvedHarness = harness as Harness<
           unknown,
-          HarnessMetadata,
-          JsonValue | undefined
+          JsonValue | undefined,
+          HarnessMetadata
         >;
         const metadata = createMetadata(options?.metadata);
         const artifacts: HarnessContext["artifacts"] = {};
@@ -344,8 +346,8 @@ const evalTest = test
 
         return run as EvalHarnessRun<
           unknown,
-          HarnessMetadata,
           JsonValue | undefined,
+          HarnessMetadata,
           typeof resolvedHarness
         >;
       };
@@ -425,15 +427,15 @@ export function describeEval<THarness extends Harness<any, any, any>>(
   name: string,
   options: DescribeEvalOptions<
     HarnessInput<THarness>,
-    HarnessMetadataFor<THarness>,
     HarnessOutput<THarness>,
+    HarnessMetadataFor<THarness>,
     THarness
   >,
   define: (
     it: EvalTestAPI<
       HarnessInput<THarness>,
-      HarnessMetadataFor<THarness>,
       HarnessOutput<THarness>,
+      HarnessMetadataFor<THarness>,
       THarness
     >,
   ) => void,
@@ -449,8 +451,8 @@ export function describeEval<THarness extends Harness<any, any, any>>(
       judgeThreshold: options.judgeThreshold,
     }) as unknown as EvalTestAPI<
       HarnessInput<THarness>,
-      HarnessMetadataFor<THarness>,
       HarnessOutput<THarness>,
+      HarnessMetadataFor<THarness>,
       THarness
     >;
 
@@ -466,9 +468,9 @@ function createMetadata<TMetadata extends HarnessMetadata>(
 
 async function applyAutomaticJudges<
   TInput,
-  TMetadata extends HarnessMetadata,
   TOutput extends JsonValue | undefined,
-  THarness extends Harness<TInput, TMetadata, TOutput>,
+  TMetadata extends HarnessMetadata,
+  THarness extends Harness<TInput, TOutput, TMetadata>,
 >(
   task: EvalTaskLike,
   judges: Array<Judge<JudgeContext<TInput, TOutput, TMetadata, THarness>>>,
@@ -544,7 +546,7 @@ function recordJudgeRunContext<
   TOutput extends JsonValue | undefined,
 >(
   run: HarnessRun<TOutput>,
-  harness: Harness<TInput, TMetadata, TOutput>,
+  harness: Harness<TInput, TOutput, TMetadata>,
   input: TInput,
   metadata: TMetadata,
   signal?: AbortSignal,

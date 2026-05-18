@@ -83,8 +83,8 @@ export type HarnessContext<
 
 export type Harness<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
   run: (
@@ -123,7 +123,6 @@ export type HarnessResultLike<
 
 export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
   input: TInput;
-  context: HarnessContext<TMetadata>;
   metadata: Readonly<TMetadata>;
   signal?: AbortSignal;
   artifacts: HarnessContext<TMetadata>["artifacts"];
@@ -132,8 +131,8 @@ export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
 
 export type CreateHarnessOptions<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   name: string;
   run: (
@@ -227,24 +226,23 @@ export function normalizeContent(value: unknown): JsonValue {
 /** Creates a harness from the common "run app code and return output" shape. */
 export function createHarness<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
 >(
-  options: CreateHarnessOptions<TInput, TMetadata, TOutput>,
-): Harness<TInput, TMetadata, TOutput>;
+  options: CreateHarnessOptions<TInput, TOutput, TMetadata>,
+): Harness<TInput, TOutput, TMetadata>;
 export function createHarness<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
 >(
-  options: CreateHarnessOptions<TInput, TMetadata, TOutput>,
-): Harness<TInput, TMetadata, TOutput> {
-  const harness: Harness<TInput, TMetadata, TOutput> = {
+  options: CreateHarnessOptions<TInput, TOutput, TMetadata>,
+): Harness<TInput, TOutput, TMetadata> {
+  const harness: Harness<TInput, TOutput, TMetadata> = {
     name: options.name,
     run: async (input, context) => {
       const result = await options.run({
         input,
-        context,
         metadata: context.metadata,
         signal: context.signal,
         artifacts: context.artifacts,

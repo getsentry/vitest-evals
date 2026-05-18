@@ -532,7 +532,7 @@ export function piAiHarness<
     TTools,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput>;
+): Harness<TInput, TOutput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -547,7 +547,7 @@ export function piAiHarness<
     TResult,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput>;
+): Harness<TInput, TOutput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -565,7 +565,7 @@ export function piAiHarness<
     TResult,
     TTools
   >,
-): Harness<TInput, TMetadata, PiAiResultOutput<Awaited<TResult>>>;
+): Harness<TInput, PiAiResultOutput<Awaited<TResult>>, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -581,7 +581,7 @@ export function piAiHarness<
     TMetadata,
     TTools
   >,
-): Harness<TInput, TMetadata, JsonValue | undefined>;
+): Harness<TInput, JsonValue | undefined, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -594,7 +594,7 @@ export function piAiHarness<
     TMetadata,
     TResult
   >,
-): Harness<TInput, TMetadata, PiAiResultOutput<Awaited<TResult>>>;
+): Harness<TInput, PiAiResultOutput<Awaited<TResult>>, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -605,7 +605,7 @@ export function piAiHarness<
     TInput,
     TMetadata
   >,
-): Harness<TInput, TMetadata, JsonValue | undefined>;
+): Harness<TInput, JsonValue | undefined, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -625,10 +625,10 @@ export function piAiHarness<
     TTools,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput> {
+): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
-  const harness: Harness<TInput, TMetadata, TOutput> = {
+  const harness: Harness<TInput, TOutput, TMetadata> = {
     name: options.name ?? "pi-ai",
     run: async (input, context) => {
       const agent = await resolveAgent(options, {

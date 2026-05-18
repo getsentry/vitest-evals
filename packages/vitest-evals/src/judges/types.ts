@@ -26,8 +26,8 @@ export interface JudgeContext<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata, TOutput> | undefined =
-    | Harness<TInput, TMetadata, TOutput>
+  THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
+    | Harness<TInput, TOutput, TMetadata>
     | undefined,
 > {
   /** Original eval input passed to the harness. */
@@ -48,8 +48,8 @@ export type JudgeOptions<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata, TOutput> | undefined =
-    | Harness<TInput, TMetadata, TOutput>
+  THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
+    | Harness<TInput, TOutput, TMetadata>
     | undefined,
 > = JudgeContext<TInput, TOutput, TMetadata, THarness> & TParams;
 

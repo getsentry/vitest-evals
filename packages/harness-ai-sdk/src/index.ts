@@ -387,7 +387,7 @@ export function aiSdkHarness<
     TTools,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput>;
+): Harness<TInput, TOutput, TMetadata>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -405,7 +405,7 @@ export function aiSdkHarness<
     TResult,
     TTools
   >,
-): Harness<TInput, TMetadata, AiSdkResultOutput<Awaited<TResult>>>;
+): Harness<TInput, AiSdkResultOutput<Awaited<TResult>>, TMetadata>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -421,7 +421,7 @@ export function aiSdkHarness<
     TMetadata,
     TTools
   >,
-): Harness<TInput, TMetadata, JsonValue | undefined>;
+): Harness<TInput, JsonValue | undefined, TMetadata>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -441,10 +441,10 @@ export function aiSdkHarness<
     TTools,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput> {
+): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
-  const harness: Harness<TInput, TMetadata, TOutput> = {
+  const harness: Harness<TInput, TOutput, TMetadata> = {
     name: options.name ?? "ai-sdk",
     run: async (input, context) => {
       const agent = await resolveAgent(options, {

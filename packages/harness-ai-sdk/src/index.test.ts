@@ -19,7 +19,7 @@ type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
   ? true
   : false;
 type Expect<T extends true> = T;
-type HarnessOutput<THarness> = THarness extends Harness<any, any, infer TOutput>
+type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput, any>
   ? TOutput
   : never;
 

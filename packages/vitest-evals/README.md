@@ -201,6 +201,7 @@ First-party harness packages are conveniences, not the only supported path. If
 you need to test a full application flow, use `createHarness(...)` to run your
 app through its normal entrypoint and return the app-facing output. Judges own
 their prompt/rubric text separately from the system under test.
+When generics are needed, use `createHarness<Input, Output, Metadata>(...)`.
 
 ```ts
 import {
@@ -231,7 +232,7 @@ type AppOutput = {
   sideEffects: string[];
 };
 
-const appHarness = createHarness<AppEvalInput, AppEvalMetadata, AppOutput>({
+const appHarness = createHarness<AppEvalInput, AppOutput, AppEvalMetadata>({
   name: "custom-app",
   run: async ({ input, signal }) => {
     const result = await replayAppEvents(input.events, {

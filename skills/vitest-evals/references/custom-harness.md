@@ -13,9 +13,9 @@ import {
   type HarnessRun,
 } from "vitest-evals/harness";
 
-const appHarness: Harness<AppInput, AppMetadata> = {
+const appHarness: Harness<AppInput, AppOutput, AppMetadata> = {
   name: "app",
-  run: async (input, context): Promise<HarnessRun> => {
+  run: async (input, context): Promise<HarnessRun<AppOutput>> => {
     const appResult = await runApp(input, {
       signal: context.signal,
       metadata: context.metadata,
@@ -49,7 +49,6 @@ const appHarness: Harness<AppInput, AppMetadata> = {
 |-------|-------------|
 | `name` | Stable short label shown in reporter output. |
 | `run` | Executes the application once and returns a normalized `HarnessRun`. |
-| `query` (optional) | Separate judge-model helper; only include it when real shared provider setup or credentials exist. |
 | `session.messages` | JSON-safe user, assistant, and tool trace. |
 | `usage` | Empty object when unknown; include provider/model/tokens when available. |
 | `errors` | Empty array on success; serialized error records on partial results. |

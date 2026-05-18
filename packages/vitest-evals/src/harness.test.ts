@@ -5,6 +5,7 @@ import {
   createHarness,
   describeEval,
   type JudgeContext,
+  type JudgeAssertionOptions,
   type JudgeOptions,
   type JudgeAssessorOptions,
   StructuredOutputJudge,
@@ -29,7 +30,7 @@ type RefundOutput = {
   status: string;
 };
 
-type RefundHarness = Harness<string, RefundEvalMetadata, RefundOutput>;
+type RefundHarness = Harness<string, RefundOutput, RefundEvalMetadata>;
 
 type RefundJudgeContext = JudgeContext<
   string,
@@ -55,6 +56,28 @@ type _JudgeContextUsesTypedOutput = Expect<
 >;
 type _UntypedHarnessRunAllowsMissingOutput = Expect<
   Equal<HarnessRun["output"], JsonValue | undefined>
+>;
+const invalidStringJudgeRunOptions: JudgeAssertionOptions<
+  JudgeContext<unknown, string>
+> = {
+  // @ts-expect-error explicit matcher runs must carry the judge output type.
+  run: {} as HarnessRun<RefundOutput>,
+};
+void invalidStringJudgeRunOptions;
+
+const outputSecondHarness = createHarness<string, RefundOutput>({
+  name: "output-second",
+  run: async () => ({
+    output: {
+      status: "approved",
+    },
+  }),
+});
+type _CreateHarnessUsesOutputAsSecondGeneric = Expect<
+  Equal<
+    Awaited<ReturnType<(typeof outputSecondHarness)["run"]>>["output"],
+    RefundOutput
+  >
 >;
 
 const requiredParamJudge = createJudge(
@@ -189,7 +212,7 @@ beforeEach(() => {
 describeEval(
   "createHarness",
   {
-    harness: createHarness<string, RefundEvalMetadata>({
+    harness: createHarness<string, RefundOutput, RefundEvalMetadata>({
       name: "custom-app",
       run: async ({ input, setArtifact }) => {
         setArtifact("request", input);

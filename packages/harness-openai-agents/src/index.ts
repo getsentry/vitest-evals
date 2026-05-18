@@ -519,7 +519,7 @@ export function openaiAgentsHarness<
     TContext,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput>;
+): Harness<TInput, TOutput, TMetadata>;
 export function openaiAgentsHarness<
   TAgent,
   TInput = string,
@@ -542,7 +542,7 @@ export function openaiAgentsHarness<
     TResult,
     TContext
   >,
-): Harness<TInput, TMetadata, OpenAiAgentsResultOutput<Awaited<TResult>>>;
+): Harness<TInput, OpenAiAgentsResultOutput<Awaited<TResult>>, TMetadata>;
 export function openaiAgentsHarness<
   TAgent,
   TInput = string,
@@ -565,10 +565,10 @@ export function openaiAgentsHarness<
   >,
 ): Harness<
   TInput,
-  TMetadata,
   OpenAiAgentsResultOutput<
     OpenAiAgentsRunnerResult<TAgent, TInput, TContext, TRunner>
-  >
+  >,
+  TMetadata
 >;
 export function openaiAgentsHarness<
   TAgent,
@@ -594,10 +594,10 @@ export function openaiAgentsHarness<
     TContext,
     TOutput
   >,
-): Harness<TInput, TMetadata, TOutput> {
+): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
-  const harness: Harness<TInput, TMetadata, TOutput> = {
+  const harness: Harness<TInput, TOutput, TMetadata> = {
     name: options.name ?? "openai-agents",
     run: async (input, context) => {
       const agent = await resolveAgent(options, {

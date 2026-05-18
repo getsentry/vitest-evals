@@ -24,6 +24,9 @@ hatches for advanced cases.
 - Put capabilities on the object that owns their configuration. Avoid parallel
   context objects with overlapping lifecycle names such as `harness` and
   `runtime`.
+- Do not pass duplicate context shapes into the same callback. If a convenience
+  callback exposes `metadata`, `signal`, and artifact helpers directly, avoid
+  also exposing the raw backing context.
 - Put the action on the role that performs it. A harness runs the system under
   test; a judge assesses a run. Binding helpers should assemble context and
   delegate to that role method rather than becoming another owner of the
@@ -44,6 +47,9 @@ hatches for advanced cases.
 - Preserve caller-owned types exactly. If `run()` declares a concrete output,
   downstream `result.output` and `ctx.output` should be concrete too; require
   `undefined` in the type only when missing output is a real state.
+- Put the common typed values first in public generics. Prefer
+  `Input, Output, Metadata` over forcing users to spell metadata before they can
+  type the result they assert on.
 - Matchers should preserve the same contract: a judge over string output should
   not type-check against a structured object result, and required custom judge
   params should stay required.
