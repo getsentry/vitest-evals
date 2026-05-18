@@ -1559,12 +1559,11 @@ function resolveOutput(result: unknown): JsonValue | undefined {
   }
 
   const candidates = ["output"] satisfies string[];
+  const resultRecord = result as Record<string, unknown>;
 
   for (const key of candidates) {
-    const value = (result as Record<string, unknown>)[key];
-    const normalized = toOutputValue(value);
-    if (normalized !== undefined) {
-      return normalized;
+    if (Object.prototype.hasOwnProperty.call(resultRecord, key)) {
+      return toOutputValue(resultRecord[key]);
     }
   }
 
@@ -1574,6 +1573,7 @@ function resolveOutput(result: unknown): JsonValue | undefined {
 // Keep this adapter-local rather than exporting a core helper. Core
 // `toJsonValue` normalizes trace data; inferred app output should only accept
 // values that are already JSON-safe so the public contract stays explicit.
+// Invalid nested values reject the whole candidate instead of being patched.
 function toOutputValue(value: unknown): JsonValue | undefined {
   if (value === undefined) {
     return undefined;

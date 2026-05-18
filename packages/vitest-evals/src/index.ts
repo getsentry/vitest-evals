@@ -866,10 +866,19 @@ function inferJudgeOutputValue(
 function resolveAssistantOutput(session: NormalizedSession) {
   const assistantContent = [...assistantMessages(session)]
     .reverse()
-    .find((message) => message.content !== undefined);
+    .find(hasAssistantOutputContent);
   return assistantContent?.content !== undefined
     ? normalizeContent(assistantContent.content)
     : undefined;
+}
+
+function hasAssistantOutputContent(
+  message: NormalizedSession["messages"][number],
+) {
+  return (
+    message.content !== undefined &&
+    (typeof message.content !== "string" || message.content.trim().length > 0)
+  );
 }
 
 function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {

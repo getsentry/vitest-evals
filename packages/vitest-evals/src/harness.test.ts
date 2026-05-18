@@ -1186,6 +1186,35 @@ test("toSatisfyJudge uses assistant message content on normalized sessions", asy
   );
 });
 
+test("toSatisfyJudge skips whitespace-only assistant content on normalized sessions", async () => {
+  const outputJudgeSpy = vi.fn(async (opts: JudgeContext) => ({
+    score: opts.output === "approved" ? 1 : 0,
+  }));
+  const outputJudge = createJudge(
+    "NormalizedSessionWhitespaceOutputJudge",
+    outputJudgeSpy,
+  );
+
+  await expect({
+    messages: [
+      {
+        role: "assistant",
+        content: "approved",
+      },
+      {
+        role: "assistant",
+        content: "   ",
+      },
+    ],
+  } satisfies NormalizedSession).toSatisfyJudge(outputJudge);
+
+  expect(outputJudgeSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      output: "approved",
+    }),
+  );
+});
+
 test("toSatisfyJudge accepts a null threshold to record without failing", async () => {
   const outputJudgeSpy = vi.fn(async () => ({
     score: 0,

@@ -582,6 +582,12 @@ test("does not infer app output from arbitrary custom result shapes", async () =
       output: new Date("2026-01-01T00:00:00.000Z"),
     }),
   });
+  const invalidArrayOutputHarness = aiSdkHarness({
+    run: async () => ({
+      output: [1, new Date("2026-01-01T00:00:00.000Z")],
+      text: "approved",
+    }),
+  });
 
   const objectResult = await objectHarness.run(
     "Refund invoice inv_123",
@@ -595,10 +601,15 @@ test("does not infer app output from arbitrary custom result shapes", async () =
     "Refund invoice inv_123",
     createHarnessContext({}),
   );
+  const invalidArrayOutputResult = await invalidArrayOutputHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
 
   expect(objectResult.output).toBeUndefined();
   expect(primitiveResult.output).toBeUndefined();
   expect(nonJsonOutputResult.output).toBeUndefined();
+  expect(invalidArrayOutputResult.output).toBeUndefined();
 });
 
 test("supports a typed output selector with inferred diagnostics", async () => {

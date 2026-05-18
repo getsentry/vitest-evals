@@ -1345,17 +1345,15 @@ function resolveOutput(
     return undefined;
   }
 
-  const finalOutput = toOutputValue(
-    (result as Record<string, unknown>).finalOutput,
-  );
-  if (finalOutput !== undefined) {
-    return finalOutput;
+  const resultRecord = result as Record<string, unknown>;
+
+  if (Object.prototype.hasOwnProperty.call(resultRecord, "finalOutput")) {
+    return toOutputValue(resultRecord.finalOutput);
   }
 
   if (options.allowOutputField && !isOpenAiAgentsRunResult(result)) {
-    const output = toOutputValue((result as { output?: unknown }).output);
-    if (output !== undefined) {
-      return output;
+    if (Object.prototype.hasOwnProperty.call(resultRecord, "output")) {
+      return toOutputValue(resultRecord.output);
     }
   }
 
@@ -1369,6 +1367,7 @@ function isOpenAiAgentsRunResult(result: object) {
 // Keep this adapter-local rather than exporting a core helper. Core
 // `toJsonValue` normalizes trace data; inferred app output should only accept
 // values that are already JSON-safe so the public contract stays explicit.
+// Invalid nested values reject the whole candidate instead of being patched.
 function toOutputValue(value: unknown): JsonValue | undefined {
   if (value === undefined) {
     return undefined;

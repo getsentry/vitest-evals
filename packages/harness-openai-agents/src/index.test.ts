@@ -430,6 +430,30 @@ test("uses custom app output with app-level state and history fields", async () 
   });
 });
 
+test("does not fall back from non-JSON final output to output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      finalOutput: [1, new Date("2026-01-01T00:00:00.000Z")],
+      output: {
+        status: "approved",
+      },
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "invalid-final-output",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+});
+
 test("does not coerce non-JSON OpenAI Agents final output", async () => {
   const harness = openaiAgentsHarness({
     agent: {
