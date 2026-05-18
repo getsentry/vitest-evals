@@ -18,20 +18,38 @@ function collectCraftPackages() {
   return collectMatches(readFile(".craft.yml"), /^\s*id:\s*"([^"]+)"/gm);
 }
 
-function assertGitHubTargetFiltersArtifacts() {
+function collectCraftTargets() {
   const craftConfig = readFile(".craft.yml");
-  const githubTarget = craftConfig.match(
-    /^\s*-\s*name:\s*github\b[\s\S]*?(?=^\s*-\s*name:|(?![\s\S]))/m,
-  )?.[0];
+  return [
+    ...craftConfig.matchAll(
+      /^\s*-\s*name:\s*([^\s#]+)\b[\s\S]*?(?=^\s*-\s*name:|(?![\s\S]))/gm,
+    ),
+  ].map((match) => ({
+    name: match[1],
+    block: match[0],
+  }));
+}
 
-  if (!githubTarget) {
+function assertGitHubTargetConfig() {
+  const targets = collectCraftTargets();
+  const githubTargets = targets.filter((target) => target.name === "github");
+
+  if (githubTargets.length !== 1) {
     console.error(
-      "Release config check failed: .craft.yml must define a github target for root action tags.",
+      "Release config check failed: .craft.yml must define exactly one github target for root action tags.",
     );
     process.exit(1);
   }
 
-  if (!/^\s*includeNames:\s*\/\^\$\/\s*$/m.test(githubTarget)) {
+  const [githubTarget] = githubTargets;
+  if (targets.at(-1) !== githubTarget) {
+    console.error(
+      "Release config check failed: the github target must be the final target so npm publishes before the public GitHub release and action tags.",
+    );
+    process.exit(1);
+  }
+
+  if (!/^\s*includeNames:\s*\/\^\$\/\s*$/m.test(githubTarget.block)) {
     console.error(
       "Release config check failed: the github target must keep includeNames: /^$/ so package artifacts are not uploaded as GitHub release assets.",
     );
@@ -85,7 +103,7 @@ const sources = [
 
 const [expectedSource, ...otherSources] = sources;
 
-assertGitHubTargetFiltersArtifacts();
+assertGitHubTargetConfig();
 
 if (expectedSource.packages.length === 0) {
   console.error(

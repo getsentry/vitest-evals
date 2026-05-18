@@ -11,13 +11,29 @@ jobs:
   update-tag:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate release tag
+        id: release_tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Skipping non-action release tag: $RELEASE_TAG"
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        if: steps.release_tag.outputs.publish == 'true'
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
           fetch-tags: true
 
       - name: Ensure source release tag
+        if: steps.release_tag.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -48,22 +64,27 @@ jobs:
           git push origin "refs/tags/$SOURCE_TAG"
 
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        if: steps.release_tag.outputs.publish == 'true'
         with:
           version: 10.33.0
           run_install: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.release_tag.outputs.publish == 'true'
         with:
           node-version: "24"
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.release_tag.outputs.publish == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build action bundle
+        if: steps.release_tag.outputs.publish == 'true'
         run: pnpm build:action
 
       - name: Commit bundle and update tags
+        if: steps.release_tag.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
