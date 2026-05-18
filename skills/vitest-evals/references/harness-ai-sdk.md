@@ -19,14 +19,7 @@ import { generateText, stepCountIs } from "ai";
 
 const harness = aiSdkHarness({
   tools,
-  prompt: (input, options) =>
-    generateText({
-      model,
-      system: options?.system,
-      prompt: input,
-      temperature: 0,
-    }).then((result) => result.text),
-  task: ({ input, runtime }) =>
+  run: ({ input, runtime }) =>
     generateText({
       model,
       prompt: input,
@@ -42,17 +35,24 @@ const harness = aiSdkHarness({
 
 | Option | Requirement |
 |--------|-------------|
-| `prompt` | Required prompt seam for judges. |
-| `task` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent`. |
-| `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `task`. |
-| `tools` | Optional AI SDK toolset; wrapped before being passed to the task or agent. |
-| `output` | Optional domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
-| `session` | Optional override when inferred steps or traces are insufficient. |
-| `usage`, `timings`, `errors` | Optional diagnostic overrides. |
+| `run` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent`. |
+| `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `run`. |
+| `tools` | Optional AI SDK toolset; wrapped before being passed to the run callback or agent. |
+| `output` | Optional typed domain output selector for raw provider results; default provider output checks `output`, `object`, `experimental_output`, then `text`. |
 | `name` | Optional reporter label; defaults to `ai-sdk`. |
 
 Agent factories receive `{ input, context }` before execution so apps can
 derive instructions, metadata, or seeded state without side-channel setup.
+
+When LLM-backed judges need shared provider setup, keep that helper in the
+judge module. Do not put judge-model calls on the app harness:
+
+```ts
+const verdict = await generateText({
+  model: rubricModel,
+  prompt: formatJudgePrompt(ctx),
+}).then((result) => result.text);
+```
 
 ## Normalization Behavior
 
@@ -74,8 +74,8 @@ derive instructions, metadata, or seeded state without side-channel setup.
 
 | Case | Prefer |
 |------|--------|
-| Direct `generateText(...)` or `generateObject(...)` call | `task` |
+| Direct `generateText(...)` or `generateObject(...)` call | `run` |
 | Existing app wrapper with `run(input, runtime)` | `agent` |
 | Provider result text needs parsing | `output` |
-| App returns a full normalized run | Return `HarnessRun` and omit overrides. |
-| App returns a run-like domain object | Use `output` and `session` overrides to avoid accidental pass-through. |
+| App returns a full normalized run | Return `HarnessRun`. |
+| App needs exact session/usage/errors control | Return `HarnessRun`. |

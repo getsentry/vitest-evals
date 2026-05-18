@@ -6,9 +6,9 @@ For new suites, prefer judges over root-level scorers.
 ## Factuality Judge
 
 ```ts
-import { namedJudge } from "vitest-evals";
+import { createJudge } from "vitest-evals";
 
-export const FactualityJudge = namedJudge(
+export const FactualityJudge = createJudge(
   "FactualityJudge",
   async ({ output }) => {
     const answer = output;
@@ -27,22 +27,25 @@ export const FactualityJudge = namedJudge(
 ## Tool Behavior Judge
 
 ```ts
-import type { JudgeFn } from "vitest-evals";
+import { createJudge } from "vitest-evals";
 
-export const LookupThenRefundJudge: JudgeFn = async ({ toolCalls }) => {
-  const names = toolCalls.map((call) => call.name);
-  const passed =
-    names.length === 2 &&
-    names[0] === "lookupInvoice" &&
-    names[1] === "createRefund";
+export const LookupThenRefundJudge = createJudge(
+  "LookupThenRefundJudge",
+  async ({ toolCalls }) => {
+    const names = toolCalls.map((call) => call.name);
+    const passed =
+      names.length === 2 &&
+      names[0] === "lookupInvoice" &&
+      names[1] === "createRefund";
 
-  return {
-    score: passed ? 1 : 0,
-    metadata: {
-      rationale: `Observed tool order: ${names.join(" -> ") || "none"}`,
-    },
-  };
-};
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: `Observed tool order: ${names.join(" -> ") || "none"}`,
+      },
+    };
+  },
+);
 ```
 
 ## Explicit Judge Assertion

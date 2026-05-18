@@ -2,7 +2,6 @@ import type {
   Harness,
   HarnessContext,
   HarnessMetadata,
-  HarnessPrompt,
   HarnessRun,
   JsonValue,
   NormalizedMessage,
@@ -32,6 +31,24 @@ import type {
 } from "vitest-evals/replay";
 
 type MaybePromise<T> = T | Promise<T>;
+type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
+  ? TValue
+  : undefined;
+type ResultFieldOutput<
+  TResult,
+  TKey extends string,
+> = TKey extends keyof TResult
+  ? Record<string, never> extends Pick<TResult, TKey>
+    ? JsonOutput<TResult[TKey]> | undefined
+    : JsonOutput<TResult[TKey]>
+  : undefined;
+type AgentSource<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> =
+  | TAgent
+  | ((args: PiAiCreateAgentArgs<TInput, TMetadata>) => MaybePromise<TAgent>);
 type AnyPiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -52,6 +69,25 @@ type PiAgentToolLike<
   execute: (toolCallId: string, args: Record<string, JsonValue>) => unknown;
 };
 
+type PiAiResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
+  ? TOutput
+  : "output" extends keyof TResult
+    ? ResultFieldOutput<TResult, "output">
+    : undefined;
+type PiAiAgentResult<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata>,
+> = TAgent extends {
+  run: (
+    input: TInput,
+    runtime: PiAiRuntime<TTools, TInput, TMetadata>,
+  ) => MaybePromise<infer TResult>;
+}
+  ? Awaited<TResult>
+  : unknown;
+
 const ORIGINAL_NATIVE_EXECUTE = Symbol("vitest-evals.originalNativeExecute");
 
 type NativeToolExecute<
@@ -61,8 +97,10 @@ type NativeToolExecute<
   [ORIGINAL_NATIVE_EXECUTE]?: PiAgentToolLike<TInput, TMetadata>["execute"];
 };
 
+/** Replay mode alias used by the Pi AI harness package. */
 export type PiAiReplayMode = ReplayMode;
 
+/** Event sink for recording Pi AI transcript messages. */
 export interface PiAiEventSink {
   message: (message: NormalizedMessage) => void;
   system: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
@@ -75,6 +113,7 @@ export interface PiAiEventSink {
   ) => void;
 }
 
+/** Context passed to instrumented Pi AI tool executions. */
 export interface PiAiToolContext<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -85,11 +124,13 @@ export interface PiAiToolContext<
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 }
 
+/** Tool replay recording shape for Pi AI tools. */
 export type PiAiToolRecording<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
 > = ToolRecording<TArgs, TResult>;
 
+/** Replay configuration for a Pi AI tool. */
 export type PiAiToolReplayConfig<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -97,6 +138,7 @@ export type PiAiToolReplayConfig<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = ToolReplayConfig<TArgs, TResult, PiAiToolContext<TInput, TMetadata>>;
 
+/** Replay policy for one Pi AI tool. */
 export type PiAiToolReplayPolicy<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -109,11 +151,13 @@ export type PiAiToolReplayPolicy<
       TMetadata
     >;
 
+/** Replay policy map keyed by Pi AI tool name. */
 export type PiAiToolReplayPolicies<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, PiAiToolReplayPolicy<TInput, TMetadata>>;
 
+/** Tool definition accepted by the Pi AI harness runtime. */
 export interface PiAiToolDefinition<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -127,6 +171,7 @@ export interface PiAiToolDefinition<
   ) => MaybePromise<TResult>;
 }
 
+/** Toolset shape accepted by the Pi AI harness. */
 export type PiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -150,6 +195,7 @@ type ToolResult<TTool> = TTool extends PiAiToolDefinition<
   ? TResult
   : never;
 
+/** Runtime object passed into Pi AI agent entrypoints. */
 export type PiAiRuntime<
   TTools extends PiAiToolset<TInput, TMetadata>,
   TInput = string,
@@ -164,6 +210,7 @@ export type PiAiRuntime<
   signal?: AbortSignal;
 };
 
+/** Arguments passed to custom Pi AI harness run callbacks. */
 export interface PiAiHarnessRunArgs<
   TAgent,
   TInput,
@@ -176,6 +223,7 @@ export interface PiAiHarnessRunArgs<
   runtime: PiAiRuntime<TTools, TInput, TMetadata>;
 }
 
+/** Arguments passed to Pi AI harness output selectors. */
 export interface PiAiHarnessResultArgs<
   TAgent,
   TInput,
@@ -186,6 +234,7 @@ export interface PiAiHarnessResultArgs<
   result: TResult;
 }
 
+/** Arguments passed to per-run Pi AI agent factories. */
 export interface PiAiCreateAgentArgs<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -203,24 +252,22 @@ interface PiAiHarnessBaseOptions<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > {
-  agent?: TAgent;
-  createAgent?: (
-    args: PiAiCreateAgentArgs<TInput, TMetadata>,
-  ) => MaybePromise<TAgent>;
+  agent: AgentSource<TAgent, TInput, TMetadata>;
   toolReplay?: PiAiToolReplayPolicies<TInput, TMetadata>;
-  normalize?: PiAiHarnessNormalizeOptions<
+  output?: PiAiHarnessOutputSelector<
     TAgent,
     TInput,
     TMetadata,
     TResult,
-    TTools
+    TTools,
+    TOutput
   >;
-  prompt: HarnessPrompt;
   name?: string;
 }
 
-export interface PiAiHarnessWithToolsOptions<
+interface PiAiHarnessWithToolsOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -229,24 +276,34 @@ export interface PiAiHarnessWithToolsOptions<
     TInput,
     TMetadata
   >,
-> extends PiAiHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> {
-  tools: TTools;
-  run?: (
-    args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-  ) => MaybePromise<TResult | HarnessRun>;
-}
-
-export interface PiAiHarnessInferredToolsOptions<
-  TAgent,
-  TInput = string,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  TResult = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > extends PiAiHarnessBaseOptions<
     TAgent,
     TInput,
     TMetadata,
     TResult,
-    InferredPiAiToolset<TInput, TMetadata>
+    TTools,
+    TOutput
+  > {
+  tools: TTools;
+  run?: (
+    args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
+}
+
+interface PiAiHarnessInferredToolsOptions<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> extends PiAiHarnessBaseOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    InferredPiAiToolset<TInput, TMetadata>,
+    TOutput
   > {
   tools?: undefined;
   run?: (
@@ -256,10 +313,10 @@ export interface PiAiHarnessInferredToolsOptions<
       TMetadata,
       InferredPiAiToolset<TInput, TMetadata>
     >,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 }
 
-export type PiAiHarnessOptions<
+type PiAiHarnessOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -268,9 +325,161 @@ export type PiAiHarnessOptions<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > =
-  | PiAiHarnessWithToolsOptions<TAgent, TInput, TMetadata, TResult, TTools>
-  | PiAiHarnessInferredToolsOptions<TAgent, TInput, TMetadata, TResult>;
+  | PiAiHarnessWithToolsOptions<
+      TAgent,
+      TInput,
+      TMetadata,
+      TResult,
+      TTools,
+      TOutput
+    >
+  | PiAiHarnessInferredToolsOptions<
+      TAgent,
+      TInput,
+      TMetadata,
+      TResult,
+      TOutput
+    >;
+
+type PiAiHarnessWithToolsOptionsWithOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = PiAiHarnessWithToolsOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  TOutput
+> & {
+  output: PiAiHarnessOutputSelector<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >;
+};
+
+type PiAiHarnessInferredToolsOptionsWithOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = PiAiHarnessInferredToolsOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TOutput
+> & {
+  output: PiAiHarnessOutputSelector<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    InferredPiAiToolset<TInput, TMetadata>,
+    TOutput
+  >;
+};
+
+type PiAiHarnessWithToolsRunOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  JsonValue | undefined
+> & {
+  tools: TTools;
+  run: (
+    args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+  ) => MaybePromise<TResult>;
+  output?: never;
+};
+
+type PiAiHarnessWithToolsAgentOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  unknown,
+  TTools,
+  JsonValue | undefined
+> & {
+  tools: TTools;
+  run?: never;
+  output?: never;
+};
+
+type PiAiHarnessInferredToolsRunOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  InferredPiAiToolset<TInput, TMetadata>,
+  JsonValue | undefined
+> & {
+  tools?: undefined;
+  run: (
+    args: PiAiHarnessRunArgs<
+      TAgent,
+      TInput,
+      TMetadata,
+      InferredPiAiToolset<TInput, TMetadata>
+    >,
+  ) => MaybePromise<TResult>;
+  output?: never;
+};
+
+type PiAiHarnessInferredToolsAgentOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  unknown,
+  InferredPiAiToolset<TInput, TMetadata>,
+  JsonValue | undefined
+> & {
+  tools?: undefined;
+  run?: never;
+  output?: never;
+};
 
 type PiAiHarnessRunOptions<
   TAgent,
@@ -278,25 +487,34 @@ type PiAiHarnessRunOptions<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
-> = PiAiHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> & {
+  TOutput extends JsonValue | undefined,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  TOutput
+> & {
   run?: (
     args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
 type PiAiRunnableAgent<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends PiAiToolset<TInput, TMetadata>,
 > = {
   run: (
     input: TInput,
     runtime: PiAiRuntime<TTools, TInput, TMetadata>,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
-export interface PiAiHarnessNormalizeOptions<
+type PiAiHarnessOutputSelector<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -305,23 +523,10 @@ export interface PiAiHarnessNormalizeOptions<
     TInput,
     TMetadata
   >,
-> {
-  session?: (
-    args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<NormalizedSession>;
-  output?: (
-    args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<JsonValue | undefined>;
-  usage?: (
-    args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<UsageSummary>;
-  timings?: (
-    args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<TimingSummary | undefined>;
-  errors?: (
-    args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<Array<Record<string, JsonValue>>>;
-}
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = (
+  args: PiAiHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
+) => MaybePromise<TOutput>;
 
 type InferredToolSurfaces<TInput, TMetadata extends HarnessMetadata> = {
   runtimeTools?: InferredPiAiToolset<TInput, TMetadata>;
@@ -342,23 +547,32 @@ export function piAiHarness<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: PiAiHarnessWithToolsOptions<
+  options: PiAiHarnessWithToolsOptionsWithOutput<
     TAgent,
     TInput,
     TMetadata,
     TResult,
-    TTools
+    TTools,
+    TOutput
   >,
-): Harness<TInput, TMetadata>;
+): Harness<TInput, TOutput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
   TResult = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: PiAiHarnessInferredToolsOptions<TAgent, TInput, TMetadata, TResult>,
-): Harness<TInput, TMetadata>;
+  options: PiAiHarnessInferredToolsOptionsWithOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TOutput
+  >,
+): Harness<TInput, TOutput, TMetadata>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -369,11 +583,93 @@ export function piAiHarness<
     TMetadata
   >,
 >(
-  options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> {
-  return {
+  options: PiAiHarnessWithToolsRunOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools
+  >,
+): Harness<TInput, PiAiResultOutput<Awaited<TResult>>, TMetadata>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: PiAiHarnessWithToolsAgentOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TTools
+  >,
+): Harness<
+  TInput,
+  PiAiResultOutput<PiAiAgentResult<TAgent, TInput, TMetadata, TTools>>,
+  TMetadata
+>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+>(
+  options: PiAiHarnessInferredToolsRunOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult
+  >,
+): Harness<TInput, PiAiResultOutput<Awaited<TResult>>, TMetadata>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(
+  options: PiAiHarnessInferredToolsAgentOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata
+  >,
+): Harness<
+  TInput,
+  PiAiResultOutput<
+    PiAiAgentResult<
+      TAgent,
+      TInput,
+      TMetadata,
+      InferredPiAiToolset<TInput, TMetadata>
+    >
+  >,
+  TMetadata
+>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+>(
+  options: PiAiHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+): Harness<TInput, TOutput, TMetadata> {
+  validateOptions(options);
+
+  const harness: Harness<TInput, TOutput, TMetadata> = {
     name: options.name ?? "pi-ai",
-    prompt: options.prompt,
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
         input,
@@ -412,6 +708,32 @@ export function piAiHarness<
       );
     },
   };
+
+  return harness;
+}
+
+function validateOptions<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TResult,
+  TTools extends PiAiToolset<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
+>(
+  options: PiAiHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+) {
+  if (options.agent === undefined) {
+    throw new Error(
+      "piAiHarness requires agent. Pass an agent instance or an agent factory.",
+    );
+  }
 }
 
 async function executePiHarnessRun<
@@ -420,15 +742,23 @@ async function executePiHarnessRun<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
 >(
-  options: PiAiHarnessRunOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: PiAiHarnessRunOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   agent: TAgent,
   input: TInput,
   context: HarnessContext<TMetadata>,
   messages: NormalizedMessage[],
   runtimeTools: TTools | undefined,
   nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>,
-): Promise<HarnessRun> {
+): Promise<HarnessRun<TOutput>> {
   const executionState = createPiToolExecutionState();
   const runtime = createRuntime({
     input,
@@ -460,7 +790,7 @@ async function executePiHarnessRun<
         }),
     );
 
-    if (isHarnessRun(result) && !hasResultOverrides(options)) {
+    if (isHarnessRun(result) && !hasOutputSelector(options)) {
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
@@ -482,31 +812,22 @@ async function executePiHarnessRun<
       TTools
     >;
 
-    const output = options.normalize?.output
-      ? await options.normalize.output(resultArgs)
-      : resolveOutput(normalizeResult);
-    const usage = options.normalize?.usage
-      ? await options.normalize.usage(resultArgs)
-      : resolveUsage(normalizeResult, runtime.toolCalls.length);
-    const session = options.normalize?.session
-      ? await options.normalize.session(resultArgs)
-      : resolveSession(normalizeResult, messages, output, usage);
+    const output = options.output
+      ? await options.output(resultArgs)
+      : (resolveOutput(normalizeResult) as TOutput | undefined);
+    const usage = resolveUsage(normalizeResult, runtime.toolCalls.length);
+    const session = resolveSession(normalizeResult, messages, output, usage);
 
     return {
       session,
       output,
       usage,
-      timings: options.normalize?.timings
-        ? await options.normalize.timings(resultArgs)
-        : undefined,
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
           : undefined,
-      errors: options.normalize?.errors
-        ? await options.normalize.errors(resultArgs)
-        : resolveErrors(normalizeResult),
-    };
+      errors: resolveErrors(normalizeResult),
+    } as HarnessRun<TOutput>;
   } catch (error) {
     const usage = resolveUsage(undefined, runtime.toolCalls.length);
     const run = {
@@ -530,37 +851,62 @@ async function resolveAgent<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
 >(
-  options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: PiAiHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   args: PiAiCreateAgentArgs<TInput, TMetadata>,
 ) {
-  if (options.agent !== undefined) {
-    return options.agent;
-  }
-
-  if (options.createAgent) {
-    return options.createAgent(args);
-  }
-
-  throw new Error(
-    "piAiHarness requires either an agent instance or a createAgent() function.",
-  );
+  return resolveAgentSource(options.agent, args);
 }
 
-function hasResultOverrides<
+async function resolveAgentSource<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+  args: PiAiCreateAgentArgs<TInput, TMetadata>,
+): Promise<TAgent> {
+  if (isAgentFactory(agent)) {
+    return agent(args);
+  }
+
+  return agent;
+}
+
+function isAgentFactory<TAgent, TInput, TMetadata extends HarnessMetadata>(
+  agent: AgentSource<TAgent, TInput, TMetadata>,
+): agent is (
+  args: PiAiCreateAgentArgs<TInput, TMetadata>,
+) => MaybePromise<TAgent> {
+  return typeof agent === "function" && !hasPiAiRunMethod(agent);
+}
+
+function hasOutputSelector<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
->(options: PiAiHarnessRunOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
-  return Boolean(
-    options.normalize?.output ??
-      options.normalize?.session ??
-      options.normalize?.usage ??
-      options.normalize?.timings ??
-      options.normalize?.errors,
-  );
+  TOutput extends JsonValue | undefined,
+>(
+  options: PiAiHarnessRunOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+) {
+  return Boolean(options.output);
 }
 
 function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
@@ -660,15 +1006,25 @@ async function runAgent<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
 >(
-  options: PiAiHarnessRunOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: PiAiHarnessRunOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-): Promise<TResult | HarnessRun> {
+): Promise<TResult | HarnessRun<TOutput>> {
   if (options.run) {
     return options.run(args);
   }
 
-  if (hasPiAiRunMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
+  if (
+    hasPiAiRunMethod<TInput, TMetadata, TResult, TOutput, TTools>(args.agent)
+  ) {
     return args.agent.run(args.input, args.runtime);
   }
 
@@ -683,14 +1039,23 @@ function hasExplicitToolset<
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends PiAiToolset<TInput, TMetadata>,
+  TOutput extends JsonValue | undefined,
 >(
-  options: PiAiHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: PiAiHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
 ): options is PiAiHarnessWithToolsOptions<
   TAgent,
   TInput,
   TMetadata,
   TResult,
-  TTools
+  TTools,
+  TOutput
 > {
   return options.tools !== undefined;
 }
@@ -699,11 +1064,12 @@ function hasPiAiRunMethod<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends PiAiToolset<TInput, TMetadata>,
 >(
   agent: unknown,
-): agent is PiAiRunnableAgent<TInput, TMetadata, TResult, TTools> {
-  if (!agent || typeof agent !== "object") {
+): agent is PiAiRunnableAgent<TInput, TMetadata, TResult, TOutput, TTools> {
+  if (!agent || (typeof agent !== "object" && typeof agent !== "function")) {
     return false;
   }
 
@@ -1189,22 +1555,69 @@ function createRuntime<
 
 function resolveOutput(result: unknown): JsonValue | undefined {
   if (!result || typeof result !== "object") {
-    return toJsonValue(result);
+    return undefined;
   }
 
-  const candidates = [
-    "output",
-    "decision",
-    "result",
-    "final",
-  ] satisfies string[];
+  const candidates = ["output"] satisfies string[];
+  const resultRecord = result as Record<string, unknown>;
 
   for (const key of candidates) {
-    const value = (result as Record<string, unknown>)[key];
-    const normalized = toJsonValue(value);
-    if (normalized !== undefined) {
-      return normalized;
+    if (Object.prototype.hasOwnProperty.call(resultRecord, key)) {
+      return toOutputValue(resultRecord[key]);
     }
+  }
+
+  return undefined;
+}
+
+// Keep this adapter-local rather than exporting a core helper. Core
+// `toJsonValue` normalizes trace data; inferred app output should only accept
+// values that are already JSON-safe so the public contract stays explicit.
+// Invalid nested values reject the whole candidate instead of being patched.
+function toOutputValue(value: unknown): JsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const items: JsonValue[] = [];
+    for (const item of value) {
+      const normalized = toOutputValue(item);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      items.push(normalized);
+    }
+    return items;
+  }
+
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return undefined;
+    }
+
+    const record: Record<string, JsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const normalized = toOutputValue(entry);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      record[key] = normalized;
+    }
+    return record;
   }
 
   return undefined;
@@ -1219,9 +1632,12 @@ function normalizeToolResult(result: unknown): JsonValue | undefined {
     return details;
   }
 
-  return (
-    toJsonValue(result) ?? (result === undefined ? undefined : String(result))
-  );
+  const normalized = toJsonValue(result);
+  return normalized !== undefined
+    ? normalized
+    : result === undefined
+      ? undefined
+      : String(result);
 }
 
 function normalizeReplayToolResult(result: unknown): JsonValue {
@@ -1251,12 +1667,14 @@ function createNativeToolReplayEnvelope(
 ): NativeToolReplayEnvelope {
   const normalizedResult = normalizeReplayToolResult(result);
 
+  const agentResult = toJsonValue(result);
+
   return {
     __vitestEvals: {
       kind: "pi-ai-native-tool-result",
       version: 2,
     },
-    agentResult: toJsonValue(result) ?? normalizedResult,
+    agentResult: agentResult !== undefined ? agentResult : normalizedResult,
     normalizedResult,
   };
 }
@@ -1394,7 +1812,6 @@ function resolveSession(
 
   return {
     messages: sessionMessages,
-    outputText: typeof output === "string" ? output : undefined,
     provider:
       ((result as Record<string, unknown> | undefined)?.provider as
         | string

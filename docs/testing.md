@@ -97,8 +97,7 @@ describeEval(
   "refund agent",
   {
     harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
-      prompt: judgePrompt,
+      agent: () => createRefundAgent(),
     }),
     judges: [ToolCallJudge()],
   },
@@ -140,6 +139,7 @@ Common commands:
 
 ```bash
 pnpm typecheck
+pnpm docs:check
 pnpm test
 pnpm build
 pnpm evals

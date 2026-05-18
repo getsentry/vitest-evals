@@ -14,6 +14,7 @@ type EvalReporterOptions = {
   toolDetails?: boolean | number;
 };
 
+/** Vitest reporter that renders eval scores, usage, and harness traces. */
 export default class DefaultEvalReporter extends VerboseReporter {
   private readonly toolDetailLevel: number;
 

@@ -8,11 +8,11 @@ Open this for failing evals, missing reporter data, or uncertain verification.
 |---------|--------------|-----|
 | Test has no `run` fixture | Suite is not inside `describeEval(...)`. | Wrap the suite with `describeEval(name, { harness }, (it) => { ... })`. |
 | App executes more than once per test | Judge or assertion calls the app directly. | Use the returned `result`; reserve `harness.run(...)` inside a judge for intentional second runs. |
-| Reporter shows little harness detail | `HarnessRun.session`, `usage`, or `errors` is sparse. | Return a richer normalized run and set `session.outputText` deliberately. |
+| Reporter shows little harness detail | `HarnessRun.session`, `usage`, or `errors` is sparse. | Return a richer normalized run with assistant messages. |
 | Tool calls are missing | Tools were not passed through the harness runtime or native tool inference missed them. | Use wrapped `runtime.tools`, explicit `tools`, or emit events from the app seam. |
 | Tool arguments/results disappear | Values are not JSON-serializable or normalize to `undefined`. | Convert to records, arrays, strings, numbers, booleans, or `null`. |
-| Judge receives blank text | `session.outputText` and assistant content are empty. | Set `session.outputText` or ensure the assistant message has content. |
-| Structured output judge fails unexpectedly | `run.output` is not the parsed domain object. | Add `output` or `normalize.output` to the harness. |
+| Judge receives blank text | The judge expects text but the run output or assistant content is not text. | Use a text `run.output` or project structured output to text inside the judge. |
+| Structured output judge fails unexpectedly | `run.output` is not the parsed domain object. | Return `{ output }` from `run()`, or add an `output` selector when returning a raw provider result. |
 | Replay misses an existing recording | Cache key input, version, tool name, or replay dir changed. | Inspect `metadata.replay.recordingPath` and update `key` or `version`. |
 | `strict` replay fails | Recording does not exist for the current key. | Run `auto` or `record` once, or commit the expected recording. |
 | Replay rejects a tool output | Tool returned a non-JSON value or async iterable. | Return JSON-safe values from recorded tools. |

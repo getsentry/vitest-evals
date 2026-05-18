@@ -2,14 +2,103 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { HarnessContext, JsonValue } from "vitest-evals/harness";
+import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
 type DemoMetadata = {
   scenario?: string;
 };
+type RefundDecision = {
+  status: "approved" | "denied";
+};
+type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
+  T,
+>() => T extends TExpected ? 1 : 2
+  ? true
+  : false;
+type Expect<T extends true> = T;
+type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput, any>
+  ? TOutput
+  : never;
 
-const createAgent = vi.fn(() => ({
+const typedRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output: RefundDecision }> => ({
+    output: {
+      status: "approved",
+    },
+  }),
+});
+type _PiAiRunOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunOutputHarness>, RefundDecision>
+>;
+
+const optionalRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output?: RefundDecision }> => ({}),
+});
+type _PiAiOptionalRunOutput = Expect<
+  Equal<
+    HarnessOutput<typeof optionalRunOutputHarness>,
+    RefundDecision | undefined
+  >
+>;
+
+const nonJsonRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output: Date }> => ({
+    output: new Date("2026-01-01T00:00:00.000Z"),
+  }),
+});
+type _PiAiNonJsonRunOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonRunOutputHarness>, undefined>
+>;
+
+const typedAgentOutputHarness = piAiHarness({
+  agent: {
+    run: async (_input: string): Promise<{ output: RefundDecision }> => ({
+      output: {
+        status: "approved",
+      },
+    }),
+  },
+});
+type _PiAiAgentOutput = Expect<
+  Equal<HarnessOutput<typeof typedAgentOutputHarness>, RefundDecision>
+>;
+
+const nonJsonAgentOutputHarness = piAiHarness({
+  agent: {
+    run: async (_input: string): Promise<{ output: Date }> => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  },
+});
+type _PiAiNonJsonAgentOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonAgentOutputHarness>, undefined>
+>;
+
+const broadDecisionFieldHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async () => ({
+    decision: {
+      status: "approved",
+    },
+  }),
+});
+type _PiAiDecisionFieldOutput = Expect<
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, undefined>
+>;
+
+const agentFactory = vi.fn(() => ({
   id: "refund-agent",
 }));
 
@@ -25,8 +114,6 @@ const tools = {
 type DemoRuntime = PiAiRuntime<typeof tools, string, DemoMetadata>;
 
 let replayDir: string | undefined;
-
-const judgePrompt = async (input: string) => input;
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -55,7 +142,7 @@ const runAgent = vi.fn(
     runtime.events.assistant("approved");
 
     return {
-      decision: {
+      output: {
         status: "approved",
       },
       metrics: {
@@ -67,29 +154,140 @@ const runAgent = vi.fn(
   },
 );
 
-test("exposes the configured prompt on the harness", async () => {
-  const prompt = vi.fn(async (input: string) => `judge: ${input}`);
-  const harness = piAiHarness({
-    agent: {
-      id: "refund-agent",
+test("accepts agent as a factory", async () => {
+  const agent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      return {
+        id: "refund-agent",
+      };
     },
-    prompt,
-    run: runAgent,
+  );
+  const run = vi.fn(
+    async ({
+      agent,
+      context,
+      runtime,
+    }: {
+      agent: { id: string };
+      context: HarnessContext<DemoMetadata>;
+      runtime: DemoRuntime;
+    }) => {
+      context.setArtifact("agentId", agent.id);
+      await runtime.tools.lookupInvoice({
+        invoiceId: "inv_123",
+      });
+
+      return {
+        output: {
+          status: "approved",
+        },
+      };
+    },
+  );
+  const artifacts: Record<string, JsonValue> = {};
+  const harness = piAiHarness({
+    agent,
+    run,
     tools,
   });
 
-  await expect(harness.prompt("score refund")).resolves.toBe(
-    "judge: score refund",
+  const result = await harness.run("Refund invoice inv_123", {
+    metadata: {},
+    artifacts,
+    setArtifact: vi.fn((name: string, value: JsonValue) => {
+      artifacts[name] = value;
+    }),
+  });
+
+  expect(agent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Refund invoice inv_123",
+    }),
   );
-  expect(prompt).toHaveBeenCalledWith("score refund");
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+  expect(result.artifacts).toEqual({
+    preparedInput: "Refund invoice inv_123",
+    agentId: "refund-agent",
+  });
+});
+
+test("does not infer app output from arbitrary custom result shapes", async () => {
+  const objectHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      decision: {
+        status: "approved",
+      },
+    }),
+  });
+  const primitiveHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => "approved",
+  });
+  const nonJsonOutputHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  });
+  const invalidArrayOutputHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      output: [1, new Date("2026-01-01T00:00:00.000Z")],
+    }),
+  });
+  const context = {
+    metadata: {},
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+
+  const objectResult = await objectHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+  const primitiveResult = await primitiveHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+  const nonJsonOutputResult = await nonJsonOutputHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+  const invalidArrayOutputResult = await invalidArrayOutputHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+
+  expect(objectResult.output).toBeUndefined();
+  expect(primitiveResult.output).toBeUndefined();
+  expect(nonJsonOutputResult.output).toBeUndefined();
+  expect(invalidArrayOutputResult.output).toBeUndefined();
 });
 
 describeEval(
   "pi-ai harness adapter",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent,
+      agent: agentFactory,
       run: runAgent,
       tools,
     }),
@@ -98,7 +296,7 @@ describeEval(
     it("runs the harness explicitly", async ({ run }) => {
       const result = await run("Refund invoice inv_123");
 
-      expect(createAgent).toHaveBeenCalledTimes(1);
+      expect(agentFactory).toHaveBeenCalledTimes(1);
       expect(runAgent).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({
         status: "approved",
@@ -118,7 +316,14 @@ describeEval(
           },
         },
       ]);
-      expect(result.session.outputText).toBeUndefined();
+      expect(result.session.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content: "approved",
+          }),
+        ]),
+      );
       expect(result.usage.totalTokens).toBe(12);
     });
   },
@@ -128,8 +333,7 @@ describeEval(
   "pi-ai harness wraps native agent tools",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent: () => {
+      agent: () => {
         const nativeTools = [
           {
             name: "lookupInvoice",
@@ -174,7 +378,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
               metrics: {
@@ -235,8 +439,7 @@ describeEval(
   "pi-ai harness wraps native tools even with an explicit tool override",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent: () => {
+      agent: () => {
         const nativeTools = [
           {
             name: "lookupInvoice",
@@ -281,7 +484,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -317,8 +520,7 @@ describeEval(
   "pi-ai harness reapplies native tool instrumentation after reset",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent: () => {
+      agent: () => {
         const createNativeTool = () => ({
           name: "lookupInvoice",
           execute: async (
@@ -375,7 +577,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -410,8 +612,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets and native tools together",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent: () => {
+      agent: () => {
         const toolset = {
           lookupInvoice: {
             execute: async ({ invoiceId }: { invoiceId: string }) => ({
@@ -466,7 +667,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -525,11 +726,10 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
   );
 
   const replayHarness = piAiHarness({
-    prompt: judgePrompt,
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -557,7 +757,7 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details.refundable
+            output: toolResult.details.refundable
               ? { status: "approved" as const }
               : { status: "denied" as const, reason: "not refundable" },
           };
@@ -568,9 +768,6 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -622,9 +819,6 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -646,8 +840,7 @@ describeEval(
   "pi-ai harness infers runtime toolsets from existing agents",
   {
     harness: piAiHarness({
-      prompt: judgePrompt,
-      createAgent: () => {
+      agent: () => {
         const toolset = {
           lookupInvoice: {
             execute: async ({ invoiceId }: { invoiceId: string }) => ({
@@ -665,7 +858,7 @@ describeEval(
             });
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -702,8 +895,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
     refundable: true,
   }));
   const harness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: () => {
+    agent: () => {
       const toolset = {
         lookupInvoice: {
           execute: lookupInvoice,
@@ -721,7 +913,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
           });
 
           return {
-            decision: {
+            output: {
               status: "approved",
             },
           };
@@ -732,9 +924,6 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
 
   const result = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -754,26 +943,20 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
   ]);
 });
 
-test("supports normalize.output as a low-level escape hatch", async () => {
+test("supports a typed output selector", async () => {
   const normalizedHarness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     run: async () => ({
-      customDecision: {
+      providerDecision: {
         status: "approved",
       },
     }),
-    normalize: {
-      output: ({ result }) =>
-        (result as { customDecision: { status: string } }).customDecision,
-    },
+    output: ({ result }) =>
+      (result as { providerDecision: { status: string } }).providerDecision,
   });
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -789,10 +972,9 @@ test("supports normalize.output as a low-level escape hatch", async () => {
   });
 });
 
-test("applies normalize overrides to HarnessRun-shaped results", async () => {
+test("applies output selectors to HarnessRun-shaped results", async () => {
   const normalizedHarness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     run: async () => ({
       session: {
         messages: [
@@ -812,28 +994,13 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
       },
       errors: [],
     }),
-    normalize: {
-      output: () => ({
-        status: "approved",
-      }),
-      session: () => ({
-        messages: [
-          {
-            role: "assistant",
-            content: {
-              status: "approved",
-            },
-          },
-        ],
-      }),
-    },
+    output: () => ({
+      status: "approved",
+    }),
   });
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -845,7 +1012,7 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
     {
       role: "assistant",
       content: {
-        status: "approved",
+        status: "denied",
       },
     },
   ]);
@@ -854,8 +1021,7 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
 
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute: async ({ invoiceId }: { invoiceId: string }) => {
@@ -869,7 +1035,7 @@ test("attaches a partial run when the harness errors", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -879,9 +1045,6 @@ test("attaches a partial run when the harness errors", async () => {
   const error = await erroringHarness
     .run("Refund invoice inv_missing", {
       metadata: {},
-      task: {
-        meta: {},
-      },
       artifacts: {},
       setArtifact: vi.fn(),
     })
@@ -937,11 +1100,10 @@ test("replays native agent tools without breaking the agent-facing result", asyn
   );
 
   const replayHarness = piAiHarness({
-    prompt: judgePrompt,
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -963,7 +1125,7 @@ test("replays native agent tools without breaking the agent-facing result", asyn
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details.refundable
+            output: toolResult.details.refundable
               ? { status: "approved" as const }
               : { status: "denied" as const, reason: "not refundable" },
           };
@@ -974,9 +1136,6 @@ test("replays native agent tools without breaking the agent-facing result", asyn
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1055,9 +1214,6 @@ test("replays native agent tools without breaking the agent-facing result", asyn
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1106,8 +1262,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
   );
 
   const harness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: () => {
+    agent: () => {
       const nativeTools = [
         {
           name: "lookupInvoice",
@@ -1130,7 +1285,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: {
+            output: {
               status: "approved" as const,
             },
           };
@@ -1141,9 +1296,6 @@ test("does not opt native agent tools into replay from tool objects", async () =
 
   const run = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1152,7 +1304,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
   expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
 });
 
-test("passes run input and context to createAgent before native tool instrumentation", async () => {
+test("passes run input and context to agent factory before native tool instrumentation", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-pi-native-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
   vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
@@ -1205,15 +1357,14 @@ test("passes run input and context to createAgent before native tool instrumenta
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details,
+            output: toolResult.details,
           };
         },
       };
     },
   );
   const harness = piAiHarness({
-    prompt: judgePrompt,
-    createAgent: createContextualAgent,
+    agent: createContextualAgent,
     toolReplay: {
       lookupInvoice: true,
     },
@@ -1222,9 +1373,6 @@ test("passes run input and context to createAgent before native tool instrumenta
   const context: HarnessContext<DemoMetadata> = {
     metadata: {
       scenario: "refund",
-    },
-    task: {
-      meta: {},
     },
     artifacts,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
@@ -1280,11 +1428,10 @@ test("records and replays opt-in tools in auto mode", async () => {
   }));
 
   const replayHarness = piAiHarness({
-    prompt: judgePrompt,
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute,
@@ -1296,7 +1443,7 @@ test("records and replays opt-in tools in auto mode", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -1305,9 +1452,6 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1342,9 +1486,6 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1366,8 +1507,7 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
   }));
 
   const harness = piAiHarness<{ id: string }, string, DemoMetadata>({
-    prompt: judgePrompt,
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         replay: true,
@@ -1380,7 +1520,7 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -1389,9 +1529,6 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
 
   const run = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1411,11 +1548,10 @@ test("errors when strict mode is missing a recording", async () => {
   }));
 
   const replayHarness = piAiHarness({
-    prompt: judgePrompt,
     toolReplay: {
       lookupInvoice: true,
     },
-    createAgent: () => ({ id: "refund-agent" }),
+    agent: () => ({ id: "refund-agent" }),
     tools: {
       lookupInvoice: {
         execute,
@@ -1427,7 +1563,7 @@ test("errors when strict mode is missing a recording", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -1437,9 +1573,6 @@ test("errors when strict mode is missing a recording", async () => {
   const error = await replayHarness
     .run("Refund invoice inv_123", {
       metadata: {},
-      task: {
-        meta: {},
-      },
       artifacts: {},
       setArtifact: vi.fn(),
     })

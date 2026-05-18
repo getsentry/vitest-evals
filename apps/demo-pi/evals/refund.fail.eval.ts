@@ -1,11 +1,7 @@
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
-import {
-  createRefundAgent,
-  promptRefundModel,
-  type RefundCase,
-} from "../src/refundAgent";
+import { createRefundAgent, type RefundCase } from "../src/refundAgent";
 
 type AssertionRefundCase = RefundCase;
 type ScoredRefundCase = RefundCase & {
@@ -13,11 +9,10 @@ type ScoredRefundCase = RefundCase & {
 };
 
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: promptRefundModel,
 });
 
 describeEval(

@@ -6,10 +6,12 @@ import type {
   MatchStrategy,
 } from "./utils";
 
+/** Options passed to the legacy structured-output scorer. */
 export interface StructuredOutputScorerOptions extends BaseScorerOptions {
   expected?: Record<string, unknown>;
 }
 
+/** Configuration for the legacy structured-output scorer factory. */
 export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
   match?: MatchStrategy<any>;
   errorField?: string | null;

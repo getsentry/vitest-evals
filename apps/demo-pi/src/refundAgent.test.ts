@@ -144,7 +144,7 @@ test("createRefundAgent awaits async reset before prompting", async () => {
       totalTokens: 14,
     },
   );
-  expect(result.decision).toEqual({
+  expect(result.output).toEqual({
     status: "approved",
     invoiceId: "inv_123",
     refundId: "rf_inv_123",

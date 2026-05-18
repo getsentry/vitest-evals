@@ -16,24 +16,20 @@ import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "@vitest-evals/h
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: promptJudgeModel,
+  agent: () => createRefundAgent(),
 });
 ```
 
-`createAgent` receives `{ input, context }` when per-run instructions, native
-tool closures, metadata, or seeded artifacts are needed before instrumentation.
+`agent` can be an existing agent instance or a per-run factory. Factories
+receive `{ input, context }` when per-run instructions, native tool closures,
+metadata, or seeded artifacts are needed before instrumentation.
 
 If the agent needs a custom entrypoint:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: promptJudgeModel,
+  agent: () => createRefundAgent(),
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
-  normalize: {
-    output: ({ result }) => result.decision,
-  },
 });
 ```
 
@@ -41,14 +37,10 @@ const harness = piAiHarness({
 
 | Option | Requirement |
 |--------|-------------|
-| `agent` | Existing instance used for runs. |
-| `createAgent` | Factory for a fresh per-run agent; receives `{ input, context }`. |
-| `prompt` | Required prompt seam for judges. |
+| `agent` | Existing instance or factory for a fresh per-run agent; factories receive `{ input, context }`. |
 | `run` | Optional custom execution; omitted when the agent exposes `run(input, runtime)`. |
 | `tools` | Optional explicit `PiAiToolset`; use when the agent hides its tool surface. |
-| `normalize.output` | Optional domain output selector; defaults to `output`, `decision`, `result`, then `final`. |
-| `normalize.session` | Optional override when event capture is insufficient. |
-| `normalize.usage`, `normalize.timings`, `normalize.errors` | Optional diagnostic overrides. |
+| `output` | Optional typed domain output selector for provider/custom results that do not already return `output`. |
 | `name` | Optional reporter label; defaults to `pi-ai`. |
 
 ## Runtime Surface
@@ -84,8 +76,8 @@ const harness = piAiHarness({
 
 | Case | Prefer |
 |------|--------|
-| Conventional agent with `run(input, runtime)` | `createAgent` plus `prompt` |
+| Conventional agent with `run(input, runtime)` | `agent` |
 | Existing agent method named differently | Add `run` |
 | Hidden tool surface | Add explicit `tools` |
-| Wrapped result with domain object | Add `normalize.output` |
+| Wrapped result with domain object | Add `output` |
 | Agent produces extra messages | Use `runtime.events.*` inside the app run path |

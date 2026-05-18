@@ -102,25 +102,29 @@ The `apps/demo-pi` app shows the intended explicit-run flow:
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
+  createJudge,
   describeEval,
-  namedJudge,
   toolCalls,
   type JudgeContext,
 } from "vitest-evals";
-import { createRefundAgent, judgePrompt } from "../src/refundAgent";
+import { createRefundAgent } from "../src/refundAgent";
 
 type RefundEvalMetadata = {
   expectedStatus: "approved" | "denied";
   expectedTools: string[];
 };
 
-const FactualityJudge = namedJudge(
+type RefundOutput = {
+  status: "approved" | "denied";
+};
+
+const FactualityJudge = createJudge(
   "FactualityJudge",
   async ({
     input,
     output,
     metadata,
-  }: JudgeContext<string, RefundEvalMetadata>) => {
+  }: JudgeContext<string, RefundOutput, RefundEvalMetadata>) => {
     const verdict = await judgeFactuality({
       question: input,
       answer: output,
@@ -140,8 +144,7 @@ describeEval(
   "demo pi refund agent",
   {
     harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
-      prompt: judgePrompt,
+      agent: () => createRefundAgent(),
     }),
     judges: [FactualityJudge],
   },
@@ -175,9 +178,14 @@ Harness-backed suites stay close to plain Vitest:
 - tests call `run(...)` explicitly
 - ordinary `expect(...)` assertions stay first-class
 - judges layer in through `expect(...).toSatisfyJudge(...)`
-- every judge receives `JudgeContext`, including the configured harness with its
-  required `prompt` function
-- scenario-specific judge criteria can live in `inputValue`; use `metadata` for
+- every judge is a named object with `assess(ctx)`
+- every judge receives `JudgeContext` with typed `input`, typed `output`, the
+  normalized run/session, tool calls, and metadata; `output` is only optional
+  when the harness output type includes `undefined`
+- judges own their prompt, rubric, model call, and parsing; use
+  `createJudge(...)` for custom judges and its provider-helper overload only
+  when multiple judges share setup
+- scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
 - reporter output, replay, usage, and tool traces come from the normalized run
@@ -185,8 +193,7 @@ Harness-backed suites stay close to plain Vitest:
 Built-in judges like `StructuredOutputJudge()` are still available for
 deterministic contract checks, but the more realistic explicit-judge path is a
 custom factuality or rubric judge over `output`, with `JudgeContext` available
-when the judge needs richer run/session data or the suite's configured model
-prompt seam.
+when the judge needs richer run/session data.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure the replay mode and directory globally in Vitest, then opt individual

@@ -7,14 +7,17 @@ type MaybePromise<T> = T | Promise<T>;
 
 const DEFAULT_REPLAY_DIR = ".vitest-evals/recordings";
 
+/** Replay mode used for tool recording and playback. */
 export type ReplayMode = "off" | "auto" | "strict" | "record";
 
+/** Metadata attached to tool calls or errors touched by replay. */
 export type ReplayMetadata = {
   status: "recorded" | "replayed";
   recordingPath: string;
   cacheKey: string;
 };
 
+/** JSON recording persisted for one replayable tool execution. */
 export interface ToolRecording<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
@@ -31,6 +34,7 @@ export interface ToolRecording<
   metadata?: Record<string, JsonValue | undefined>;
 }
 
+/** Per-tool replay configuration for keying and sanitizing recordings. */
 export interface ToolReplayConfig<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
@@ -43,6 +47,7 @@ export interface ToolReplayConfig<
   version?: string;
 }
 
+/** Executes a tool call with optional recording or replay behavior. */
 export async function executeWithReplay<
   TArgs extends JsonValue,
   TResult extends JsonValue,
@@ -163,6 +168,7 @@ export async function executeWithReplay<
   }
 }
 
+/** Reads replay metadata attached to a thrown tool error. */
 export function getReplayMetadataFromError(error: unknown) {
   if (
     error &&
@@ -178,6 +184,7 @@ export function getReplayMetadataFromError(error: unknown) {
   return undefined;
 }
 
+/** Converts replay metadata into the JSON-safe shape stored on tool calls. */
 export function normalizeReplayMetadata(replay: ReplayMetadata | undefined) {
   if (!replay) {
     return undefined;

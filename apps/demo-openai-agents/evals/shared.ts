@@ -5,24 +5,20 @@ import {
   createRefundAgent,
   createRefundRunner,
   parseRefundDecision,
-  promptRefundModel,
   resolveResultText,
   type RefundCase,
 } from "../src/refundAgent";
 
 export const refundHarness = openaiAgentsHarness({
-  createAgent: () => createRefundAgent(),
-  createRunner: () => createRefundRunner(),
-  prompt: promptRefundModel,
+  agent: () => createRefundAgent(),
+  runner: () => createRefundRunner(),
   runOptions: {
     maxTurns: 5,
   },
   toolReplay: {
     lookupInvoice: true,
   },
-  normalize: {
-    output: ({ result }) => parseRefundDecision(resolveResultText(result)),
-  },
+  output: ({ result }) => parseRefundDecision(resolveResultText(result)),
 });
 
 export async function assertRefundCase(

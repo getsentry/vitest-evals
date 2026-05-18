@@ -14,16 +14,20 @@ npm install -D @openai/agents vitest-evals @vitest-evals/harness-openai-agents
 import { expect } from "vitest";
 import { Runner } from "@openai/agents";
 import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  createJudge,
+  describeEval,
+  toolCalls,
+  type JudgeContext,
+} from "vitest-evals";
 
 const harness = openaiAgentsHarness({
-  createAgent: () => createClassifierAgent(),
-  createRunner: () =>
+  agent: () => createClassifierAgent(),
+  runner: () =>
     new Runner({
       modelProvider,
       tracingDisabled: true,
     }),
-  prompt: sharedJudgePrompt,
 });
 
 describeEval("classifier agent", { harness }, (it) => {
@@ -48,52 +52,71 @@ If your application has a custom entrypoint, wire it directly:
 
 ```ts
 const harness = openaiAgentsHarness({
-  createAgent: () => createClassifierAgent(),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
-  run: ({ agent, input, runner, runOptions }) =>
-    runBottleClassifier({ agent, runner, input, runOptions }),
-  normalize: {
-    output: ({ result }) => result.classification,
-    outputText: ({ output }) => JSON.stringify(output),
+  agent: () => createClassifierAgent(),
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
+  run: async ({ agent, input, runner, runOptions }) => {
+    const result = await runBottleClassifier({
+      agent,
+      runner,
+      input,
+      runOptions,
+    });
+
+    return {
+      output: result.classification,
+    };
   },
 });
 ```
 
-`createAgent` receives the per-run input and harness context before the
-adapter instruments local function tools. Use that when an agent needs
-scenario-specific tool closures, instructions, seeded artifacts, or metadata
-while staying on the native replay path:
+`agent` and `runner` can be objects or per-run factories. An `agent` factory
+receives the per-run input and harness context before the adapter instruments
+local function tools. Use that when an agent needs scenario-specific tool
+closures, instructions, or metadata while staying on the native replay path:
 
 ```ts
 const harness = openaiAgentsHarness({
-  createAgent: ({ input, context }) =>
+  agent: ({ input, context }) =>
     createClassifierAgent({
       bottleId: parseBottleId(input),
       metadata: context.metadata,
-      setArtifact: context.setArtifact,
     }),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {
     lookup_bottle: true,
   },
 });
 ```
 
-The required `prompt` callback is passed to harness-backed judges as
-`JudgeContext.harness.prompt`, so rubric or factuality judges can share the
-same provider/model setup as the suite harness.
+`run` executes the OpenAI agent under test. Judges are created separately; keep
+judge prompts and model calls in the judge instead of putting a judge model
+call on the app harness.
+
+```ts
+const ClassificationJudge = createJudge(
+  "ClassificationJudge",
+  async (ctx: JudgeContext<string, Classification>) => {
+    const result = await judgeRunner
+      .run(judgeAgent, formatJudgePrompt(ctx))
+      .then((result) => resolveResultText(result));
+
+    return parseJudgeVerdict(result);
+  },
+);
+```
 
 The adapter provides:
 
 - native `Runner.run(agent, input, options)` execution
-- support for existing agents or per-run `createAgent({ input, context })`
-  factories
+- support for existing agents/runners or per-run `agent` and `runner` factories
 - a `run` escape hatch for app-specific entrypoints
 - normalized assistant output, messages, tool calls, tool results, usage,
   timings, errors, and replay-friendly metadata
-- app-facing `run.output` plus a deliberate `session.outputText` for judges
+- app-facing `run.output` from native `finalOutput`, a custom `run()` result's
+  `output`, or an explicit `output` selector; native OpenAI Agents `output`
+  items stay in the normalized session trace
+- native app output is accepted only when it is already JSON-safe; non-JSON
+  values require an explicit `output` selector
 - opt-in replay metadata for local function tools configured with `toolReplay`
 
 ## Tool Replay
@@ -129,9 +152,8 @@ const lookupBottle = tool({
 });
 
 const harness = openaiAgentsHarness({
-  createAgent: () => new Agent({ name: "classifier", tools: [lookupBottle] }),
-  createRunner: () => new Runner({ modelProvider, tracingDisabled: true }),
-  prompt: sharedJudgePrompt,
+  agent: () => new Agent({ name: "classifier", tools: [lookupBottle] }),
+  runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {
     lookup_bottle: true,
   },

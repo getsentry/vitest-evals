@@ -1,5 +1,4 @@
 import { Agent, Runner, tool } from "@openai/agents";
-import type { HarnessPromptOptions } from "vitest-evals";
 import { z } from "zod";
 
 export type InvoiceRecord = {
@@ -146,32 +145,6 @@ export function createRefundRunner() {
       temperature: 0,
     },
   });
-}
-
-/** Uses the same OpenAI Agents stack as a provider-agnostic judge prompt seam. */
-export async function promptRefundModel(
-  input: string,
-  options?: HarnessPromptOptions,
-) {
-  const runner = createRefundRunner();
-  const agent = new Agent({
-    name: "demo_refund_prompt",
-    instructions: options?.system ?? "Return a concise answer.",
-    model: DEFAULT_REFUND_MODEL,
-    modelSettings: {
-      temperature: 0,
-    },
-  });
-  const result = await runner.run(agent, input, {
-    maxTurns: 2,
-  });
-  const outputText = resolveResultText(result);
-
-  if (!outputText) {
-    throw new Error("Prompt model returned an empty response.");
-  }
-
-  return outputText;
 }
 
 /** Parses the demo agent's final JSON payload into a typed refund decision. */

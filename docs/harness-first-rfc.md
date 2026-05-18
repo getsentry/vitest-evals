@@ -35,8 +35,8 @@ For an existing agent, the user should only need to supply:
 - the existing app or agent instance, or a factory that creates it per test
 - the normal entrypoint for running one case
 - any required test fixtures or setup
-- an optional output selector when the app returns a domain object instead of a
-  plain assistant string
+- an optional output selector only when returning a raw provider result that
+  needs projection into app-facing output
 
 The user should not have to:
 
@@ -105,8 +105,8 @@ surface.
 1. `describeEval` selects one harness for the suite.
 2. Core overrides that harness onto a fixture-backed Vitest `it`.
 3. A test calls `run(input, { metadata? })`.
-4. Core creates a `HarnessContext` containing reporter plumbing, artifacts, and
-   the test signal.
+4. Core creates a `HarnessContext` containing metadata, artifacts, and the test
+   signal.
 5. The harness creates or receives the existing agent/application instance.
 6. The harness runs the application with the provided input and injected test
    dependencies.
@@ -134,8 +134,7 @@ describeEval(
   "refund agent",
   {
     harness: piAiHarness({
-      createAgent: () => createRefundAgent(),
-      prompt: judgePrompt,
+      agent: () => createRefundAgent(),
       run: ({ agent, input, runtime }) => agent.run(input, runtime),
     }),
   },
@@ -169,8 +168,7 @@ The default path should be close to zero glue for standard apps:
 ```ts
 describeEval("refund agent", {
   harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    prompt: judgePrompt,
+    agent: () => createRefundAgent(),
   }),
 }, (it) => {
   it("approves a refundable invoice", async ({ run }) => {
@@ -188,12 +186,8 @@ entrypoint or custom result shape:
 ```ts
 describeEval("refund agent", {
   harness: piAiHarness({
-    createAgent: () => createRefundAgent(),
-    prompt: judgePrompt,
+    agent: () => createRefundAgent(),
     run: ({ agent, input, runtime }) => agent.execute(input, runtime),
-    normalize: {
-      output: ({ result }) => result.decision,
-    },
   }),
 }, (it) => {
   it("approves a refundable invoice", async ({ run }) => {

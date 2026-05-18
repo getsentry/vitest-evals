@@ -2,6 +2,7 @@ import type {
   Harness,
   HarnessMetadata,
   HarnessRun,
+  JsonValue,
   ToolCallRecord,
 } from "../harness";
 
@@ -17,27 +18,26 @@ export type JudgeResult = {
 /**
  * Full normalized context passed to every judge.
  *
- * Scenario-owned judge criteria should live on `inputValue`. Use `metadata`
- * for per-run expectations or harness configuration that are not part of the
+ * Scenario-owned judge criteria should live on `input`. Use `metadata` for
+ * per-run expectations or harness configuration that are not part of the
  * scenario payload.
  */
 export interface JudgeContext<
   TInput = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> | undefined =
-    | Harness<TInput, TMetadata>
+  THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
+    | Harness<TInput, TOutput, TMetadata>
     | undefined,
 > {
-  /** Canonical text input passed to judges for plain prompt evaluation. */
-  input: string;
-  /** Canonical text response passed to judges for plain output evaluation. */
-  output: string;
-  /** Original non-string input value when the judge needs more than `input`. */
-  inputValue: TInput;
+  /** Original eval input passed to the harness. */
+  input: TInput;
+  /** App-facing output returned by the harness. */
+  output: TOutput;
   toolCalls: ToolCallRecord[];
   metadata: Readonly<TMetadata>;
-  run: HarnessRun;
-  session: HarnessRun["session"];
+  run: HarnessRun<TOutput>;
+  session: HarnessRun<TOutput>["session"];
   /** Harness associated with this judge context. */
   harness: THarness;
 }
@@ -46,13 +46,50 @@ export interface JudgeContext<
 export type JudgeOptions<
   TParams extends Record<string, unknown> = Record<string, never>,
   TInput = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TMetadata> | undefined =
-    | Harness<TInput, TMetadata>
+  THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
+    | Harness<TInput, TOutput, TMetadata>
     | undefined,
-> = JudgeContext<TInput, TMetadata, THarness> & TParams;
+> = JudgeContext<TInput, TOutput, TMetadata, THarness> & TParams;
 
-/** Judge function over the normalized judge context. */
-export type JudgeFn<
-  TOptions extends JudgeContext<any, any, any> = JudgeContext,
+/** Function that assesses a normalized judge context. */
+export type JudgeAssessFn<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = (opts: TOptions) => Promise<JudgeResult> | JudgeResult;
+
+/** Runtime options supplied by core when calling a judge-side assessor. */
+export type JudgeAssessorOptions = {
+  signal?: AbortSignal;
+};
+
+/** Provider/model helper that a judge can use without running the app harness. */
+export type JudgeAssessor<TInput = string, TOutput = string> = {
+  assess: (
+    input: TInput,
+    options: JudgeAssessorOptions,
+  ) => Promise<TOutput> | TOutput;
+};
+
+/** Judge-side assessor after core binds run-scoped options such as abort signal. */
+export type BoundJudgeAssessor<TInput = string, TOutput = string> = {
+  assess: (input: TInput) => Promise<TOutput>;
+};
+
+/** Function that assesses a context with a prebound judge-side assessor. */
+export type JudgeAssessWithAssessorFn<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+  TInput = string,
+  TOutput = string,
+> = (
+  opts: TOptions,
+  assessor: BoundJudgeAssessor<TInput, TOutput>,
+) => Promise<JudgeResult> | JudgeResult;
+
+/** Named judge object consumed by suite-level judges and explicit assertions. */
+export interface Judge<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+> {
+  name: string;
+  assess: JudgeAssessFn<TOptions>;
+}

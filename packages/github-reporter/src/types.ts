@@ -1,3 +1,4 @@
+/** Status values emitted by Vitest JSON reports. */
 export type VitestJsonStatus =
   | "passed"
   | "failed"
@@ -6,11 +7,13 @@ export type VitestJsonStatus =
   | "todo"
   | "disabled";
 
+/** Source location attached to a Vitest assertion. */
 export type VitestJsonLocation = {
   line: number;
   column: number;
 };
 
+/** Assertion record read from Vitest's JSON reporter output. */
 export type VitestJsonAssertion = {
   ancestorTitles: string[];
   fullName: string;
@@ -23,6 +26,7 @@ export type VitestJsonAssertion = {
   tags?: string[];
 };
 
+/** Test-file record read from Vitest's JSON reporter output. */
 export type VitestJsonFile = {
   message: string;
   name: string;
@@ -32,6 +36,7 @@ export type VitestJsonFile = {
   assertionResults: VitestJsonAssertion[];
 };
 
+/** Top-level Vitest JSON reporter payload. */
 export type VitestJsonReport = {
   numFailedTests: number;
   numPassedTests: number;
@@ -43,6 +48,7 @@ export type VitestJsonReport = {
   testResults: VitestJsonFile[];
 };
 
+/** Score record stored by `vitest-evals` on Vitest task metadata. */
 export type EvalScore = {
   name?: string;
   score?: number | null;
@@ -53,6 +59,7 @@ export type EvalScore = {
   };
 };
 
+/** Normalized eval case consumed by GitHub reporter renderers. */
 export type EvalCase = {
   id: string;
   file: string;
@@ -80,12 +87,14 @@ export type EvalCase = {
   primaryFailure?: EvalFailure;
 };
 
+/** Primary failure summary extracted from an eval case. */
 export type EvalFailure = {
   judgeName?: string;
   score?: number;
   reason?: string;
 };
 
+/** Collected eval report used by summaries, annotations, and check runs. */
 export type EvalReport = {
   status: "passed" | "failed";
   startedAt?: number;
@@ -108,6 +117,7 @@ export type EvalReport = {
   failures: EvalCase[];
 };
 
+/** Aggregated usage values shown in reporter output. */
 export type UsageSummary = {
   inputTokens?: number;
   outputTokens?: number;
@@ -117,12 +127,14 @@ export type UsageSummary = {
   toolCalls?: number;
 };
 
+/** Tool-call summary shown in reporter output. */
 export type ToolCallSummary = {
   name: string;
   error?: string;
   durationMs?: number;
 };
 
+/** Options for collecting eval data from a Vitest JSON report. */
 export type CollectOptions = {
   workspace?: string;
 };

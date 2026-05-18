@@ -11,8 +11,13 @@ export {
 } from "./toolCallJudge";
 
 export type {
+  BoundJudgeAssessor,
+  Judge,
+  JudgeAssessFn,
+  JudgeAssessWithAssessorFn,
+  JudgeAssessor,
+  JudgeAssessorOptions,
   JudgeContext,
-  JudgeFn,
   JudgeOptions,
   JudgeResult,
 } from "./types";

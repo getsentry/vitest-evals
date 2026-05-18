@@ -13,14 +13,18 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 ```ts
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  createJudge,
+  describeEval,
+  toolCalls,
+  type JudgeContext,
+} from "vitest-evals";
 
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 
 describeEval("refund agent", { harness }, (it) => {
@@ -38,8 +42,25 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-`prompt` gives rubric or factuality judges the same provider/model setup
-through `JudgeContext.harness.prompt`.
+`run` executes the Pi agent under test. Judges are created separately; keep
+judge prompts and model calls in the judge instead of putting a judge model
+call on the app harness.
+
+```ts
+const RefundRubricJudge = createJudge(
+  "RefundRubricJudge",
+  async (ctx: JudgeContext<string, RefundDecision>) => {
+    const verdict = await queryRefundJudgeModel({
+      prompt: formatJudgePrompt({
+        input: ctx.input,
+        output: ctx.output,
+      }),
+    });
+
+    return parseJudgeVerdict(verdict);
+  },
+);
+```
 
 If the agent already exposes its own tools, the adapter will infer them from
 the agent by default. If your existing Pi Mono agent already exposes its own
@@ -48,8 +69,7 @@ seam:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: sharedJudgePrompt,
+  agent: () => createRefundAgent(),
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
 });
 ```
@@ -57,62 +77,59 @@ const harness = piAiHarness({
 If the agent already implements `run(input, runtime)`, you can omit `run` and
 the harness will call that method automatically.
 
-`createAgent` receives the per-run input and harness context before the adapter
-infers and instruments native agent tools. Use that for scenario-specific
-instructions, tool closures, metadata, or seeded artifacts without leaving the
-default replay path:
+`agent` can be an object or a per-run factory. The factory receives the per-run
+input and harness context before the adapter infers and instruments native
+agent tools. Use that for scenario-specific instructions, tool closures, or
+metadata without leaving the default replay path:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: ({ input, context }) =>
+  agent: ({ input, context }) =>
     createRefundAgent({
       instructions: buildInstructions(input),
       metadata: context.metadata,
-      setArtifact: context.setArtifact,
     }),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 ```
 
 You should not need to configure output/session/usage basics for the normal Pi
 path. Pass your agent and let the adapter infer both the toolset and the
-normalized result from common Pi-style return values such as `decision` or
-`output`.
+normalized result from the agent transcript. When your app returns a structured
+domain value, return it as `output`.
 
 If the agent completely hides its tools, `tools` still exists as a low-level
 override:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
-  prompt: sharedJudgePrompt,
+  agent: () => createRefundAgent(),
   tools: hiddenAgentTools,
 });
 ```
 
-If you do have an unusual wrapper around the agent result, low-level
-normalization hooks still exist under `normalize`:
+If you do have an unusual wrapper around the agent result, make the app-facing
+value explicit in the `run()` return:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createWrappedRefundAgent(),
-  prompt: sharedJudgePrompt,
-  run: ({ agent, input, runtime }) => agent.run(input, runtime),
-  normalize: {
-    output: ({ result }) => result.customDecision,
-  },
+  agent: () => createWrappedRefundAgent(),
+  run: async ({ agent, input, runtime }) => ({
+    output: await agent.run(input, runtime),
+  }),
 });
 ```
 
 The adapter provides:
 
 - a runtime/tool injection seam for an existing agent
-- a required prompt seam for LLM-backed judges
 - normalized session capture from emitted events and wrapped tool calls
-- usage/output inference for common `pi-ai`-style result objects
+- usage capture plus typed app output from `run()` results that return `output`
+- native app output is accepted only when it is already JSON-safe; arbitrary
+  fields, primitive raw results, and non-JSON values require an explicit
+  `output` selector
 - opt-in tool replay/recording from harness-level `toolReplay`
 
 See the workspace demo in `apps/demo-pi`.
@@ -138,11 +155,10 @@ Then opt individual tools into recording/replay from the harness:
 
 ```ts
 const harness = piAiHarness({
-  createAgent: () => createRefundAgent(),
+  agent: () => createRefundAgent(),
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: sharedJudgePrompt,
 });
 ```
 

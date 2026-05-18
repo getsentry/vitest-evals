@@ -13,6 +13,7 @@ type LanguageModel = Parameters<typeof generateObject>[0]["model"];
 
 let defaultModel: LanguageModel | undefined;
 
+/** Configures the default language model used by legacy `evaluate(...)`. */
 export function configure(opts: { model: LanguageModel }) {
   defaultModel = opts.model;
 }
@@ -129,6 +130,7 @@ export async function _evaluate(
   }
 }
 
+/** Defines a legacy model-graded eval test. Prefer harness-backed suites. */
 export function evaluate(
   name: string,
   opts: EvaluateOptions & { timeout?: number },

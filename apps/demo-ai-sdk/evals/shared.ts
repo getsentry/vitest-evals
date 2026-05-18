@@ -113,14 +113,7 @@ export const refundHarness = aiSdkHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  prompt: (input, options) =>
-    generateText({
-      model: anthropic("claude-sonnet-4-5"),
-      system: options?.system,
-      prompt: input,
-      temperature: 0,
-    }).then((result) => result.text),
-  task: async ({ input, runtime }) =>
+  run: async ({ input, runtime }) =>
     generateText({
       model: anthropic("claude-sonnet-4-5"),
       system: REFUND_SYSTEM_PROMPT,

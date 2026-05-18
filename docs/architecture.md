@@ -77,9 +77,13 @@ These are judge-shaped adapters over the legacy comparison logic so new suites
 can stay on the harness-first surface while older matching behavior remains
 available.
 
-All judges receive `JudgeContext`, which carries normalized run/session data
-plus the configured `harness` and its required `prompt(...)` method. That keeps
-rubric and factuality judges on the same API as deterministic judges.
+All judges receive `JudgeContext`, which carries normalized run/session data,
+typed `input`, typed `output`, and the configured `harness`. The output is only
+optional when the harness output type includes `undefined`. LLM-backed judges own
+their prompt, rubric text, model call, and parser. Custom judges should use
+`createJudge("Name", assess)` for stable reporter labels; the provider-helper
+overload is for reusable judge-side setup that needs curried run-scoped options
+such as abort signals.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -138,14 +142,13 @@ For each eval test in a harness-backed suite:
 8. The eval test asserts on the same returned result and session.
 9. The reporter renders the recorded metadata without re-executing the harness.
 
-Explicit `expect(result).toSatisfyJudge(...)` calls use the run's canonical
-text output and reuse registered input, metadata, and harness prompt
+Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
+and reuse registered input, metadata, and harness context
 when `result` came from the fixture-backed `run(...)`. Inside an eval test,
-calls on registered raw output or session objects reuse that exact run context;
-raw output values are serialized as the judge `output`, and other raw values
-fall back to the current test's most recent `run(...)` context. Calls outside
-that context, or on manually-created runs, must pass the context required by
-the judge in matcher options.
+calls on registered output objects or session objects reuse that exact run
+context; other raw values fall back to the current test's most recent
+`run(...)` context. Calls outside that context, or on manually-created runs,
+must pass the context required by the judge in matcher options.
 
 ## First-Party Harness Packages
 
@@ -157,16 +160,16 @@ behavior only.
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
-result objects, while still allowing custom `run`, `session`, `output`, and
-`usage` overrides.
+result objects, while still allowing a custom `run` entrypoint and typed
+`output` selector.
 
 ### `@vitest-evals/harness-openai-agents`
 
 Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
-normalized run/session shape. It accepts an existing agent or `createAgent()`
-factory, supports custom app entrypoints, normalizes `RunResult` output,
-messages, usage, tool calls, tool results, errors, trace metadata, and records
-replay metadata for opt-in local function tools.
+normalized run/session shape. It accepts existing agents/runners or per-run
+`agent`/`runner` factories, supports custom app entrypoints, normalizes
+`RunResult` output, messages, usage, tool calls, tool results, errors, trace
+metadata, and records replay metadata for opt-in local function tools.
 
 ### `@vitest-evals/harness-pi-ai`
 
@@ -197,8 +200,6 @@ New runtime integrations should be implemented as thin adapter packages that:
 - execute the target runtime through its normal seam
 - capture messages, tool calls, usage, timings, and errors
 - normalize them into `HarnessRun`
-- expose `prompt` so the same provider/model configuration can be reused by
-  LLM-backed judges
 - avoid inventing harness-specific assertion or reporter behavior in userland
 
 ### New Judges
@@ -207,20 +208,21 @@ Root-level custom evaluation logic should generally be written as judges over
 normalized run/session data:
 
 ```ts
-import type { JudgeFn, JudgeOptions } from "vitest-evals";
+import { createJudge, type JudgeOptions } from "vitest-evals";
 
-export const RefundToolJudge: JudgeFn<
-  JudgeOptions<{ expectedTools: string[] }>
-> = async ({ expectedTools, toolCalls }) => ({
-  score: expectedTools.every(
-    (name, index) => toolCalls[index]?.name === name,
-  )
-    ? 1
-    : 0,
-  metadata: {
-    rationale: `Expected ${expectedTools.join(" -> ")}`,
+export const RefundToolJudge = createJudge(
+  "RefundToolJudge",
+  async ({ expectedTools, toolCalls }: JudgeOptions<{ expectedTools: string[] }>) => ({
+    score: expectedTools.every(
+      (name, index) => toolCalls[index]?.name === name,
+    )
+      ? 1
+      : 0,
+    metadata: {
+      rationale: `Expected ${expectedTools.join(" -> ")}`,
+    },
   },
-});
+);
 ```
 
 ### Legacy Support

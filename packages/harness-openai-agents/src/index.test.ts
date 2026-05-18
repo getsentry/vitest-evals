@@ -3,12 +3,149 @@ import { join } from "node:path";
 import { Agent, tool } from "@openai/agents";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { HarnessContext, JsonValue } from "vitest-evals/harness";
+import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
 type DemoMetadata = {
   scenario?: string;
 };
+type Classification = {
+  label: "bourbon" | "scotch";
+};
+type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
+  T,
+>() => T extends TExpected ? 1 : 2
+  ? true
+  : false;
+type Expect<T extends true> = T;
+type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput, any>
+  ? TOutput
+  : never;
+
+const typedRunOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{ output: Classification }> => ({
+    output: {
+      label: "bourbon",
+    },
+  }),
+});
+type _OpenAiRunOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunOutputHarness>, Classification>
+>;
+
+const optionalRunOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{ output?: Classification }> => ({}),
+});
+type _OpenAiOptionalRunOutput = Expect<
+  Equal<
+    HarnessOutput<typeof optionalRunOutputHarness>,
+    Classification | undefined
+  >
+>;
+
+const typedRunnerFinalOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ finalOutput: Classification }> => ({
+      finalOutput: {
+        label: "bourbon",
+      },
+    }),
+  },
+});
+type _OpenAiRunnerFinalOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunnerFinalOutputHarness>, Classification>
+>;
+
+const nonJsonRunnerFinalOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ finalOutput: Date }> => ({
+      finalOutput: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  },
+});
+type _OpenAiNonJsonRunnerFinalOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonRunnerFinalOutputHarness>, undefined>
+>;
+
+const runnerOutputItemsHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ output: JsonValue[] }> => ({
+      output: [],
+    }),
+  },
+});
+type _OpenAiRunnerOutputItems = Expect<
+  Equal<HarnessOutput<typeof runnerOutputItemsHarness>, undefined>
+>;
+
+const customRunNativeItemsHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{
+    output: JsonValue[];
+    newItems: JsonValue[];
+    rawResponses: JsonValue[];
+  }> => ({
+    output: [],
+    newItems: [],
+    rawResponses: [],
+  }),
+});
+type _OpenAiCustomRunNativeItems = Expect<
+  Equal<HarnessOutput<typeof customRunNativeItemsHarness>, undefined>
+>;
+
+const customRunOutputWithStateHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{
+    output: Classification;
+    state: Record<string, JsonValue>;
+    history: JsonValue[];
+  }> => ({
+    output: {
+      label: "bourbon",
+    },
+    state: {
+      phase: "done",
+    },
+    history: [],
+  }),
+});
+type _OpenAiCustomRunOutputWithState = Expect<
+  Equal<HarnessOutput<typeof customRunOutputWithStateHarness>, Classification>
+>;
+
+const broadDecisionFieldHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async () => ({
+    decision: {
+      label: "bourbon",
+    },
+  }),
+});
+type _OpenAiDecisionFieldOutput = Expect<
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, undefined>
+>;
 
 type DemoAgent = {
   name: string;
@@ -17,8 +154,6 @@ type DemoAgent = {
 };
 
 let replayDir: string | undefined;
-
-const judgePrompt = async (input: string) => input;
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -33,9 +168,6 @@ function createHarnessContext<TMetadata extends Record<string, unknown>>(
 ) {
   const context = {
     metadata,
-    task: {
-      meta: {},
-    },
     artifacts: {} as Record<string, JsonValue>,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
       context.artifacts[name] = value;
@@ -121,7 +253,6 @@ describeEval(
   "openai agents harness adapter",
   {
     harness: openaiAgentsHarness({
-      prompt: judgePrompt,
       agent: {
         name: "classifier",
         model: "gpt-4.1-mini",
@@ -154,9 +285,6 @@ describeEval(
         status: "classified",
         category: "bourbon",
       });
-      expect(result.session.outputText).toBe(
-        '{"status":"classified","category":"bourbon"}',
-      );
       expect(result.usage).toMatchObject({
         model: "gpt-4.1-mini",
         inputTokens: 13,
@@ -207,11 +335,151 @@ describeEval(
   },
 );
 
-test("exposes prompt and supports custom app output mapping", async () => {
-  const prompt = vi.fn(async (input: string) => `judge: ${input}`);
+test("does not use OpenAI Agents output items as app output", async () => {
   const harness = openaiAgentsHarness({
-    prompt,
-    createAgent: () => ({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        output: runResult.newItems,
+        state: runResult.state,
+        lastAgent: runResult.lastAgent,
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-items",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: '{"status":"classified","category":"bourbon"}',
+      }),
+    ]),
+  );
+});
+
+test("does not use custom run raw OpenAI Agents output items as app output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      output: runResult.newItems,
+      state: runResult.state,
+      rawResponses: runResult.rawResponses,
+      newItems: runResult.newItems,
+      lastAgent: runResult.lastAgent,
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-items",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: '{"status":"classified","category":"bourbon"}',
+      }),
+    ]),
+  );
+});
+
+test("uses custom app output with app-level state and history fields", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      output: {
+        status: "approved",
+      },
+      state: {
+        phase: "complete",
+      },
+      history: ["reviewed"],
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "app-state",
+    }),
+  );
+
+  expect(result.output).toEqual({
+    status: "approved",
+  });
+});
+
+test("does not fall back from non-JSON final output to output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      finalOutput: [1, new Date("2026-01-01T00:00:00.000Z")],
+      output: {
+        status: "approved",
+      },
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "invalid-final-output",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+});
+
+test("does not coerce non-JSON OpenAI Agents final output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: new Date("2026-01-01T00:00:00.000Z"),
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-final-output",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+});
+
+test("supports custom app output mapping", async () => {
+  const harness = openaiAgentsHarness({
+    agent: () => ({
       name: "classifier",
       model: "gpt-4.1-mini",
     }),
@@ -230,15 +498,10 @@ test("exposes prompt and supports custom app output mapping", async () => {
         },
       };
     },
-    normalize: {
-      output: ({ result }) =>
-        (result as { classification: { label: string; confidence: number } })
-          .classification,
-      outputText: ({ output }) => JSON.stringify(output),
-    },
+    output: ({ result }) =>
+      (result as { classification: { label: string; confidence: number } })
+        .classification,
   });
-
-  await expect(harness.prompt("score this")).resolves.toBe("judge: score this");
 
   const result = await harness.run(
     "Classify bottle bt_123",
@@ -247,26 +510,33 @@ test("exposes prompt and supports custom app output mapping", async () => {
     }),
   );
 
-  expect(prompt).toHaveBeenCalledWith("score this");
   expect(result.output).toEqual({
     label: "bourbon",
     confidence: 0.92,
   });
-  expect(result.session.outputText).toBe(
-    '{"label":"bourbon","confidence":0.92}',
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: {
+          label: "bourbon",
+          confidence: 0.92,
+        },
+      }),
+    ]),
   );
   expect(result.artifacts).toEqual({
     entrypoint: "custom",
   });
 });
 
-test("passes run input and context to createAgent before tool instrumentation", async () => {
+test("passes run input and context to agent factory before tool instrumentation", async () => {
   replayDir = mkdtempSync(join(process.cwd(), ".tmp-openai-agents-replay-"));
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
   vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
 
   let createdTool: OpenAiAgentsTool<string, DemoMetadata> | undefined;
-  const createAgent = vi.fn(
+  const agentFactory = vi.fn(
     ({
       input,
       context,
@@ -321,8 +591,7 @@ test("passes run input and context to createAgent before tool instrumentation", 
     }),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
-    createAgent,
+    agent: agentFactory,
     runner,
     toolReplay: {
       lookupBottle: true,
@@ -336,7 +605,7 @@ test("passes run input and context to createAgent before tool instrumentation", 
     }),
   );
 
-  expect(createAgent).toHaveBeenCalledWith(
+  expect(agentFactory).toHaveBeenCalledWith(
     expect.objectContaining({
       input: "Classify bottle bt_123",
       context: expect.objectContaining({
@@ -424,7 +693,6 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
     }),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner,
     toolReplay: {
@@ -515,7 +783,6 @@ test("prefers captured local tool results over model-visible output wrappers", a
     })),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -600,7 +867,6 @@ test("preserves explicit null captured local tool results", async () => {
     invoke: vi.fn(async () => null),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -672,7 +938,6 @@ test("errors when replay is configured for unknown OpenAI Agents tools", async (
     run: vi.fn(),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -702,7 +967,6 @@ test("errors when replay is configured for OpenAI Agents tools without invoke", 
     run: vi.fn(),
   };
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",
@@ -752,7 +1016,6 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
   });
   const originalTool = agent.tools[0];
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner: {
       run: async (runAgent, _input, runOptions) => {
@@ -801,32 +1064,68 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
   ]);
 });
 
-test("rejects implicit agent and runner factories", () => {
-  expect(() =>
-    openaiAgentsHarness({
-      prompt: judgePrompt,
-      agent: (() => ({
+test("accepts agent and runner as factories", async () => {
+  const agent = vi.fn(
+    ({
+      input,
+      context,
+    }: {
+      input: string;
+      context: HarnessContext<DemoMetadata>;
+    }) => {
+      context.setArtifact("preparedInput", input);
+      return {
         name: "classifier",
         model: "gpt-4.1-mini",
-      })) as unknown as DemoAgent,
-      runner: {
-        run: async () => ({}),
-      },
-    }),
-  ).toThrow("Use createAgent() for agent factories");
+      };
+    },
+  );
+  const runnerRun = vi.fn(
+    async (_agent: DemoAgent, _input: string, runOptions) => {
+      expect(runOptions?.context).toMatchObject({
+        metadata: {
+          scenario: "peated",
+        },
+      });
+      return runResult;
+    },
+  );
+  const runner = vi.fn(() => ({
+    run: runnerRun,
+  }));
+  const harness = openaiAgentsHarness({
+    agent,
+    runner,
+  });
 
-  expect(() =>
-    openaiAgentsHarness({
-      prompt: judgePrompt,
-      agent: {
-        name: "classifier",
-        model: "gpt-4.1-mini",
-      },
-      runner: (() => ({
-        run: async () => ({}),
-      })) as unknown as { run: () => Promise<unknown> },
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "peated",
     }),
-  ).toThrow("Use createRunner() for runner factories");
+  );
+
+  expect(agent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Classify bottle bt_123",
+    }),
+  );
+  expect(runner).toHaveBeenCalledWith(
+    expect.objectContaining({
+      input: "Classify bottle bt_123",
+      runOptions: expect.objectContaining({
+        stream: false,
+      }),
+    }),
+  );
+  expect(runnerRun).toHaveBeenCalledTimes(1);
+  expect(result.output).toEqual({
+    status: "classified",
+    category: "bourbon",
+  });
+  expect(result.artifacts).toEqual({
+    preparedInput: "Classify bottle bt_123",
+  });
 });
 
 test("keeps tool capture isolated across overlapping runs", async () => {
@@ -852,7 +1151,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
     tools: [lookupBottle],
   } satisfies DemoAgent;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent,
     runner: {
       run: async (runAgent: DemoAgent, _input: string, runOptions) => {
@@ -917,7 +1215,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
 
 test("marks failed tool output items as tool call errors", async () => {
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "editor",
       model: "gpt-4.1-mini",
@@ -980,7 +1277,6 @@ test("attaches partial tool calls when Runner.run errors", async () => {
     }),
   } satisfies OpenAiAgentsTool<string, DemoMetadata>;
   const harness = openaiAgentsHarness({
-    prompt: judgePrompt,
     agent: {
       name: "classifier",
       model: "gpt-4.1-mini",

@@ -1,4 +1,4 @@
-import type { JudgeContext, JudgeFn } from "./types";
+import type { Judge, JudgeContext } from "./types";
 import {
   ToolCallScorer,
   type ToolCallScorerConfig,
@@ -13,14 +13,16 @@ type ExpectedTool =
       arguments?: unknown;
     };
 
+/** Configuration for the deterministic tool-call judge. */
 export interface ToolCallJudgeConfig extends ToolCallScorerConfig {}
 
 type ToolCallJudgeMetadata = HarnessMetadata & {
   expectedTools?: ExpectedTool[];
 };
 
+/** Matcher context accepted by `ToolCallJudge()`. */
 export interface ToolCallJudgeOptions
-  extends JudgeContext<any, HarnessMetadata, any>,
+  extends JudgeContext<any, any, HarnessMetadata, any>,
     Omit<
       ToolCallScorerOptions,
       "input" | "output" | "toolCalls" | "expectedTools"
@@ -28,30 +30,46 @@ export interface ToolCallJudgeOptions
   expectedTools?: ExpectedTool[];
 }
 
+/** Creates a deterministic judge that checks expected tool calls. */
 export function ToolCallJudge(
   config: ToolCallJudgeConfig = {},
-): JudgeFn<ToolCallJudgeOptions> {
+): Judge<ToolCallJudgeOptions> {
   const scorer = ToolCallScorer(config);
-  const judge = ((opts: ToolCallJudgeOptions) => {
-    const metadata = opts.metadata as ToolCallJudgeMetadata;
+  return {
+    name: "ToolCallJudge",
+    assess: (opts: ToolCallJudgeOptions) => {
+      const metadata = opts.metadata as ToolCallJudgeMetadata;
 
-    return scorer({
-      ...opts,
-      expectedTools: normalizeExpectedTools(
-        opts.expectedTools ?? metadata.expectedTools,
-      ),
-    });
-  }) as JudgeFn<ToolCallJudgeOptions>;
-
-  Object.defineProperty(judge, "name", {
-    value: "ToolCallJudge",
-  });
-
-  return judge;
+      return scorer({
+        ...opts,
+        input: formatJudgeValue(opts.input),
+        output: formatJudgeValue(opts.output),
+        expectedTools: normalizeExpectedTools(
+          opts.expectedTools ?? metadata.expectedTools,
+        ),
+      });
+    },
+  };
 }
 
 function normalizeExpectedTools(expectedTools: ExpectedTool[] | undefined) {
   return expectedTools?.map((tool) =>
     typeof tool === "string" ? { name: tool } : tool,
   );
+}
+
+function formatJudgeValue(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value !== undefined) {
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return "";
 }

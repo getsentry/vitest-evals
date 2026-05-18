@@ -6,6 +6,7 @@ import type {
   MatchStrategy,
 } from "./utils";
 
+/** Options passed to the legacy tool-call scorer. */
 export interface ToolCallScorerOptions extends BaseScorerOptions {
   expectedTools?: Array<{
     name: string;
@@ -13,6 +14,7 @@ export interface ToolCallScorerOptions extends BaseScorerOptions {
   }>;
 }
 
+/** Configuration for the legacy tool-call scorer factory. */
 export interface ToolCallScorerConfig extends BaseMatcherConfig {
   ordered?: boolean;
   params?: MatchStrategy<any>;

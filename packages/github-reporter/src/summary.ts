@@ -11,6 +11,7 @@ import {
   truncate,
 } from "./utils";
 
+/** Options for rendering GitHub Actions summary markdown. */
 export type SummaryOptions = {
   maxFailures?: number;
   maxReasonChars?: number;
