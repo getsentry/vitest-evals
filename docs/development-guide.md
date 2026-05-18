@@ -134,7 +134,7 @@ package should focus on:
 - executing the target runtime through its normal seam
 - capturing messages, tool calls, usage, timings, and errors
 - returning a normalized `HarnessRun`
-- exposing narrow escape hatches like `run` and grouped `normalize` hooks
+- exposing narrow escape hatches like `run` and a typed `output` selector
 
 Follow [API design policy](../policies/api-design.md): prefer one public
 spelling per concept, value-or-factory inputs for lifecycle choices, and strong

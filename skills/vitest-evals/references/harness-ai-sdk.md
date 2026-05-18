@@ -27,9 +27,7 @@ const harness = aiSdkHarness({
       stopWhen: stepCountIs(5),
       temperature: 0,
     }),
-  normalize: {
-    output: ({ result }) => parseDomainOutput(result.text),
-  },
+  output: ({ result }) => parseDomainOutput(result.text),
 });
 ```
 
@@ -41,9 +39,7 @@ const harness = aiSdkHarness({
 | `run` | Use for custom execution such as `generateText(...)`; mutually exclusive with `agent`. |
 | `agent` | Use for objects or per-run factories exposing `run(input, runtime)` or `generate(input, runtime)`; mutually exclusive with `run`. |
 | `tools` | Optional AI SDK toolset; wrapped before being passed to the run callback or agent. |
-| `normalize.output` | Optional domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
-| `normalize.session` | Optional override when inferred steps or traces are insufficient. |
-| `normalize.usage`, `normalize.timings`, `normalize.errors` | Optional diagnostic overrides. |
+| `output` | Optional typed domain output selector; defaults to `output`, `object`, `experimental_output`, `result`, then `text`. |
 | `name` | Optional reporter label; defaults to `ai-sdk`. |
 
 Agent factories receive `{ input, context }` before execution so apps can
@@ -93,6 +89,6 @@ const harness = aiSdkHarness({
 |------|--------|
 | Direct `generateText(...)` or `generateObject(...)` call | `run` |
 | Existing app wrapper with `run(input, runtime)` | `agent` |
-| Provider result text needs parsing | `normalize.output` |
-| App returns a full normalized run | Return `HarnessRun` and omit overrides. |
-| App returns a run-like domain object | Use `normalize.output` and `normalize.session` overrides to avoid accidental pass-through. |
+| Provider result text needs parsing | `output` |
+| App returns a full normalized run | Return `HarnessRun`. |
+| App needs exact session/usage/errors control | Return `HarnessRun`. |

@@ -56,9 +56,7 @@ const harness = openaiAgentsHarness({
   runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   run: ({ agent, input, runner, runOptions }) =>
     runBottleClassifier({ agent, runner, input, runOptions }),
-  normalize: {
-    output: ({ result }) => result.classification,
-  },
+  output: ({ result }) => result.classification,
 });
 ```
 

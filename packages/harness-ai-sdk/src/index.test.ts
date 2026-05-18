@@ -472,15 +472,12 @@ test("supports run as the custom entrypoint", async () => {
   });
 });
 
-test("groups normalization hooks under normalize", async () => {
+test("supports a typed output selector with inferred diagnostics", async () => {
   const output = vi.fn(
     ({ result }: { result: { object: { status: string } } }) => result.object,
   );
   const harness = aiSdkHarness({
     run: async () => ({
-      session: {
-        messages: [],
-      },
       usage: {
         totalTokens: 7,
       },
@@ -488,24 +485,7 @@ test("groups normalization hooks under normalize", async () => {
         status: "approved",
       },
     }),
-    normalize: {
-      output,
-      session: ({ input }) => ({
-        messages: [
-          {
-            role: "user",
-            content: input,
-          },
-          {
-            role: "assistant",
-            content: "approved",
-          },
-        ],
-      }),
-      usage: () => ({
-        totalTokens: 11,
-      }),
-    },
+    output,
   });
 
   const result = await harness.run(
@@ -524,10 +504,12 @@ test("groups normalization hooks under normalize", async () => {
     },
     {
       role: "assistant",
-      content: "approved",
+      content: {
+        status: "approved",
+      },
     },
   ]);
-  expect(result.usage.totalTokens).toBe(11);
+  expect(result.usage.totalTokens).toBe(7);
 });
 
 test("attaches partial runtime tool calls when custom run errors", async () => {
@@ -1062,31 +1044,8 @@ test("normalizes domain results that resemble harness runs", async () => {
       return result.object;
     },
   );
-  const session = vi.fn(
-    ({
-      input,
-      result,
-    }: {
-      input: string;
-      result: { object: { status: string } };
-    }) => ({
-      messages: [
-        {
-          role: "user" as const,
-          content: input,
-        },
-        {
-          role: "assistant" as const,
-          content: result.object,
-        },
-      ],
-    }),
-  );
   const harness = aiSdkHarness({
     run: async () => ({
-      session: {
-        messages: [],
-      },
       usage: {
         totalTokens: 7,
       },
@@ -1095,10 +1054,7 @@ test("normalizes domain results that resemble harness runs", async () => {
         status: "approved",
       },
     }),
-    normalize: {
-      output,
-      session,
-    },
+    output,
   });
 
   const run = await harness.run(
@@ -1110,7 +1066,6 @@ test("normalizes domain results that resemble harness runs", async () => {
     status: "approved",
   });
   expect(output).toHaveBeenCalledTimes(1);
-  expect(session).toHaveBeenCalledTimes(1);
   expect(run.session.messages).toEqual([
     {
       role: "user",

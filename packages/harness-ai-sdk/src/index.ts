@@ -186,29 +186,16 @@ export interface AiSdkHarnessResultArgs<
   result: TResult;
 }
 
-export type AiSdkHarnessNormalizeOptions<
+export type AiSdkHarnessOutputSelector<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
   TTools extends AiSdkToolset<TInput, TMetadata>,
-> = {
-  session?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<NormalizedSession>;
-  output?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<JsonValue | undefined>;
-  usage?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<UsageSummary>;
-  timings?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<TimingSummary | undefined>;
-  errors?: (
-    args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
-  ) => MaybePromise<Array<Record<string, JsonValue>>>;
-};
+  TOutput extends JsonValue | undefined,
+> = (
+  args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
+) => MaybePromise<TOutput>;
 
 export type AiSdkHarnessOptions<
   TAgent = unknown,
@@ -219,7 +206,15 @@ export type AiSdkHarnessOptions<
     TInput,
     TMetadata
   >,
-> = AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools> &
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = AiSdkHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  TOutput
+> &
   (
     | {
         agent: AgentSource<TAgent, TInput, TMetadata>;
@@ -228,7 +223,7 @@ export type AiSdkHarnessOptions<
     | {
         run: (
           args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-        ) => MaybePromise<TResult | HarnessRun>;
+        ) => MaybePromise<TResult | HarnessRun<TOutput>>;
         agent?: never;
       }
   );
@@ -242,15 +237,17 @@ interface AiSdkHarnessBaseOptions<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > {
   tools?: TTools;
   toolReplay?: AiSdkToolReplayPolicies<TInput, TMetadata>;
-  normalize?: AiSdkHarnessNormalizeOptions<
+  output?: AiSdkHarnessOutputSelector<
     TAgent,
     TInput,
     TMetadata,
     TResult,
-    TTools
+    TTools,
+    TOutput
   >;
   name?: string;
 }
@@ -259,24 +256,26 @@ type AiSdkRunnableAgent<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 > = {
   run: (
     input: TInput,
     runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
 type AiSdkGeneratableAgent<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 > = {
   generate: (
     input: TInput,
     runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
 export function aiSdkHarness<
@@ -288,9 +287,17 @@ export function aiSdkHarness<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata>;
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+): Harness<TInput, TMetadata, TOutput>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -300,12 +307,20 @@ export function aiSdkHarness<
     TInput,
     TMetadata
   >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
-): Harness<TInput, TMetadata> {
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+): Harness<TInput, TMetadata, TOutput> {
   validateOptions(options);
 
-  const harness: Harness<TInput, TMetadata> = {
+  const harness: Harness<TInput, TMetadata, TOutput> = {
     name: options.name ?? "ai-sdk",
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
@@ -324,13 +339,21 @@ async function runAiSdkHarness<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   agent: TAgent | undefined,
   input: TInput,
   context: HarnessContext<TMetadata>,
-): Promise<HarnessRun> {
+): Promise<HarnessRun<TOutput>> {
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
   const runtimeToolCalls: ToolCallRecord[] = [];
   const tools = createToolset({
@@ -355,7 +378,7 @@ async function runAiSdkHarness<
       tools,
     });
 
-    if (isHarnessRun(result) && !hasResultOverrides(options)) {
+    if (isHarnessRun(result) && !hasOutputSelector(options)) {
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
@@ -377,33 +400,23 @@ async function runAiSdkHarness<
       TTools
     >;
 
-    const output = options.normalize?.output
-      ? await options.normalize.output(resultArgs)
-      : resolveOutput(result);
-    const usage = options.normalize?.usage
-      ? await options.normalize.usage(resultArgs)
-      : resolveUsage(result, runtimeToolCalls.length);
-    const session = options.normalize?.session
-      ? await options.normalize.session(resultArgs)
-      : resolveSession(
-          input,
-          result,
-          output,
-          replayMetadataByToolCallId,
-          runtimeToolCalls,
-        );
-    const timings = options.normalize?.timings
-      ? await options.normalize.timings(resultArgs)
-      : undefined;
-    const errors = options.normalize?.errors
-      ? await options.normalize.errors(resultArgs)
-      : resolveHarnessRunErrors(result);
+    const output = options.output
+      ? await options.output(resultArgs)
+      : (resolveOutput(result) as TOutput | undefined);
+    const usage = resolveUsage(result, runtimeToolCalls.length);
+    const session = resolveSession(
+      input,
+      result,
+      output,
+      replayMetadataByToolCallId,
+      runtimeToolCalls,
+    );
+    const errors = resolveHarnessRunErrors(result);
 
     return {
       session,
       output,
       usage,
-      timings,
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
@@ -429,28 +442,30 @@ async function runAiSdkHarness<
           ? context.artifacts
           : undefined,
       errors: [serializeError(error)],
-    } satisfies HarnessRun;
+    } satisfies HarnessRun<TOutput>;
 
     throw attachHarnessRunToError(error, run);
   }
 }
 
-function hasResultOverrides<
+function hasOutputSelector<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
-  options: AiSdkHarnessBaseOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: AiSdkHarnessBaseOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
 ) {
-  return Boolean(
-    options.normalize?.output ??
-      options.normalize?.session ??
-      options.normalize?.usage ??
-      options.normalize?.timings ??
-      options.normalize?.errors,
-  );
+  return Boolean(options.output);
 }
 
 async function resolveAgent<
@@ -458,9 +473,17 @@ async function resolveAgent<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   args: AiSdkCreateAgentArgs<TInput, TMetadata>,
 ) {
   return hasAgentSource(options)
@@ -473,20 +496,34 @@ async function runAgent<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
   args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
-): Promise<TResult | HarnessRun> {
+): Promise<TResult | HarnessRun<TOutput>> {
   if (options.run) {
     return options.run(args);
   }
 
-  if (hasAiSdkRunMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
+  if (
+    hasAiSdkRunMethod<TInput, TMetadata, TResult, TOutput, TTools>(args.agent)
+  ) {
     return args.agent.run(args.input, args.runtime);
   }
 
-  if (hasAiSdkGenerateMethod<TInput, TMetadata, TResult, TTools>(args.agent)) {
+  if (
+    hasAiSdkGenerateMethod<TInput, TMetadata, TResult, TOutput, TTools>(
+      args.agent,
+    )
+  ) {
     return args.agent.generate(args.input, args.runtime);
   }
 
@@ -500,8 +537,18 @@ function validateOptions<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
->(options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>) {
+>(
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
+) {
   const hasAgent = hasAgentSource(options);
   const hasRun = typeof (options as { run?: unknown }).run === "function";
   const entrypoints = [hasAgent, hasRun].filter(Boolean).length;
@@ -524,15 +571,24 @@ function hasAgentSource<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
-  options: AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools>,
+  options: AiSdkHarnessOptions<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >,
 ): options is AiSdkHarnessBaseOptions<
   TAgent,
   TInput,
   TMetadata,
   TResult,
-  TTools
+  TTools,
+  TOutput
 > & { agent: AgentSource<TAgent, TInput, TMetadata> } {
   return "agent" in options && options.agent !== undefined;
 }
@@ -556,10 +612,11 @@ function hasAiSdkRunMethod<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
   agent: unknown,
-): agent is AiSdkRunnableAgent<TInput, TMetadata, TResult, TTools> {
+): agent is AiSdkRunnableAgent<TInput, TMetadata, TResult, TOutput, TTools> {
   return hasCallableMethod(agent, "run");
 }
 
@@ -567,10 +624,11 @@ function hasAiSdkGenerateMethod<
   TInput,
   TMetadata extends HarnessMetadata,
   TResult,
+  TOutput extends JsonValue | undefined,
   TTools extends AiSdkToolset<TInput, TMetadata>,
 >(
   agent: unknown,
-): agent is AiSdkGeneratableAgent<TInput, TMetadata, TResult, TTools> {
+): agent is AiSdkGeneratableAgent<TInput, TMetadata, TResult, TOutput, TTools> {
   return hasCallableMethod(agent, "generate");
 }
 

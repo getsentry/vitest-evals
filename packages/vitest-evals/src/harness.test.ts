@@ -258,6 +258,39 @@ test("createHarness drops non-normalized lightweight tool call fields", async ()
   ]);
 });
 
+test("createHarness preserves typed lightweight output values", async () => {
+  const output = {
+    status: "approved",
+  };
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output,
+    }),
+  });
+
+  const result = await lightweightHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    task: {
+      meta: {},
+    },
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.output).toBe(output);
+  expect(result.session.messages).toEqual([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      role: "assistant",
+      content: output,
+    },
+  ]);
+});
+
 test("createHarness preserves null lightweight output in the session", async () => {
   const lightweightHarness = createHarness({
     name: "custom-app",

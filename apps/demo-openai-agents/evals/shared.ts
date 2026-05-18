@@ -18,9 +18,7 @@ export const refundHarness = openaiAgentsHarness({
   toolReplay: {
     lookupInvoice: true,
   },
-  normalize: {
-    output: ({ result }) => parseRefundDecision(resolveResultText(result)),
-  },
+  output: ({ result }) => parseRefundDecision(resolveResultText(result)),
 });
 
 export async function assertRefundCase(

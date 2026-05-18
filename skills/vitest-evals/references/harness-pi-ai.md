@@ -30,9 +30,7 @@ If the agent needs a custom entrypoint:
 const harness = piAiHarness({
   agent: () => createRefundAgent(),
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
-  normalize: {
-    output: ({ result }) => result.decision,
-  },
+  output: ({ result }) => result.decision,
 });
 ```
 
@@ -44,9 +42,7 @@ const harness = piAiHarness({
 | `query` | Optional judge-model helper; only include it when real shared provider setup or credentials exist. |
 | `run` | Optional custom execution; omitted when the agent exposes `run(input, runtime)`. |
 | `tools` | Optional explicit `PiAiToolset`; use when the agent hides its tool surface. |
-| `normalize.output` | Optional domain output selector; defaults to `output`, `decision`, `result`, then `final`. |
-| `normalize.session` | Optional override when event capture is insufficient. |
-| `normalize.usage`, `normalize.timings`, `normalize.errors` | Optional diagnostic overrides. |
+| `output` | Optional typed domain output selector; defaults to `output`, `decision`, `result`, then `final`. |
 | `name` | Optional reporter label; defaults to `pi-ai`. |
 
 ## Runtime Surface
@@ -85,5 +81,5 @@ const harness = piAiHarness({
 | Conventional agent with `run(input, runtime)` | `agent` |
 | Existing agent method named differently | Add `run` |
 | Hidden tool surface | Add explicit `tools` |
-| Wrapped result with domain object | Add `normalize.output` |
+| Wrapped result with domain object | Add `output` |
 | Agent produces extra messages | Use `runtime.events.*` inside the app run path |

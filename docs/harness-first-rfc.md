@@ -188,9 +188,7 @@ describeEval("refund agent", {
   harness: piAiHarness({
     agent: () => createRefundAgent(),
     run: ({ agent, input, runtime }) => agent.execute(input, runtime),
-    normalize: {
-      output: ({ result }) => result.decision,
-    },
+    output: ({ result }) => result.decision,
   }),
 }, (it) => {
   it("approves a refundable invoice", async ({ run }) => {

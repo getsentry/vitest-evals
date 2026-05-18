@@ -54,12 +54,18 @@ export type OpenAiAgentsRunOptions<TContext = unknown> = Record<
   stream?: boolean;
 };
 
-export interface OpenAiAgentsRunner<TAgent, TInput, TContext, TResult> {
+export interface OpenAiAgentsRunner<
+  TAgent,
+  TInput,
+  TContext,
+  TResult,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> {
   run: (
     agent: TAgent,
     input: TInput,
     options?: OpenAiAgentsRunOptions<TContext>,
-  ) => MaybePromise<TResult | HarnessRun>;
+  ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 }
 
 export interface OpenAiAgentsRuntime<
@@ -146,7 +152,6 @@ export interface OpenAiAgentsHarnessResultArgs<
     TContext
   > {
   result: TResult;
-  output: JsonValue | undefined;
 }
 
 export interface OpenAiAgentsToolContext<
@@ -202,68 +207,24 @@ export type OpenAiAgentsTool<
   invoke?: OpenAiAgentsInvoke;
 };
 
-export interface OpenAiAgentsHarnessNormalizeOptions<
+export type OpenAiAgentsHarnessOutputSelector<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
   TRunner = unknown,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
-> {
-  session?: (
-    args: OpenAiAgentsHarnessResultArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<NormalizedSession>;
-  output?: (
-    args: Omit<
-      OpenAiAgentsHarnessResultArgs<
-        TAgent,
-        TInput,
-        TMetadata,
-        TRunner,
-        TResult,
-        TContext
-      >,
-      "output"
-    >,
-  ) => MaybePromise<JsonValue | undefined>;
-  usage?: (
-    args: OpenAiAgentsHarnessResultArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<UsageSummary>;
-  timings?: (
-    args: OpenAiAgentsHarnessResultArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<TimingSummary | undefined>;
-  errors?: (
-    args: OpenAiAgentsHarnessResultArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<Array<Record<string, JsonValue>>>;
-}
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = (
+  args: OpenAiAgentsHarnessResultArgs<
+    TAgent,
+    TInput,
+    TMetadata,
+    TRunner,
+    TResult,
+    TContext
+  >,
+) => MaybePromise<TOutput>;
 
 type OpenAiAgentsHarnessBaseOptions<
   TAgent,
@@ -273,10 +234,12 @@ type OpenAiAgentsHarnessBaseOptions<
     TAgent,
     TInput,
     OpenAiAgentsRuntimeContext<TMetadata>,
-    unknown
+    unknown,
+    JsonValue | undefined
   >,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = {
   agent: AgentSource<TAgent, TInput, TMetadata>;
   runOptions?:
@@ -295,13 +258,14 @@ type OpenAiAgentsHarnessBaseOptions<
         >,
       ) => MaybePromise<OpenAiAgentsRunOptions<TContext> | undefined>);
   toolReplay?: OpenAiAgentsToolReplayPolicies<TInput, TMetadata>;
-  normalize?: OpenAiAgentsHarnessNormalizeOptions<
+  output?: OpenAiAgentsHarnessOutputSelector<
     TAgent,
     TInput,
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >;
   name?: string;
 };
@@ -313,6 +277,7 @@ type OpenAiAgentsRunFn<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 > = (
   args: OpenAiAgentsHarnessRunArgs<
     TAgent,
@@ -322,7 +287,7 @@ type OpenAiAgentsRunFn<
     TResult,
     TContext
   >,
-) => MaybePromise<TResult | HarnessRun>;
+) => MaybePromise<TResult | HarnessRun<TOutput>>;
 
 export type OpenAiAgentsHarnessOptions<
   TAgent,
@@ -332,17 +297,20 @@ export type OpenAiAgentsHarnessOptions<
     TAgent,
     TInput,
     OpenAiAgentsRuntimeContext<TMetadata>,
-    unknown
+    unknown,
+    JsonValue | undefined
   >,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OpenAiAgentsHarnessBaseOptions<
   TAgent,
   TInput,
   TMetadata,
   TRunner,
   TResult,
-  TContext
+  TContext,
+  TOutput
 > &
   (
     | {
@@ -360,7 +328,8 @@ export type OpenAiAgentsHarnessOptions<
           TMetadata,
           TRunner,
           TResult,
-          TContext
+          TContext,
+          TOutput
         >;
       }
     | {
@@ -370,7 +339,8 @@ export type OpenAiAgentsHarnessOptions<
           TMetadata,
           TRunner,
           TResult,
-          TContext
+          TContext,
+          TOutput
         >;
         runner?: RunnerSource<
           TAgent,
@@ -396,10 +366,12 @@ export function openaiAgentsHarness<
     TAgent,
     TInput,
     OpenAiAgentsRuntimeContext<TMetadata>,
-    unknown
+    unknown,
+    JsonValue | undefined
   >,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -407,9 +379,10 @@ export function openaiAgentsHarness<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
-): Harness<TInput, TMetadata>;
+): Harness<TInput, TMetadata, TOutput>;
 export function openaiAgentsHarness<
   TAgent,
   TInput = string,
@@ -418,10 +391,12 @@ export function openaiAgentsHarness<
     TAgent,
     TInput,
     OpenAiAgentsRuntimeContext<TMetadata>,
-    unknown
+    unknown,
+    JsonValue | undefined
   >,
   TResult = unknown,
   TContext = OpenAiAgentsRuntimeContext<TMetadata>,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -429,12 +404,13 @@ export function openaiAgentsHarness<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
-): Harness<TInput, TMetadata> {
+): Harness<TInput, TMetadata, TOutput> {
   validateOptions(options);
 
-  const harness: Harness<TInput, TMetadata> = {
+  const harness: Harness<TInput, TMetadata, TOutput> = {
     name: options.name ?? "openai-agents",
     run: async (input, context) => {
       const agent = await resolveAgent(options, {
@@ -455,6 +431,7 @@ async function executeOpenAiAgentsHarness<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -462,12 +439,13 @@ async function executeOpenAiAgentsHarness<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
   agent: TAgent,
   input: TInput,
   context: HarnessContext<TMetadata>,
-): Promise<HarnessRun> {
+): Promise<HarnessRun<TOutput>> {
   const startedAt = Date.now();
   const capture: RuntimeToolCapture = {
     calls: [],
@@ -493,7 +471,8 @@ async function executeOpenAiAgentsHarness<
         TMetadata,
         TRunner,
         TResult,
-        TContext
+        TContext,
+        TOutput
       >(
         options,
         instrumentedAgent,
@@ -526,14 +505,14 @@ async function executeOpenAiAgentsHarness<
         });
         const settledResult = await settleRunResult(result);
 
-        if (isHarnessRun(settledResult) && !hasResultOverrides(options)) {
+        if (isHarnessRun(settledResult) && !hasOutputSelector(options)) {
           if (
             Object.keys(context.artifacts).length > 0 &&
             !settledResult.artifacts
           ) {
             settledResult.artifacts = context.artifacts;
           }
-          return settledResult;
+          return settledResult as HarnessRun<TOutput>;
         }
 
         const normalizeResult = settledResult as TResult;
@@ -546,43 +525,32 @@ async function executeOpenAiAgentsHarness<
           runOptions,
           result: normalizeResult,
         };
-        const output = options.normalize?.output
-          ? await options.normalize.output(baseResultArgs)
-          : resolveOutput(normalizeResult);
-        const resultArgs = {
-          ...baseResultArgs,
-          output,
-        } satisfies OpenAiAgentsHarnessResultArgs<
+        const resultArgs: OpenAiAgentsHarnessResultArgs<
           TAgent,
           TInput,
           TMetadata,
           TRunner,
           TResult,
           TContext
-        >;
-        const usage = options.normalize?.usage
-          ? await options.normalize.usage(resultArgs)
-          : resolveUsage(normalizeResult, capture.calls.length);
-        const session = options.normalize?.session
-          ? await options.normalize.session(resultArgs)
-          : resolveSession(input, normalizeResult, output, usage, {
-              runtimeToolCalls: capture.calls,
-            });
+        > = baseResultArgs;
+        const output = options.output
+          ? await options.output(resultArgs)
+          : (resolveOutput(normalizeResult) as TOutput | undefined);
+        const usage = resolveUsage(normalizeResult, capture.calls.length);
+        const session = resolveSession(input, normalizeResult, output, usage, {
+          runtimeToolCalls: capture.calls,
+        });
 
         return {
           session,
           output,
           usage,
-          timings: options.normalize?.timings
-            ? await options.normalize.timings(resultArgs)
-            : { totalMs: Date.now() - startedAt },
+          timings: { totalMs: Date.now() - startedAt },
           artifacts:
             Object.keys(context.artifacts).length > 0
               ? context.artifacts
               : undefined,
-          errors: options.normalize?.errors
-            ? await options.normalize.errors(resultArgs)
-            : resolveHarnessRunErrors(normalizeResult),
+          errors: resolveHarnessRunErrors(normalizeResult),
         };
       } catch (error) {
         const usage =
@@ -599,7 +567,7 @@ async function executeOpenAiAgentsHarness<
               ? context.artifacts
               : undefined,
           errors: [serializeError(error)],
-        } satisfies HarnessRun;
+        } satisfies HarnessRun<TOutput>;
 
         throw attachHarnessRunToError(error, run);
       }
@@ -614,6 +582,7 @@ function validateOptions<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -621,7 +590,8 @@ function validateOptions<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
 ) {
   if (options.agent === undefined) {
@@ -644,6 +614,7 @@ async function resolveAgent<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -651,7 +622,8 @@ async function resolveAgent<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
   args: OpenAiAgentsCreateAgentArgs<TInput, TMetadata>,
 ) {
@@ -688,6 +660,7 @@ async function resolveRunner<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -695,7 +668,8 @@ async function resolveRunner<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
   args: Omit<
     OpenAiAgentsHarnessRunArgs<
@@ -776,6 +750,7 @@ async function resolveRunOptions<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -783,7 +758,8 @@ async function resolveRunOptions<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
   agent: TAgent,
   input: TInput,
@@ -821,6 +797,7 @@ async function runAgent<
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -828,7 +805,8 @@ async function runAgent<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
   args: OpenAiAgentsHarnessRunArgs<
     TAgent,
@@ -838,12 +816,14 @@ async function runAgent<
     TResult,
     TContext
   >,
-): Promise<TResult | HarnessRun> {
+): Promise<TResult | HarnessRun<TOutput>> {
   if (options.run) {
     return options.run(args);
   }
 
-  if (hasRunnerRunMethod<TAgent, TInput, TContext, TResult>(args.runner)) {
+  if (
+    hasRunnerRunMethod<TAgent, TInput, TContext, TResult, TOutput>(args.runner)
+  ) {
     return args.runner.run(args.agent, args.input, args.runOptions);
   }
 
@@ -852,9 +832,15 @@ async function runAgent<
   );
 }
 
-function hasRunnerRunMethod<TAgent, TInput, TContext, TResult>(
+function hasRunnerRunMethod<
+  TAgent,
+  TInput,
+  TContext,
+  TResult,
+  TOutput extends JsonValue | undefined,
+>(
   runner: unknown,
-): runner is OpenAiAgentsRunner<TAgent, TInput, TContext, TResult> {
+): runner is OpenAiAgentsRunner<TAgent, TInput, TContext, TResult, TOutput> {
   return hasCallableMethod(runner, "run");
 }
 
@@ -871,13 +857,14 @@ async function settleRunResult(result: unknown) {
   return result;
 }
 
-function hasResultOverrides<
+function hasOutputSelector<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
   TRunner,
   TResult,
   TContext,
+  TOutput extends JsonValue | undefined,
 >(
   options: OpenAiAgentsHarnessOptions<
     TAgent,
@@ -885,16 +872,11 @@ function hasResultOverrides<
     TMetadata,
     TRunner,
     TResult,
-    TContext
+    TContext,
+    TOutput
   >,
 ) {
-  return Boolean(
-    options.normalize?.output ??
-      options.normalize?.session ??
-      options.normalize?.usage ??
-      options.normalize?.timings ??
-      options.normalize?.errors,
-  );
+  return Boolean(options.output);
 }
 
 async function withInstrumentedAgentTools<

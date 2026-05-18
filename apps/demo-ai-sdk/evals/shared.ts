@@ -122,9 +122,7 @@ export const refundHarness = aiSdkHarness({
       stopWhen: stepCountIs(5),
       temperature: 0,
     }),
-  normalize: {
-    output: ({ result }) => parseRefundDecision(result.text),
-  },
+  output: ({ result }) => parseRefundDecision(result.text),
 });
 
 export async function assertRefundCase(

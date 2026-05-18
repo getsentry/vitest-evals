@@ -120,16 +120,14 @@ const harness = piAiHarness({
 });
 ```
 
-If you do have an unusual wrapper around the agent result, low-level
-normalization hooks still exist under `normalize`:
+If you do have an unusual wrapper around the agent result, provide a typed
+`output` selector:
 
 ```ts
 const harness = piAiHarness({
   agent: () => createWrappedRefundAgent(),
   run: ({ agent, input, runtime }) => agent.run(input, runtime),
-  normalize: {
-    output: ({ result }) => result.customDecision,
-  },
+  output: ({ result }) => result.customDecision,
 });
 ```
 

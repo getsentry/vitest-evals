@@ -222,11 +222,9 @@ test("supports custom app output mapping", async () => {
         },
       };
     },
-    normalize: {
-      output: ({ result }) =>
-        (result as { classification: { label: string; confidence: number } })
-          .classification,
-    },
+    output: ({ result }) =>
+      (result as { classification: { label: string; confidence: number } })
+        .classification,
   });
 
   const result = await harness.run(

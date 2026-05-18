@@ -285,7 +285,7 @@ export function normalizeHarnessRun<
     return result;
   }
 
-  const output = toJsonValue(result.output) as TOutput | undefined;
+  const output = result.output;
   const toolCalls = normalizeSimpleToolCalls(result.toolCalls);
   const usage = result.usage ?? {};
   const messages =

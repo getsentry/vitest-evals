@@ -41,6 +41,7 @@ const harness = aiSdkHarness({
       tools: runtime.tools,
       stopWhen: stepCountIs(5),
     }),
+  output: ({ result }) => parseRefundDecision(result.text),
 });
 
 describeEval("refund agent", { harness }, (it) => {
@@ -118,7 +119,8 @@ The adapter infers:
 - normalized session and tool-call traces from AI SDK `steps`
 - usage diagnostics from `totalUsage` / `usage`
 - `run.output` from common AI SDK result fields such as `output`, `object`, and
-  `text`
+  `text`, or from a typed `output` selector when the app needs to parse a
+  provider result
 - replay/cassette metadata for local tools configured with `toolReplay`
 
 See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in

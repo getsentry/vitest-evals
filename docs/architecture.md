@@ -159,8 +159,8 @@ behavior only.
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
-result objects, while still allowing a custom `run` entrypoint and grouped
-`normalize` overrides.
+result objects, while still allowing a custom `run` entrypoint and typed
+`output` selector.
 
 ### `@vitest-evals/harness-openai-agents`
 

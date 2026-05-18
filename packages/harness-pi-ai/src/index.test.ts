@@ -804,7 +804,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
   ]);
 });
 
-test("supports normalize.output as a low-level escape hatch", async () => {
+test("supports a typed output selector", async () => {
   const normalizedHarness = piAiHarness({
     agent: () => ({ id: "refund-agent" }),
     run: async () => ({
@@ -812,10 +812,8 @@ test("supports normalize.output as a low-level escape hatch", async () => {
         status: "approved",
       },
     }),
-    normalize: {
-      output: ({ result }) =>
-        (result as { customDecision: { status: string } }).customDecision,
-    },
+    output: ({ result }) =>
+      (result as { customDecision: { status: string } }).customDecision,
   });
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
@@ -838,7 +836,7 @@ test("supports normalize.output as a low-level escape hatch", async () => {
   });
 });
 
-test("applies normalize overrides to HarnessRun-shaped results", async () => {
+test("applies output selectors to HarnessRun-shaped results", async () => {
   const normalizedHarness = piAiHarness({
     agent: () => ({ id: "refund-agent" }),
     run: async () => ({
@@ -860,21 +858,9 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
       },
       errors: [],
     }),
-    normalize: {
-      output: () => ({
-        status: "approved",
-      }),
-      session: () => ({
-        messages: [
-          {
-            role: "assistant",
-            content: {
-              status: "approved",
-            },
-          },
-        ],
-      }),
-    },
+    output: () => ({
+      status: "approved",
+    }),
   });
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
@@ -893,7 +879,7 @@ test("applies normalize overrides to HarnessRun-shaped results", async () => {
     {
       role: "assistant",
       content: {
-        status: "approved",
+        status: "denied",
       },
     },
   ]);
