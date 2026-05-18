@@ -41,6 +41,12 @@ hatches for advanced cases.
 - Prefer typed `run()` output over mapping hooks. If a native provider result
   needs projection into app output, expose one semantic selector such as
   `output`; do not publish generic normalization knobs.
+- Preserve caller-owned types exactly. If `run()` declares a concrete output,
+  downstream `result.output` and `ctx.output` should be concrete too; require
+  `undefined` in the type only when missing output is a real state.
+- Keep overload helper types private when overloads are the intended API.
+  Exporting implementation unions makes users annotate around the simpler
+  contract and weakens the design.
 - Keep compatibility aliases working when migration cost matters, but document
   and test the preferred spelling. Do not make new users choose between equally
   prominent aliases.

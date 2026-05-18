@@ -315,7 +315,7 @@ type OpenAiAgentsRunFn<
   >,
 ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 
-export type OpenAiAgentsHarnessOptions<
+type OpenAiAgentsHarnessOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -729,7 +729,7 @@ async function executeOpenAiAgentsHarness<
               ? context.artifacts
               : undefined,
           errors: resolveHarnessRunErrors(normalizeResult),
-        };
+        } as HarnessRun<TOutput>;
       } catch (error) {
         const usage =
           capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
@@ -745,7 +745,7 @@ async function executeOpenAiAgentsHarness<
               ? context.artifacts
               : undefined,
           errors: [serializeError(error)],
-        } satisfies HarnessRun<TOutput>;
+        } satisfies HarnessRun;
 
         throw attachHarnessRunToError(error, run);
       }

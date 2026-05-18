@@ -212,7 +212,7 @@ export type AiSdkHarnessOutputSelector<
   args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
 ) => MaybePromise<TOutput>;
 
-export type AiSdkHarnessOptions<
+type AiSdkHarnessOptions<
   TAgent = unknown,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -537,7 +537,7 @@ async function runAiSdkHarness<
           ? context.artifacts
           : undefined,
       errors,
-    };
+    } as HarnessRun<TOutput>;
   } catch (error) {
     const run = {
       session: resolveSession(
@@ -557,7 +557,7 @@ async function runAiSdkHarness<
           ? context.artifacts
           : undefined,
       errors: [serializeError(error)],
-    } satisfies HarnessRun<TOutput>;
+    } satisfies HarnessRun;
 
     throw attachHarnessRunToError(error, run);
   }

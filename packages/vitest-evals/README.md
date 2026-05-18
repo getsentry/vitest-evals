@@ -40,7 +40,8 @@ npm install -D @vitest-evals/github-reporter
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
-  normalized run/session, tool calls, and metadata
+  normalized run/session, tool calls, and metadata; `output` is only optional
+  when the harness output type includes `undefined`
 - judges own their prompt, rubric, model call, and parsing; use
   `createJudge(...)` for custom judges and its provider-helper overload only
   when multiple judges share setup

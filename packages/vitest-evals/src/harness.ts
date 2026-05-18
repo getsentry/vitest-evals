@@ -53,11 +53,13 @@ export type NormalizedSession = {
   metadata?: Record<string, JsonValue>;
 };
 
+type OutputField<TOutput extends JsonValue | undefined> =
+  undefined extends TOutput ? { output?: TOutput } : { output: TOutput };
+
 export type HarnessRun<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-> = {
+> = OutputField<TOutput> & {
   session: NormalizedSession;
-  output?: TOutput;
   usage: UsageSummary;
   timings?: TimingSummary;
   artifacts?: Record<string, JsonValue>;
@@ -108,8 +110,7 @@ export type SimpleToolCallRecord = Omit<
 
 export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-> = {
-  output?: TOutput;
+> = OutputField<TOutput> & {
   messages?: NormalizedMessage[];
   toolCalls?: SimpleToolCallRecord[];
   usage?: UsageSummary;
@@ -315,7 +316,7 @@ export function normalizeHarnessRun<
     ...(result.timings ? { timings: result.timings } : {}),
     ...(artifacts ? { artifacts } : {}),
     errors: normalizeSimpleErrors(result.errors),
-  };
+  } as HarnessRun<TOutput>;
 }
 
 function createDefaultSessionMessages<TInput>({

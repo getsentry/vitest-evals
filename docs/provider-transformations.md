@@ -32,9 +32,10 @@ type NormalizedSession = {
   metadata?: Record<string, JsonValue>;
 };
 
-type HarnessRun = {
+type HarnessRun<TOutput extends JsonValue | undefined = JsonValue | undefined> = (
+  undefined extends TOutput ? { output?: TOutput } : { output: TOutput }
+) & {
   session: NormalizedSession;
-  output?: JsonValue;
   usage: UsageSummary;
   timings?: TimingSummary;
   artifacts?: Record<string, JsonValue>;

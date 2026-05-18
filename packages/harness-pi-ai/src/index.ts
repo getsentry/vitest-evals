@@ -233,7 +233,7 @@ interface PiAiHarnessBaseOptions<
   name?: string;
 }
 
-export interface PiAiHarnessWithToolsOptions<
+interface PiAiHarnessWithToolsOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -257,7 +257,7 @@ export interface PiAiHarnessWithToolsOptions<
   ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 }
 
-export interface PiAiHarnessInferredToolsOptions<
+interface PiAiHarnessInferredToolsOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -282,7 +282,7 @@ export interface PiAiHarnessInferredToolsOptions<
   ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 }
 
-export type PiAiHarnessOptions<
+type PiAiHarnessOptions<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -778,7 +778,7 @@ async function executePiHarnessRun<
           ? context.artifacts
           : undefined,
       errors: resolveErrors(normalizeResult),
-    };
+    } as HarnessRun<TOutput>;
   } catch (error) {
     const usage = resolveUsage(undefined, runtime.toolCalls.length);
     const run = {
@@ -790,7 +790,7 @@ async function executePiHarnessRun<
           ? context.artifacts
           : undefined,
       errors: [serializeError(error)],
-    } satisfies HarnessRun<TOutput>;
+    } satisfies HarnessRun;
 
     throw attachHarnessRunToError(error, run);
   }

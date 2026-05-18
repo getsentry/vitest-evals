@@ -78,8 +78,9 @@ can stay on the harness-first surface while older matching behavior remains
 available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data,
-typed `input`, typed `output`, and the configured `harness`. LLM-backed judges
-own their prompt, rubric text, model call, and parser. Custom judges should use
+typed `input`, typed `output`, and the configured `harness`. The output is only
+optional when the harness output type includes `undefined`. LLM-backed judges own
+their prompt, rubric text, model call, and parser. Custom judges should use
 `createJudge("Name", assess)` for stable reporter labels; the provider-helper
 overload is for reusable judge-side setup that needs curried run-scoped options
 such as abort signals.

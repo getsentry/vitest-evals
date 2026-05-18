@@ -33,7 +33,7 @@ export interface JudgeContext<
   /** Original eval input passed to the harness. */
   input: TInput;
   /** App-facing output returned by the harness. */
-  output: TOutput | undefined;
+  output: TOutput;
   toolCalls: ToolCallRecord[];
   metadata: Readonly<TMetadata>;
   run: HarnessRun<TOutput>;
@@ -58,32 +58,32 @@ export type JudgeAssessFn<
   TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = (opts: TOptions) => Promise<JudgeResult> | JudgeResult;
 
-/** Runtime options supplied by core when calling a judge-side harness. */
-export type JudgeHarnessOptions = {
+/** Runtime options supplied by core when calling a judge-side assessor. */
+export type JudgeAssessorOptions = {
   signal?: AbortSignal;
 };
 
 /** Provider/model helper that a judge can use without running the app harness. */
-export type JudgeHarness<TInput = string, TOutput = string> = {
+export type JudgeAssessor<TInput = string, TOutput = string> = {
   assess: (
     input: TInput,
-    options: JudgeHarnessOptions,
+    options: JudgeAssessorOptions,
   ) => Promise<TOutput> | TOutput;
 };
 
-/** Judge-side harness after core binds run-scoped options such as abort signal. */
-export type BoundJudgeHarness<TInput = string, TOutput = string> = {
+/** Judge-side assessor after core binds run-scoped options such as abort signal. */
+export type BoundJudgeAssessor<TInput = string, TOutput = string> = {
   assess: (input: TInput) => Promise<TOutput>;
 };
 
-/** Function that assesses a context with a prebound judge-side harness. */
-export type JudgeAssessWithHarnessFn<
+/** Function that assesses a context with a prebound judge-side assessor. */
+export type JudgeAssessWithAssessorFn<
   TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
   TInput = string,
   TOutput = string,
 > = (
   opts: TOptions,
-  judge: BoundJudgeHarness<TInput, TOutput>,
+  assessor: BoundJudgeAssessor<TInput, TOutput>,
 ) => Promise<JudgeResult> | JudgeResult;
 
 /** Named judge object consumed by suite-level judges and explicit assertions. */

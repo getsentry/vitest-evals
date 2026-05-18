@@ -22,8 +22,8 @@ import type {
   JudgeContext,
   Judge,
   JudgeAssessFn,
-  JudgeAssessWithHarnessFn,
-  JudgeHarness,
+  JudgeAssessWithAssessorFn,
+  JudgeAssessor,
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
@@ -168,8 +168,8 @@ type JudgeAssertionInput<
 type JudgeAssertionOutput<
   TJudgeOptions extends JudgeContext<any, any, any, any>,
 > = TJudgeOptions extends { output: infer TOutput }
-  ? Exclude<TOutput, undefined>
-  : JsonValue;
+  ? TOutput
+  : JsonValue | undefined;
 
 type JudgeAssertionMetadata<
   TJudgeOptions extends JudgeContext<any, any, any, any>,
@@ -463,7 +463,7 @@ async function applyAutomaticJudges<
         session: run.session,
         signal,
         harness,
-      } as JudgeContext<TInput, TOutput, TMetadata, THarness>;
+      } as unknown as JudgeContext<TInput, TOutput, TMetadata, THarness>;
 
       return Promise.resolve(judge.assess(judgeOptions));
     }),
@@ -888,8 +888,8 @@ export function createJudge<
   TOutput,
 >(
   name: string,
-  harness: JudgeHarness<TInput, TOutput>,
-  assess: JudgeAssessWithHarnessFn<TOptions, TInput, TOutput>,
+  assessor: JudgeAssessor<TInput, TOutput>,
+  assess: JudgeAssessWithAssessorFn<TOptions, TInput, TOutput>,
 ): Judge<TOptions>;
 export function createJudge<
   TOptions extends JudgeContext<any, any, any, any>,
@@ -897,17 +897,17 @@ export function createJudge<
   TOutput,
 >(
   name: string,
-  assessOrHarness: JudgeAssessFn<TOptions> | JudgeHarness<TInput, TOutput>,
-  assess?: JudgeAssessWithHarnessFn<TOptions, TInput, TOutput>,
+  assessOrAssessor: JudgeAssessFn<TOptions> | JudgeAssessor<TInput, TOutput>,
+  assess?: JudgeAssessWithAssessorFn<TOptions, TInput, TOutput>,
 ): Judge<TOptions> {
   if (!assess) {
     return {
       name,
-      assess: assessOrHarness as JudgeAssessFn<TOptions>,
+      assess: assessOrAssessor as JudgeAssessFn<TOptions>,
     };
   }
 
-  const harness = assessOrHarness as JudgeHarness<TInput, TOutput>;
+  const assessor = assessOrAssessor as JudgeAssessor<TInput, TOutput>;
 
   return {
     name,
@@ -915,7 +915,7 @@ export function createJudge<
       assess(opts, {
         assess: (input) =>
           Promise.resolve(
-            harness.assess(input, {
+            assessor.assess(input, {
               signal: (opts as { signal?: AbortSignal }).signal,
             }),
           ),
@@ -964,13 +964,13 @@ export {
   type ToolCallJudgeOptions,
 } from "./judges";
 export type {
-  BoundJudgeHarness,
+  BoundJudgeAssessor,
   Judge,
   JudgeAssessFn,
-  JudgeAssessWithHarnessFn,
+  JudgeAssessWithAssessorFn,
+  JudgeAssessor,
+  JudgeAssessorOptions,
   JudgeContext,
-  JudgeHarness,
-  JudgeHarnessOptions,
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
