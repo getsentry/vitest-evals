@@ -30,7 +30,7 @@ export async function resolveResultFiles(
 /** Splits a GitHub Action results input into path and glob entries. */
 export function splitResultsInput(value: string | undefined) {
   return (value ?? "")
-    .split(/\r?\n|,/)
+    .split(/\r?\n/)
     .map((entry) => entry.trim())
     .filter(Boolean);
 }

@@ -487,6 +487,16 @@ describe("parseActionInputs", () => {
     });
   });
 
+  test("keeps commas inside action result paths", () => {
+    expect(
+      parseActionInputs({
+        INPUT_RESULTS: "eval-results/report,v2.json\neval-results/*.json",
+      }),
+    ).toMatchObject({
+      results: ["eval-results/report,v2.json", "eval-results/*.json"],
+    });
+  });
+
   test("does not fall back to env token when the token input is blank", () => {
     expect(
       parseActionInputs({
