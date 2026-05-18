@@ -1083,6 +1083,31 @@ test("toSatisfyJudge builds a synthetic run for raw output values", async () => 
   );
 });
 
+test("toSatisfyJudge reports structured output on failures", async () => {
+  const failingJudge = createJudge(
+    "StructuredFailureJudge",
+    async (_opts: JudgeContext<unknown, RefundOutput>) => ({
+      score: 0,
+      metadata: {
+        rationale: "not approved",
+      },
+    }),
+  );
+
+  let thrown: Error | undefined;
+  try {
+    await expect({
+      status: "denied",
+      refundId: "rf_inv_123",
+    }).toSatisfyJudge(failingJudge);
+  } catch (error) {
+    thrown = error as Error;
+  }
+
+  expect(thrown?.message).toContain('"status": "denied"');
+  expect(thrown?.message).toContain('"refundId": "rf_inv_123"');
+});
+
 test("toSatisfyJudge preserves structured harness output when text is also present", async () => {
   const outputJudgeSpy = vi.fn(
     async (opts: JudgeContext<unknown, RefundOutput>) => ({

@@ -398,12 +398,24 @@ expect.extend({
           threshold === null
             ? `Score: ${score.toFixed(2)} recorded without a failure threshold`
             : `Score: ${score.toFixed(2)} below threshold: ${threshold.toFixed(2)}`,
-          `Output: ${wrapText(judgeOptions.output)}`,
+          `Output: ${formatJudgeOutputForMessage(judgeOptions.output)}`,
           formatScores([scoredJudge]),
         ].join("\n\n"),
     };
   },
 });
+
+function formatJudgeOutputForMessage(output: JsonValue | undefined) {
+  if (typeof output === "string") {
+    return wrapText(output);
+  }
+
+  if (output === undefined) {
+    return "undefined";
+  }
+
+  return wrapText(JSON.stringify(output, null, 2));
+}
 
 /**
  * Creates a harness-backed eval suite on top of a fixture-backed Vitest test API.
