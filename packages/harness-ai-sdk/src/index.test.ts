@@ -191,8 +191,14 @@ describeEval(
       });
       expect(result.session.provider).toBe("openai");
       expect(result.session.model).toBe("gpt-4o-mini");
-      expect(result.session.outputText).toBe(
-        '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
+      expect(result.session.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content:
+              '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123"}',
+          }),
+        ]),
       );
       expect(toolCalls(result.session)).toMatchObject([
         {
@@ -299,7 +305,14 @@ describeEval(
       expect(result.output).toEqual({
         status: "approved",
       });
-      expect(result.session.outputText).toBe('{"status":"approved"}');
+      expect(result.session.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content: '{"status":"approved"}',
+          }),
+        ]),
+      );
     });
   },
 );

@@ -584,10 +584,6 @@ function isEvalTaskLike(task: unknown): task is EvalTaskLike {
   );
 }
 
-function hasMeaningfulText(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
 function formatJudgeOutput(run: HarnessRun) {
   if (typeof run.output === "string") {
     return run.output;
@@ -601,15 +597,25 @@ function formatJudgeOutput(run: HarnessRun) {
     }
   }
 
-  return run.session.outputText ?? "";
+  const assistantOutput = resolveAssistantOutput(run.session);
+  if (assistantOutput !== undefined) {
+    return typeof assistantOutput === "string"
+      ? assistantOutput
+      : JSON.stringify(assistantOutput);
+  }
+
+  return "";
 }
 
 function formatJudgeTextOutput(run: HarnessRun) {
-  if (hasMeaningfulText(run.session.outputText)) {
-    return run.session.outputText;
+  const assistantOutput = resolveAssistantOutput(run.session);
+  if (assistantOutput === undefined) {
+    return formatJudgeOutput(run);
   }
 
-  return resolveAssistantOutput(run.session) ?? formatJudgeOutput(run);
+  return typeof assistantOutput === "string"
+    ? assistantOutput
+    : JSON.stringify(assistantOutput);
 }
 
 function buildJudgeAssertionOptions<
@@ -802,7 +808,6 @@ function createSyntheticJudgeSession<
 
   return {
     messages,
-    outputText: typeof received === "string" ? received : undefined,
   };
 }
 
@@ -816,9 +821,6 @@ function inferJudgeOutputValue(
 
   if (isNormalizedSession(received)) {
     return (
-      (hasMeaningfulText(session.outputText)
-        ? session.outputText
-        : undefined) ??
       resolveAssistantOutput(session) ??
       normalizeJudgeJsonValue(received.messages)
     );
@@ -830,9 +832,9 @@ function inferJudgeOutputValue(
 function resolveAssistantOutput(session: NormalizedSession) {
   const assistantContent = [...assistantMessages(session)]
     .reverse()
-    .find((message) => hasMeaningfulText(message.content));
-  return hasMeaningfulText(assistantContent?.content)
-    ? assistantContent.content
+    .find((message) => message.content !== undefined);
+  return assistantContent?.content !== undefined
+    ? normalizeContent(assistantContent.content)
     : undefined;
 }
 

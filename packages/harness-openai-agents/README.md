@@ -58,7 +58,6 @@ const harness = openaiAgentsHarness({
     runBottleClassifier({ agent, runner, input, runOptions }),
   normalize: {
     output: ({ result }) => result.classification,
-    outputText: ({ output }) => JSON.stringify(output),
   },
 });
 ```
@@ -115,7 +114,7 @@ The adapter provides:
 - a `run` escape hatch for app-specific entrypoints
 - normalized assistant output, messages, tool calls, tool results, usage,
   timings, errors, and replay-friendly metadata
-- app-facing `run.output` plus a deliberate `session.outputText` for judges
+- app-facing `run.output` for typed assertions and judges
 - opt-in replay metadata for local function tools configured with `toolReplay`
 
 ## Tool Replay

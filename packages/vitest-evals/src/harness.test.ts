@@ -62,7 +62,6 @@ const runSpy = vi.fn(
             ],
           },
         ],
-        outputText: "approved",
         provider: "pi-ai",
         model: "pi-test",
       },
@@ -1014,7 +1013,6 @@ test("toSatisfyJudge preserves structured harness output when text is also prese
           content: "approved",
         },
       ],
-      outputText: "",
     },
     output: {
       status: "approved",
@@ -1052,13 +1050,9 @@ test("toSatisfyJudge preserves structured harness output when text is blank", as
       messages: [
         {
           role: "assistant",
-          content: {
-            status: "approved",
-            refundId: "rf_inv_123",
-          },
+          content: "   ",
         },
       ],
-      outputText: "   ",
     },
     output: {
       status: "approved",
@@ -1078,7 +1072,7 @@ test("toSatisfyJudge preserves structured harness output when text is blank", as
   );
 });
 
-test("toSatisfyJudge ignores empty outputText on normalized sessions", async () => {
+test("toSatisfyJudge uses assistant message content on normalized sessions", async () => {
   const outputJudgeSpy = vi.fn(async (opts: JudgeContext) => ({
     score: opts.output === "approved" ? 1 : 0,
   }));
@@ -1094,7 +1088,6 @@ test("toSatisfyJudge ignores empty outputText on normalized sessions", async () 
         content: "approved",
       },
     ],
-    outputText: "",
   } satisfies NormalizedSession).toSatisfyJudge(outputJudge);
 
   expect(outputJudgeSpy).toHaveBeenCalledWith(
@@ -1229,7 +1222,6 @@ test("normalized session helpers expose common access paths", () => {
         },
       },
     ],
-    outputText: "approved",
   };
 
   expect(userMessages(session)).toEqual([

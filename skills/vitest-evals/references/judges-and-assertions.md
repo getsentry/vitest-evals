@@ -8,38 +8,42 @@ Every judge receives:
 
 | Field | Meaning |
 |-------|---------|
-| `input` | Canonical text input. |
-| `output` | Canonical text output for grading. |
-| `inputValue` | Original input value. |
+| `input` | Original typed eval input. |
+| `output` | Typed app output returned by the harness. |
 | `metadata` | Readonly per-run metadata. |
 | `toolCalls` | Flattened calls from `run.session`. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
-| `signal` | Abort signal from the eval run when available. |
-| `harness` | Suite harness; queryable only when typed with `QueryableHarness`. |
+| `harness` | Suite harness for intentional second runs. |
 
 ## Custom Judge Pattern
 
 ```ts
 import {
-  namedJudge,
-  type QueryableJudgeContext,
+  createJudge,
+  type JudgeContext,
+  type JudgeHarness,
 } from "vitest-evals";
 
-const FactualityJudge = namedJudge(
-  "FactualityJudge",
-  async ({
-    harness,
-    input,
-    output,
-    metadata,
-    signal,
-  }: QueryableJudgeContext<string, CaseMeta>) => {
-    const verdict = await harness.query(formatRubric({ input, output }), {
-      system: "Grade the answer against the rubric.",
-      metadata: { expectedStatus: metadata.expectedStatus },
+const judgeModel = {
+  assess: (prompt, { signal }) =>
+    callJudgeModel({
+      prompt,
       signal,
-    });
+    }),
+} satisfies JudgeHarness<string, string>;
+
+const FactualityJudge = createJudge(
+  "FactualityJudge",
+  judgeModel,
+  async (ctx: JudgeContext<string, RefundOutput, CaseMeta>, judge) => {
+    const verdict = await judge.assess(
+      formatRubric({
+        input: ctx.input,
+        output: ctx.output,
+        expectedStatus: ctx.metadata.expectedStatus,
+      }),
+    );
 
     return parseVerdict(verdict);
   },
@@ -54,9 +58,9 @@ const FactualityJudge = namedJudge(
 | A score below a threshold should fail the test | `judgeThreshold` or matcher `threshold` |
 | Record a score without failing | `threshold: null` |
 | Only one assertion needs the judge | `await expect(result).toSatisfyJudge(Judge)` |
-| Judge needs structured app output | Read `ctx.run.output` |
-| Judge needs canonical text | Read `ctx.output` |
-| Judge needs shared model setup | Type the context as `QueryableJudgeContext` and call `ctx.harness.query(...)` |
+| Judge needs structured app output | Type `JudgeContext<..., TOutput>` and read `ctx.output` |
+| Judge needs text | Use a text `TOutput` or explicitly project structured output to text |
+| Judge needs shared model setup | Pass a judge-side `JudgeHarness` to `createJudge(...)` |
 
 ## Built-In Judges
 
@@ -69,14 +73,14 @@ const FactualityJudge = namedJudge(
 
 - `expect(result).toSatisfyJudge(...)` reuses the fixture-backed run context.
 - `expect(result.output).toSatisfyJudge(...)` can reuse the exact run when the output object came from that run.
-- Raw values outside an eval context need explicit `inputValue`, `metadata`, `session`, `run`, or `harness` when the judge depends on them.
-- Empty `session.outputText` falls back to assistant text, then structured output.
+- Raw values outside an eval context need explicit `input`, `metadata`, `session`, `run`, or `harness` when the judge depends on them.
+- Normalized sessions infer output from the latest assistant message content.
 - Calling `ctx.harness.run(...)` inside a judge executes the app again; only do this when the judge intentionally needs a second run.
 
 ## Review Checklist
 
-- Custom judges are wrapped in `namedJudge(...)`.
+- Custom judges are wrapped in `createJudge(...)`.
 - Scores are numbers or `null`; failure behavior is controlled by thresholds.
 - Rationale or parsed judge output is placed under `metadata`.
-- LLM-backed judges provide the judge prompt/rubric text. Use
-  `harness.query(...)` only when the harness exposes a real query helper.
+- LLM-backed judges provide the judge prompt/rubric text. Shared provider setup
+  belongs in a judge-side helper, not on the app harness.

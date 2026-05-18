@@ -50,7 +50,6 @@ describeEval("refund agent", { harness }, (it) => {
 
 - `run.output` is JSON-serializable or omitted.
 - `run.session.messages` contains user, assistant, and tool records worth reporting.
-- `run.session.outputText` is set deliberately when judges need canonical text.
 - `run.usage` includes provider/model/token/tool data when available.
 - `run.artifacts` contains only JSON-safe diagnostics set through `context.setArtifact(...)`.
 - `run.errors` is an array, even on success.

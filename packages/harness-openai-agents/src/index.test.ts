@@ -151,9 +151,6 @@ describeEval(
         status: "classified",
         category: "bourbon",
       });
-      expect(result.session.outputText).toBe(
-        '{"status":"classified","category":"bourbon"}',
-      );
       expect(result.usage).toMatchObject({
         model: "gpt-4.1-mini",
         inputTokens: 13,
@@ -229,7 +226,6 @@ test("supports custom app output mapping", async () => {
       output: ({ result }) =>
         (result as { classification: { label: string; confidence: number } })
           .classification,
-      outputText: ({ output }) => JSON.stringify(output),
     },
   });
 
@@ -244,8 +240,16 @@ test("supports custom app output mapping", async () => {
     label: "bourbon",
     confidence: 0.92,
   });
-  expect(result.session.outputText).toBe(
-    '{"label":"bourbon","confidence":0.92}',
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: {
+          label: "bourbon",
+          confidence: 0.92,
+        },
+      }),
+    ]),
   );
   expect(result.artifacts).toEqual({
     entrypoint: "custom",

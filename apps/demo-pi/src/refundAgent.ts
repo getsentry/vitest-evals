@@ -185,19 +185,19 @@ export class RefundAgent {
       );
     }
 
-    const outputText = getAssistantText(assistant);
-    if (!outputText) {
+    const assistantText = getAssistantText(assistant);
+    if (!assistantText) {
       throw new Error("Refund agent returned an empty final response.");
     }
 
-    runtime.events.assistant(outputText, {
+    runtime.events.assistant(assistantText, {
       provider: assistant.provider,
       model: assistant.model,
       totalTokens: assistant.usage.totalTokens,
     });
 
     return {
-      decision: parseRefundDecision(outputText),
+      decision: parseRefundDecision(assistantText),
       metrics: {
         provider: assistant.provider,
         model: assistant.model,

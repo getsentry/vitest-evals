@@ -944,11 +944,9 @@ function resolveSession(
   }
 
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
-  const outputText = resolveOutputText(result, output, lastStep);
 
   return {
     messages,
-    outputText,
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
   };
@@ -1009,26 +1007,6 @@ function resolveLanguageModelUsage(
 
   const aiResult = result as AiSdkLikeResult;
   return aiResult.totalUsage ?? aiResult.usage;
-}
-
-function resolveOutputText(
-  result: unknown,
-  output: JsonValue | undefined,
-  lastStep: StepLike | undefined,
-) {
-  if (lastStep?.text) {
-    return lastStep.text;
-  }
-
-  if (
-    result &&
-    typeof result === "object" &&
-    typeof (result as AiSdkLikeResult).text === "string"
-  ) {
-    return (result as AiSdkLikeResult).text;
-  }
-
-  return typeof output === "string" ? output : undefined;
 }
 
 function normalizeStep(

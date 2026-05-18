@@ -168,7 +168,14 @@ describeEval(
           },
         },
       ]);
-      expect(result.session.outputText).toBeUndefined();
+      expect(result.session.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content: "approved",
+          }),
+        ]),
+      );
       expect(result.usage.totalTokens).toBe(12);
     });
   },

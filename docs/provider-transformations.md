@@ -27,7 +27,6 @@ type ToolCallRecord = {
 
 type NormalizedSession = {
   messages: NormalizedMessage[];
-  outputText?: string;
   provider?: string;
   model?: string;
   metadata?: Record<string, JsonValue>;
@@ -86,7 +85,6 @@ function normalizeSession(input: string, result: ProviderResult): NormalizedSess
         toolCalls: normalizeProviderStep(step),
       })),
     ],
-    outputText: result.text,
     provider: result.provider,
     model: result.model,
   };

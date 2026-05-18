@@ -254,7 +254,6 @@ const appHarness = createHarness<AppEvalInput, AppEvalMetadata, AppOutput>({
         replies: result.replies,
         sideEffects: result.sideEffects,
       },
-      outputText: result.replies.map((reply) => reply.text).join("\n\n"),
       artifacts: {
         replyCount: result.replies.length,
       },
@@ -316,8 +315,8 @@ so reserve that for judges that intentionally need a second execution. Put
 criteria on `input` when they are part of the scenario itself; use per-run
 `metadata` for harness configuration or expectations that are not part of the
 scenario payload. `createHarness(...)` builds a default user/assistant session
-from `input`, `output`, and `outputText`; return a full `HarnessRun` only when
-you need exact session control.
+from `input` and typed `output`; return a full `HarnessRun` only when you need
+exact session control.
 
 Provider setup and rubric parsing stay in your judge. The core
 package only requires the judge to return a `JudgeResult` with a score and

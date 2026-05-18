@@ -11,16 +11,10 @@ import {
   toJsonValue,
   type Harness,
   type HarnessRun,
-  type QueryableHarness,
 } from "vitest-evals/harness";
 
-const appHarness: QueryableHarness<AppInput, AppMetadata> = {
+const appHarness: Harness<AppInput, AppMetadata> = {
   name: "app",
-  query: (input, options) =>
-    queryJudgeModel(input, {
-      system: options?.system,
-      signal: options?.signal,
-    }),
   run: async (input, context): Promise<HarnessRun> => {
     const appResult = await runApp(input, {
       signal: context.signal,
@@ -40,7 +34,6 @@ const appHarness: QueryableHarness<AppInput, AppMetadata> = {
             metadata: normalizeMetadata({ channel: appResult.channel }),
           },
         ],
-        outputText: appResult.reply,
         metadata: normalizeMetadata({ caseId: appResult.caseId }),
       },
       usage: appResult.usage ?? {},
@@ -68,7 +61,7 @@ const appHarness: QueryableHarness<AppInput, AppMetadata> = {
 - Use `context.setArtifact(name, value)` for JSON-safe diagnostics that should appear on the run.
 - Convert unknown values with `toJsonValue(...)`, `normalizeContent(...)`, or `normalizeMetadata(...)`.
 - Attach a partial run to thrown errors with `attachHarnessRunToError(...)` when meaningful trace data exists.
-- Define `session.outputText` when LLM-backed judges should grade text rather than structured output.
+- Put text that should be judged as text in `run.output`; put transcript text in assistant messages.
 
 ## Choose A Custom Harness When
 

@@ -233,16 +233,6 @@ export interface OpenAiAgentsHarnessNormalizeOptions<
       "output"
     >,
   ) => MaybePromise<JsonValue | undefined>;
-  outputText?: (
-    args: OpenAiAgentsHarnessResultArgs<
-      TAgent,
-      TInput,
-      TMetadata,
-      TRunner,
-      TResult,
-      TContext
-    >,
-  ) => MaybePromise<string | undefined>;
   usage?: (
     args: OpenAiAgentsHarnessResultArgs<
       TAgent,
@@ -573,12 +563,9 @@ async function executeOpenAiAgentsHarness<
         const usage = options.normalize?.usage
           ? await options.normalize.usage(resultArgs)
           : resolveUsage(normalizeResult, capture.calls.length);
-        const outputText = options.normalize?.outputText
-          ? await options.normalize.outputText(resultArgs)
-          : resolveOutputText(normalizeResult, output);
         const session = options.normalize?.session
           ? await options.normalize.session(resultArgs)
-          : resolveSession(input, normalizeResult, output, outputText, usage, {
+          : resolveSession(input, normalizeResult, output, usage, {
               runtimeToolCalls: capture.calls,
             });
 
@@ -601,16 +588,9 @@ async function executeOpenAiAgentsHarness<
         const usage =
           capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
         const run = {
-          session: resolveSession(
-            input,
-            undefined,
-            undefined,
-            undefined,
-            usage,
-            {
-              runtimeToolCalls: capture.calls,
-            },
-          ),
+          session: resolveSession(input, undefined, undefined, usage, {
+            runtimeToolCalls: capture.calls,
+          }),
           output: undefined,
           usage,
           timings: { totalMs: Date.now() - startedAt },
@@ -910,7 +890,6 @@ function hasResultOverrides<
 ) {
   return Boolean(
     options.normalize?.output ??
-      options.normalize?.outputText ??
       options.normalize?.session ??
       options.normalize?.usage ??
       options.normalize?.timings ??
@@ -1190,32 +1169,6 @@ function resolveOutput(result: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveOutputText(
-  result: unknown,
-  output: JsonValue | undefined,
-): string | undefined {
-  if (!result || typeof result !== "object") {
-    return typeof output === "string" ? output : stringifyJson(output);
-  }
-
-  const directText =
-    stringProperty(result, "finalOutput") ??
-    stringProperty(result, "final_output") ??
-    stringProperty(result, "text");
-  if (directText !== undefined) {
-    return directText;
-  }
-
-  const itemText = resolveAssistantTextFromItems(
-    arrayProperty(result, "newItems") ?? arrayProperty(result, "output") ?? [],
-  );
-  if (itemText) {
-    return itemText;
-  }
-
-  return typeof output === "string" ? output : stringifyJson(output);
-}
-
 function resolveUsage(result: unknown, runtimeToolCallCount: number) {
   const usage =
     getObjectProperty(getObjectProperty(result, "state"), "usage") ??
@@ -1253,7 +1206,6 @@ function resolveSession(
   input: unknown,
   result: unknown,
   output: JsonValue | undefined,
-  outputText: string | undefined,
   usage: UsageSummary,
   options: {
     runtimeToolCalls: ToolCallRecord[];
@@ -1303,7 +1255,6 @@ function resolveSession(
 
   return {
     messages,
-    outputText,
     provider: resolveProvider(result) ?? usage.provider,
     model: resolveModel(result) ?? usage.model,
     metadata: normalizeMetadata({
@@ -1636,24 +1587,6 @@ function normalizeMessageContent(
   return content === undefined ? undefined : normalizeContent(content);
 }
 
-function resolveAssistantTextFromItems(items: unknown[]) {
-  const texts: string[] = [];
-
-  for (const item of items) {
-    const rawItem = getRunItemRawItem(item);
-    if (!isAssistantMessageItem(item, rawItem)) {
-      continue;
-    }
-
-    const text = extractText(getObjectProperty(rawItem, "content"));
-    if (text) {
-      texts.push(text);
-    }
-  }
-
-  return texts.join("\n\n");
-}
-
 function isAssistantMessageItem(item: unknown, rawItem: unknown) {
   return (
     getObjectProperty(item, "type") === "message_output_item" ||
@@ -1942,10 +1875,6 @@ function findStringAtPath(value: unknown, path: string[]) {
   }
 
   return typeof current === "string" ? current : undefined;
-}
-
-function stringifyJson(value: JsonValue | undefined) {
-  return value === undefined ? undefined : JSON.stringify(value);
 }
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {

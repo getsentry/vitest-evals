@@ -1431,7 +1431,6 @@ function resolveSession(
 
   return {
     messages: sessionMessages,
-    outputText: typeof output === "string" ? output : undefined,
     provider:
       ((result as Record<string, unknown> | undefined)?.provider as
         | string

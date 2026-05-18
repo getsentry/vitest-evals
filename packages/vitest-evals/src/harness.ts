@@ -48,7 +48,6 @@ export type TimingSummary = {
 
 export type NormalizedSession = {
   messages: NormalizedMessage[];
-  outputText?: string;
   provider?: string;
   model?: string;
   metadata?: Record<string, JsonValue>;
@@ -111,7 +110,6 @@ export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = {
   output?: TOutput;
-  outputText?: string;
   messages?: NormalizedMessage[];
   toolCalls?: SimpleToolCallRecord[];
   usage?: UsageSummary;
@@ -289,14 +287,12 @@ export function normalizeHarnessRun<
 
   const output = toJsonValue(result.output) as TOutput | undefined;
   const toolCalls = normalizeSimpleToolCalls(result.toolCalls);
-  const outputText = resolveSimpleOutputText(result, output);
   const usage = result.usage ?? {};
   const messages =
     result.messages ??
     createDefaultSessionMessages({
       input,
       output,
-      outputText,
       toolCalls,
     });
   const metadata = result.metadata
@@ -310,7 +306,6 @@ export function normalizeHarnessRun<
   return {
     session: {
       messages,
-      ...(outputText !== undefined ? { outputText } : {}),
       ...(usage.provider ? { provider: usage.provider } : {}),
       ...(usage.model ? { model: usage.model } : {}),
       ...(metadata ? { metadata } : {}),
@@ -323,26 +318,13 @@ export function normalizeHarnessRun<
   };
 }
 
-function resolveSimpleOutputText(
-  result: SimpleHarnessResult,
-  output: JsonValue | undefined,
-) {
-  if (result.outputText !== undefined) {
-    return result.outputText;
-  }
-
-  return typeof output === "string" ? output : undefined;
-}
-
 function createDefaultSessionMessages<TInput>({
   input,
   output,
-  outputText,
   toolCalls: normalizedToolCalls,
 }: {
   input: TInput;
   output: JsonValue | undefined;
-  outputText: string | undefined;
   toolCalls: ToolCallRecord[];
 }): NormalizedMessage[] {
   const messages: NormalizedMessage[] = [
@@ -351,14 +333,11 @@ function createDefaultSessionMessages<TInput>({
       content: normalizeContent(input),
     },
   ];
-  const assistantContent = output !== undefined ? output : outputText;
 
-  if (assistantContent !== undefined || normalizedToolCalls.length > 0) {
+  if (output !== undefined || normalizedToolCalls.length > 0) {
     messages.push({
       role: "assistant",
-      ...(assistantContent !== undefined
-        ? { content: normalizeContent(assistantContent) }
-        : {}),
+      ...(output !== undefined ? { content: normalizeContent(output) } : {}),
       ...(normalizedToolCalls.length > 0
         ? { toolCalls: normalizedToolCalls }
         : {}),
