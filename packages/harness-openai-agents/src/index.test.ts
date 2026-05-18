@@ -65,6 +65,20 @@ type _OpenAiRunnerFinalOutput = Expect<
   Equal<HarnessOutput<typeof typedRunnerFinalOutputHarness>, Classification>
 >;
 
+const runnerOutputItemsHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ output: JsonValue[] }> => ({
+      output: [],
+    }),
+  },
+});
+type _OpenAiRunnerOutputItems = Expect<
+  Equal<HarnessOutput<typeof runnerOutputItemsHarness>, undefined>
+>;
+
 const broadDecisionFieldHarness = openaiAgentsHarness({
   agent: {
     name: "classifier",
@@ -76,7 +90,7 @@ const broadDecisionFieldHarness = openaiAgentsHarness({
   }),
 });
 type _OpenAiDecisionFieldOutput = Expect<
-  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, JsonValue | undefined>
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, undefined>
 >;
 
 type DemoAgent = {
@@ -266,6 +280,39 @@ describeEval(
     });
   },
 );
+
+test("does not use OpenAI Agents output items as app output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        output: runResult.newItems,
+        state: runResult.state,
+        lastAgent: runResult.lastAgent,
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-items",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: '{"status":"classified","category":"bourbon"}',
+      }),
+    ]),
+  );
+});
 
 test("supports custom app output mapping", async () => {
   const harness = openaiAgentsHarness({

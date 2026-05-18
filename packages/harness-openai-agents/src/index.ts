@@ -47,17 +47,23 @@ type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
     : JsonOutput<TOutput> | undefined
   : JsonValue | undefined;
 
-type OpenAiAgentsResultOutput<TResult> = TResult extends HarnessRun<
+type OpenAiAgentsRunResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
 >
   ? TOutput
   : TResult extends { finalOutput?: unknown }
     ? ResultFieldOutput<TResult, "finalOutput">
-    : TResult extends { final_output?: unknown }
-      ? ResultFieldOutput<TResult, "final_output">
-      : TResult extends { output?: unknown }
-        ? ResultFieldOutput<TResult, "output">
-        : JsonValue | undefined;
+    : TResult extends { output?: unknown }
+      ? ResultFieldOutput<TResult, "output">
+      : undefined;
+
+type OpenAiAgentsRunnerResultOutput<TResult> = TResult extends HarnessRun<
+  infer TOutput
+>
+  ? TOutput
+  : TResult extends { finalOutput?: unknown }
+    ? ResultFieldOutput<TResult, "finalOutput">
+    : undefined;
 
 /** Replay mode alias used by the OpenAI Agents harness package. */
 export type OpenAiAgentsReplayMode = ReplayMode;
@@ -556,7 +562,7 @@ export function openaiAgentsHarness<
     TResult,
     TContext
   >,
-): Harness<TInput, OpenAiAgentsResultOutput<Awaited<TResult>>, TMetadata>;
+): Harness<TInput, OpenAiAgentsRunResultOutput<Awaited<TResult>>, TMetadata>;
 export function openaiAgentsHarness<
   TAgent,
   TInput = string,
@@ -579,7 +585,7 @@ export function openaiAgentsHarness<
   >,
 ): Harness<
   TInput,
-  OpenAiAgentsResultOutput<
+  OpenAiAgentsRunnerResultOutput<
     OpenAiAgentsRunnerResult<TAgent, TInput, TContext, TRunner>
   >,
   TMetadata
@@ -736,7 +742,9 @@ async function executeOpenAiAgentsHarness<
         > = baseResultArgs;
         const output = options.output
           ? await options.output(resultArgs)
-          : (resolveOutput(normalizeResult) as TOutput | undefined);
+          : (resolveOutput(normalizeResult, {
+              allowOutputField: Boolean(options.run),
+            }) as TOutput | undefined);
         const usage = resolveUsage(normalizeResult, capture.calls.length);
         const session = resolveSession(input, normalizeResult, output, usage, {
           runtimeToolCalls: capture.calls,
@@ -1323,23 +1331,26 @@ function resolveToolCallId(
   );
 }
 
-function resolveOutput(result: unknown): JsonValue | undefined {
+function resolveOutput(
+  result: unknown,
+  options: { allowOutputField: boolean },
+): JsonValue | undefined {
   if (!result || typeof result !== "object") {
-    return toJsonValue(result);
+    return undefined;
   }
 
-  const candidates = ["finalOutput", "final_output"] satisfies string[];
+  const finalOutput = toJsonValue(
+    (result as Record<string, unknown>).finalOutput,
+  );
+  if (finalOutput !== undefined) {
+    return finalOutput;
+  }
 
-  for (const key of candidates) {
-    const normalized = toJsonValue((result as Record<string, unknown>)[key]);
-    if (normalized !== undefined) {
-      return normalized;
+  if (options.allowOutputField) {
+    const output = toJsonValue((result as { output?: unknown }).output);
+    if (output !== undefined) {
+      return output;
     }
-  }
-
-  const output = toJsonValue((result as { output?: unknown }).output);
-  if (output !== undefined) {
-    return output;
   }
 
   return undefined;

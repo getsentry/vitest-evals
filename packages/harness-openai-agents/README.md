@@ -112,7 +112,9 @@ The adapter provides:
 - a `run` escape hatch for app-specific entrypoints
 - normalized assistant output, messages, tool calls, tool results, usage,
   timings, errors, and replay-friendly metadata
-- app-facing `run.output` for typed assertions and judges
+- app-facing `run.output` from native `finalOutput`, a custom `run()` result's
+  `output`, or an explicit `output` selector; native OpenAI Agents `output`
+  items stay in the normalized session trace
 - opt-in replay metadata for local function tools configured with `toolReplay`
 
 ## Tool Replay
