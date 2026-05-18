@@ -242,7 +242,7 @@ export type OpenAiAgentsTool<
   invoke?: OpenAiAgentsInvoke;
 };
 
-export type OpenAiAgentsHarnessOutputSelector<
+type OpenAiAgentsHarnessOutputSelector<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,

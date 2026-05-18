@@ -489,7 +489,7 @@ type PiAiRunnableAgent<
   ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
-export type PiAiHarnessOutputSelector<
+type PiAiHarnessOutputSelector<
   TAgent,
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,

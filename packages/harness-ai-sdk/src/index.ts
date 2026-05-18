@@ -210,7 +210,7 @@ export interface AiSdkHarnessResultArgs<
   result: TResult;
 }
 
-export type AiSdkHarnessOutputSelector<
+type AiSdkHarnessOutputSelector<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
