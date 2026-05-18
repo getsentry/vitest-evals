@@ -99,14 +99,38 @@ const customRunNativeItemsHarness = openaiAgentsHarness({
   },
   run: async (): Promise<{
     output: JsonValue[];
-    state: Record<string, JsonValue>;
+    newItems: JsonValue[];
+    rawResponses: JsonValue[];
   }> => ({
     output: [],
-    state: {},
+    newItems: [],
+    rawResponses: [],
   }),
 });
 type _OpenAiCustomRunNativeItems = Expect<
   Equal<HarnessOutput<typeof customRunNativeItemsHarness>, undefined>
+>;
+
+const customRunOutputWithStateHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{
+    output: Classification;
+    state: Record<string, JsonValue>;
+    history: JsonValue[];
+  }> => ({
+    output: {
+      label: "bourbon",
+    },
+    state: {
+      phase: "done",
+    },
+    history: [],
+  }),
+});
+type _OpenAiCustomRunOutputWithState = Expect<
+  Equal<HarnessOutput<typeof customRunOutputWithStateHarness>, Classification>
 >;
 
 const broadDecisionFieldHarness = openaiAgentsHarness({
@@ -353,6 +377,8 @@ test("does not use custom run raw OpenAI Agents output items as app output", asy
     run: vi.fn(async () => ({
       output: runResult.newItems,
       state: runResult.state,
+      rawResponses: runResult.rawResponses,
+      newItems: runResult.newItems,
       lastAgent: runResult.lastAgent,
     })),
   });
@@ -373,6 +399,35 @@ test("does not use custom run raw OpenAI Agents output items as app output", asy
       }),
     ]),
   );
+});
+
+test("uses custom app output with app-level state and history fields", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      output: {
+        status: "approved",
+      },
+      state: {
+        phase: "complete",
+      },
+      history: ["reviewed"],
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "app-state",
+    }),
+  );
+
+  expect(result.output).toEqual({
+    status: "approved",
+  });
 });
 
 test("does not coerce non-JSON OpenAI Agents final output", async () => {

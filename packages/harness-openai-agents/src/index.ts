@@ -58,15 +58,10 @@ type OpenAiAgentsRunResultOutput<TResult> = TResult extends HarnessRun<
         ? ResultFieldOutput<TResult, "output">
         : undefined;
 
-type OpenAiAgentsNativeResultLike =
-  | { newItems: unknown }
-  | { rawResponses: unknown }
-  | { lastAgent: unknown }
-  | { state: unknown }
-  | { history: unknown }
-  | { inputGuardrailResults: unknown }
-  | { outputGuardrailResults: unknown }
-  | { interruptions: unknown };
+type OpenAiAgentsNativeResultLike = {
+  newItems: unknown;
+  rawResponses: unknown;
+};
 
 type OpenAiAgentsRunnerResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
@@ -1368,16 +1363,7 @@ function resolveOutput(
 }
 
 function isOpenAiAgentsRunResult(result: object) {
-  return (
-    "newItems" in result ||
-    "rawResponses" in result ||
-    "lastAgent" in result ||
-    "state" in result ||
-    "history" in result ||
-    "inputGuardrailResults" in result ||
-    "outputGuardrailResults" in result ||
-    "interruptions" in result
-  );
+  return "newItems" in result && "rawResponses" in result;
 }
 
 function toOutputValue(value: unknown): JsonValue | undefined {
