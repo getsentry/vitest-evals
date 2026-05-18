@@ -1366,6 +1366,9 @@ function isOpenAiAgentsRunResult(result: object) {
   return "newItems" in result && "rawResponses" in result;
 }
 
+// Keep this adapter-local rather than exporting a core helper. Core
+// `toJsonValue` normalizes trace data; inferred app output should only accept
+// values that are already JSON-safe so the public contract stays explicit.
 function toOutputValue(value: unknown): JsonValue | undefined {
   if (value === undefined) {
     return undefined;
