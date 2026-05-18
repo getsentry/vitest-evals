@@ -14,9 +14,9 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
+  createJudge,
   describeEval,
   toolCalls,
-  type Judge,
   type JudgeContext,
 } from "vitest-evals";
 
@@ -42,14 +42,14 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-`run` executes the Pi agent under test. Judges are separate named objects; keep
+`run` executes the Pi agent under test. Judges are created separately; keep
 judge prompts and model calls in the judge instead of putting a judge model
 call on the app harness.
 
 ```ts
-const RefundRubricJudge = {
-  name: "RefundRubricJudge",
-  async assess(ctx: JudgeContext<string, RefundDecision>) {
+const RefundRubricJudge = createJudge(
+  "RefundRubricJudge",
+  async (ctx: JudgeContext<string, RefundDecision>) => {
     const verdict = await queryRefundJudgeModel({
       prompt: formatJudgePrompt({
         input: ctx.input,
@@ -59,7 +59,7 @@ const RefundRubricJudge = {
 
     return parseJudgeVerdict(verdict);
   },
-} satisfies Judge<JudgeContext<string, RefundDecision>>;
+);
 ```
 
 If the agent already exposes its own tools, the adapter will infer them from

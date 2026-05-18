@@ -79,10 +79,10 @@ available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data,
 typed `input`, typed `output`, and the configured `harness`. LLM-backed judges
-own their prompt, rubric text, model call, and parser. A judge can be a plain
-`{ name, assess }` object; `createJudge(...)` is a shorthand for
-function-style judges and reusable judge-side provider helpers that need
-curried run-scoped options such as abort signals.
+own their prompt, rubric text, model call, and parser. Custom judges should use
+`createJudge("Name", assess)` for stable reporter labels; the provider-helper
+overload is for reusable judge-side setup that needs curried run-scoped options
+such as abort signals.
 
 ### `packages/vitest-evals/src/legacy/*`
 

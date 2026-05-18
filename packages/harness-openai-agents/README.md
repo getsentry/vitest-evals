@@ -15,9 +15,9 @@ import { expect } from "vitest";
 import { Runner } from "@openai/agents";
 import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
 import {
+  createJudge,
   describeEval,
   toolCalls,
-  type Judge,
   type JudgeContext,
 } from "vitest-evals";
 
@@ -88,21 +88,21 @@ const harness = openaiAgentsHarness({
 });
 ```
 
-`run` executes the OpenAI agent under test. Judges are separate named objects;
-keep judge prompts and model calls in the judge instead of putting a judge
-model call on the app harness.
+`run` executes the OpenAI agent under test. Judges are created separately; keep
+judge prompts and model calls in the judge instead of putting a judge model
+call on the app harness.
 
 ```ts
-const ClassificationJudge = {
-  name: "ClassificationJudge",
-  async assess(ctx: JudgeContext<string, Classification>) {
+const ClassificationJudge = createJudge(
+  "ClassificationJudge",
+  async (ctx: JudgeContext<string, Classification>) => {
     const result = await judgeRunner
       .run(judgeAgent, formatJudgePrompt(ctx))
       .then((result) => resolveResultText(result));
 
     return parseJudgeVerdict(result);
   },
-} satisfies Judge<JudgeContext<string, Classification>>;
+);
 ```
 
 The adapter provides:

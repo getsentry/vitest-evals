@@ -28,10 +28,10 @@ hatches for advanced cases.
   test; a judge assesses a run. Binding helpers should assemble context and
   delegate to that role method rather than becoming another owner of the
   behavior.
-- Keep assessment prompts, model choices, and parsers on the judge. A judge can
-  be a plain `{ name, assess }` object; use helper binding only when multiple
-  judges reuse provider setup and need curried run-scoped options such as abort
-  signals.
+- Keep assessment prompts, model choices, and parsers on the judge. Prefer
+  `createJudge("Name", assess)` as the public custom-judge authoring path; use
+  helper binding only when multiple judges reuse provider setup and need
+  curried run-scoped options such as abort signals.
 - Per-run factories should receive one contextual args object with the run
   input and harness context when the harness owns later instrumentation or
   execution.

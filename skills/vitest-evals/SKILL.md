@@ -33,10 +33,11 @@ Use the harness-backed API as the only authoring model.
 - Assert on `result.output` for app-facing behavior.
 - Use `result.session` and helpers such as `toolCalls(session)` for trace assertions.
 - Keep `HarnessRun`, `NormalizedSession`, usage, artifacts, and tool records JSON-serializable.
-- Keep judge model calls on judges. Use `createJudge(...)` only for
-  function-style judges or reusable judge-side provider helpers.
+- Keep judge model calls on judges. Use `createJudge("Name", assess)` for
+  custom judges; use the provider-helper overload only when multiple judges
+  reuse setup and need curried run options.
 - Put scenario-owned criteria on the input value; put per-run expectations or harness settings in `metadata`.
-- Custom judges can be plain `{ name, assess }` objects with stable reporter labels.
+- Custom judges should use `createJudge(...)` for stable reporter labels.
 
 ## Verification
 

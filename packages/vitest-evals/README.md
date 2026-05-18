@@ -41,9 +41,9 @@ npm install -D @vitest-evals/github-reporter
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, tool calls, and metadata
-- judges own their prompt, rubric, model call, and parsing; `createJudge(...)`
-  is only a convenience for function-style judges or reusable judge-side
-  provider helpers
+- judges own their prompt, rubric, model call, and parsing; use
+  `createJudge(...)` for custom judges and its provider-helper overload only
+  when multiple judges share setup
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
@@ -204,8 +204,8 @@ their prompt/rubric text separately from the system under test.
 ```ts
 import {
   createHarness,
+  createJudge,
   describeEval,
-  type Judge,
   type JudgeContext,
 } from "vitest-evals";
 
@@ -250,9 +250,9 @@ const appHarness = createHarness<AppEvalInput, AppEvalMetadata, AppOutput>({
   },
 });
 
-const AppRubricJudge = {
-  name: "AppRubricJudge",
-  async assess(ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>) {
+const AppRubricJudge = createJudge(
+  "AppRubricJudge",
+  async (ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>) => {
     const verdict = await promptJudgeModel({
       prompt: formatRubricPrompt({
         output: ctx.output,
@@ -262,7 +262,7 @@ const AppRubricJudge = {
 
     return parseRubricVerdict(verdict);
   },
-} satisfies Judge<JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>>;
+);
 
 describeEval(
   "app behavior",
@@ -335,14 +335,15 @@ await expect({ status: "approved" }).toSatisfyJudge(MyJudge, {
 });
 ```
 
-A custom judge can be a plain named object:
+Use `createJudge(...)` for custom judges so reporter output gets a stable
+label:
 
 ```ts
-import type { Judge } from "vitest-evals";
+import { createJudge } from "vitest-evals";
 
-const FactualityJudge = {
-  name: "FactualityJudge",
-  async assess({ output }) {
+const FactualityJudge = createJudge(
+  "FactualityJudge",
+  async ({ output }) => {
     const answer = output;
     const verdict = await judgeFactuality(answer);
 
@@ -353,17 +354,16 @@ const FactualityJudge = {
       },
     };
   },
-} satisfies Judge;
+);
 ```
 
 LLM-backed judges should provide their own judge prompt and rubric text.
 `vitest-evals` does not prescribe a rubric schema, scoring scale, model
-provider, or parser; those stay in the judge. `createJudge(...)` remains
-available as a shorthand for function-style judges, and for the less common
-case where a reusable judge-side provider helper should receive curried
-run-scoped options such as abort signals. Calling `harness.run(...)` from a
-judge executes the application again, so use that only when a second run is
-intentional.
+provider, or parser; those stay in the judge. When multiple judges share a
+reusable judge-side provider helper, use the provider-helper overload of
+`createJudge(...)` so run-scoped options such as abort signals stay curried.
+Calling `harness.run(...)` from a judge executes the application again, so use
+that only when a second run is intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered

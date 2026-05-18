@@ -16,9 +16,9 @@ import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
 import {
+  createJudge,
   describeEval,
   toolCalls,
-  type Judge,
   type JudgeContext,
 } from "vitest-evals";
 
@@ -88,14 +88,14 @@ const harness = aiSdkHarness({
 });
 ```
 
-`run` executes the system under test. Judges are separate named objects; keep
-judge prompts and model calls in the judge instead of putting a judge model call
-on the app harness.
+`run` executes the system under test. Judges are created separately; keep judge
+prompts and model calls in the judge instead of putting a judge model call on
+the app harness.
 
 ```ts
-const FactualityJudge = {
-  name: "FactualityJudge",
-  async assess(ctx: JudgeContext<string, RefundDecision>) {
+const FactualityJudge = createJudge(
+  "FactualityJudge",
+  async (ctx: JudgeContext<string, RefundDecision>) => {
     const verdict = await generateText({
       model: openai("gpt-4o-mini"),
       prompt: formatJudgePrompt({
@@ -106,7 +106,7 @@ const FactualityJudge = {
 
     return parseJudgeVerdict(verdict);
   },
-} satisfies Judge<JudgeContext<string, RefundDecision>>;
+);
 ```
 
 The adapter infers:
