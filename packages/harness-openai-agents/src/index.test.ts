@@ -3,12 +3,68 @@ import { join } from "node:path";
 import { Agent, tool } from "@openai/agents";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { HarnessContext, JsonValue } from "vitest-evals/harness";
+import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
 type DemoMetadata = {
   scenario?: string;
 };
+type Classification = {
+  label: "bourbon" | "scotch";
+};
+type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
+  T,
+>() => T extends TExpected ? 1 : 2
+  ? true
+  : false;
+type Expect<T extends true> = T;
+type HarnessOutput<THarness> = THarness extends Harness<any, any, infer TOutput>
+  ? TOutput
+  : never;
+
+const typedRunOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{ output: Classification }> => ({
+    output: {
+      label: "bourbon",
+    },
+  }),
+});
+type _OpenAiRunOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunOutputHarness>, Classification>
+>;
+
+const typedRunnerFinalOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ finalOutput: Classification }> => ({
+      finalOutput: {
+        label: "bourbon",
+      },
+    }),
+  },
+});
+type _OpenAiRunnerFinalOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunnerFinalOutputHarness>, Classification>
+>;
+
+const broadDecisionFieldHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async () => ({
+    decision: {
+      label: "bourbon",
+    },
+  }),
+});
+type _OpenAiDecisionFieldOutput = Expect<
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, JsonValue | undefined>
+>;
 
 type DemoAgent = {
   name: string;

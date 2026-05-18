@@ -14,10 +14,10 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
-  createJudge,
   describeEval,
   toolCalls,
-  type JudgeHarness,
+  type Judge,
+  type JudgeContext,
 } from "vitest-evals";
 
 const harness = piAiHarness({
@@ -42,34 +42,24 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
-`run` executes the Pi agent under test. Judges are separate
-`createJudge(...)` objects; when they need the same provider setup or
-credentials, pass a judge-side harness to `createJudge(...)` instead of
-putting a judge model call on the app harness.
+`run` executes the Pi agent under test. Judges are separate named objects; keep
+judge prompts and model calls in the judge instead of putting a judge model
+call on the app harness.
 
 ```ts
-const piJudgeHarness = {
-  assess: (prompt, { signal }) =>
-    queryRefundJudgeModel({
-      prompt,
-      signal,
-    }),
-} satisfies JudgeHarness<string, string>;
-
-const RefundRubricJudge = createJudge(
-  "RefundRubricJudge",
-  piJudgeHarness,
-  async (ctx, judge) => {
-    const verdict = await judge.assess(
-      formatJudgePrompt({
+const RefundRubricJudge = {
+  name: "RefundRubricJudge",
+  async assess(ctx: JudgeContext<string, RefundDecision>) {
+    const verdict = await queryRefundJudgeModel({
+      prompt: formatJudgePrompt({
         input: ctx.input,
         output: ctx.output,
       }),
-    );
+    });
 
     return parseJudgeVerdict(verdict);
   },
-);
+} satisfies Judge<JudgeContext<string, RefundDecision>>;
 ```
 
 If the agent already exposes its own tools, the adapter will infer them from
@@ -120,14 +110,15 @@ const harness = piAiHarness({
 });
 ```
 
-If you do have an unusual wrapper around the agent result, provide a typed
-`output` selector:
+If you do have an unusual wrapper around the agent result, make the app-facing
+value explicit in the `run()` return:
 
 ```ts
 const harness = piAiHarness({
   agent: () => createWrappedRefundAgent(),
-  run: ({ agent, input, runtime }) => agent.run(input, runtime),
-  output: ({ result }) => result.customDecision,
+  run: async ({ agent, input, runtime }) => ({
+    output: await agent.run(input, runtime),
+  }),
 });
 ```
 
@@ -135,7 +126,7 @@ The adapter provides:
 
 - a runtime/tool injection seam for an existing agent
 - normalized session capture from emitted events and wrapped tool calls
-- usage/output inference for common `pi-ai`-style result objects
+- usage capture plus typed app output from `run()` results that return `output`
 - opt-in tool replay/recording from harness-level `toolReplay`
 
 See the workspace demo in `apps/demo-pi`.

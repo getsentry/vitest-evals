@@ -45,6 +45,9 @@ import type {
 } from "ai";
 
 type MaybePromise<T> = T | Promise<T>;
+type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
+  ? TValue
+  : JsonValue | undefined;
 type AgentSource<
   TAgent,
   TInput = string,
@@ -85,6 +88,18 @@ type AiSdkLikeResult = {
   trace?: NormalizedSession;
   errors?: Array<Record<string, JsonValue>>;
 };
+
+type AiSdkResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
+  ? TOutput
+  : TResult extends { output?: infer TOutput }
+    ? JsonOutput<TOutput>
+    : TResult extends { object?: infer TOutput }
+      ? JsonOutput<TOutput>
+      : TResult extends { experimental_output?: infer TOutput }
+        ? JsonOutput<TOutput>
+        : TResult extends { text?: infer TOutput }
+          ? JsonOutput<TOutput>
+          : JsonValue | undefined;
 
 export interface AiSdkToolContext<
   TInput = string,
@@ -228,6 +243,72 @@ export type AiSdkHarnessOptions<
       }
   );
 
+type AiSdkHarnessOptionsWithOutput<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = AiSdkHarnessOptions<TAgent, TInput, TMetadata, TResult, TTools, TOutput> & {
+  output: AiSdkHarnessOutputSelector<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >;
+};
+
+type AiSdkHarnessRunOptionsWithoutOutput<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+> = AiSdkHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  JsonValue | undefined
+> & {
+  run: (
+    args: AiSdkHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+  ) => MaybePromise<TResult>;
+  agent?: never;
+  output?: never;
+};
+
+type AiSdkHarnessAgentOptionsWithoutOutput<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+> = AiSdkHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  unknown,
+  TTools,
+  JsonValue | undefined
+> & {
+  agent: AgentSource<TAgent, TInput, TMetadata>;
+  run?: never;
+  output?: never;
+};
+
 interface AiSdkHarnessBaseOptions<
   TAgent = unknown,
   TInput = string,
@@ -289,7 +370,7 @@ export function aiSdkHarness<
   >,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: AiSdkHarnessOptions<
+  options: AiSdkHarnessOptionsWithOutput<
     TAgent,
     TInput,
     TMetadata,
@@ -298,6 +379,40 @@ export function aiSdkHarness<
     TOutput
   >,
 ): Harness<TInput, TMetadata, TOutput>;
+export function aiSdkHarness<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: AiSdkHarnessRunOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools
+  >,
+): Harness<TInput, TMetadata, AiSdkResultOutput<Awaited<TResult>>>;
+export function aiSdkHarness<
+  TAgent = unknown,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends AiSdkToolset<TInput, TMetadata> = AiSdkToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: AiSdkHarnessAgentOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TTools
+  >,
+): Harness<TInput, TMetadata, JsonValue | undefined>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -820,7 +935,6 @@ function resolveOutput(result: unknown): JsonValue | undefined {
     "output",
     "object",
     "experimental_output",
-    "result",
     "text",
   ] satisfies string[];
 

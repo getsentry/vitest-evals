@@ -20,34 +20,24 @@ Every judge receives:
 
 ```ts
 import {
-  createJudge,
+  type Judge,
   type JudgeContext,
-  type JudgeHarness,
 } from "vitest-evals";
 
-const judgeModel = {
-  assess: (prompt, { signal }) =>
-    callJudgeModel({
-      prompt,
-      signal,
-    }),
-} satisfies JudgeHarness<string, string>;
-
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  judgeModel,
-  async (ctx: JudgeContext<string, RefundOutput, CaseMeta>, judge) => {
-    const verdict = await judge.assess(
-      formatRubric({
+const FactualityJudge = {
+  name: "FactualityJudge",
+  async assess(ctx: JudgeContext<string, RefundOutput, CaseMeta>) {
+    const verdict = await callJudgeModel({
+      prompt: formatRubric({
         input: ctx.input,
         output: ctx.output,
         expectedStatus: ctx.metadata.expectedStatus,
       }),
-    );
+    });
 
     return parseVerdict(verdict);
   },
-);
+} satisfies Judge<JudgeContext<string, RefundOutput, CaseMeta>>;
 ```
 
 ## Automatic Vs Explicit
@@ -60,7 +50,7 @@ const FactualityJudge = createJudge(
 | Only one assertion needs the judge | `await expect(result).toSatisfyJudge(Judge)` |
 | Judge needs structured app output | Type `JudgeContext<..., TOutput>` and read `ctx.output` |
 | Judge needs text | Use a text `TOutput` or explicitly project structured output to text |
-| Judge needs shared model setup | Pass a judge-side `JudgeHarness` to `createJudge(...)` |
+| Judge needs shared model setup | Keep a local helper in the judge module; use `createJudge(...)` only when curried run options are needed |
 
 ## Built-In Judges
 
@@ -79,7 +69,7 @@ const FactualityJudge = createJudge(
 
 ## Review Checklist
 
-- Custom judges are wrapped in `createJudge(...)`.
+- Custom judges can be plain `{ name, assess }` objects.
 - Scores are numbers or `null`; failure behavior is controlled by thresholds.
 - Rationale or parsed judge output is placed under `metadata`.
 - LLM-backed judges provide the judge prompt/rubric text. Shared provider setup

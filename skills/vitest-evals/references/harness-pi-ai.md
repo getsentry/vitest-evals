@@ -30,7 +30,6 @@ If the agent needs a custom entrypoint:
 const harness = piAiHarness({
   agent: () => createRefundAgent(),
   run: ({ agent, input, runtime }) => agent.execute(input, runtime),
-  output: ({ result }) => result.decision,
 });
 ```
 
@@ -39,10 +38,9 @@ const harness = piAiHarness({
 | Option | Requirement |
 |--------|-------------|
 | `agent` | Existing instance or factory for a fresh per-run agent; factories receive `{ input, context }`. |
-| `query` | Optional judge-model helper; only include it when real shared provider setup or credentials exist. |
 | `run` | Optional custom execution; omitted when the agent exposes `run(input, runtime)`. |
 | `tools` | Optional explicit `PiAiToolset`; use when the agent hides its tool surface. |
-| `output` | Optional typed domain output selector; defaults to `output`, `decision`, `result`, then `final`. |
+| `output` | Optional typed domain output selector for provider/custom results that do not already return `output`. |
 | `name` | Optional reporter label; defaults to `pi-ai`. |
 
 ## Runtime Surface

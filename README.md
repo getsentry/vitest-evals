@@ -102,9 +102,9 @@ The `apps/demo-pi` app shows the intended explicit-run flow:
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import {
-  createJudge,
   describeEval,
   toolCalls,
+  type Judge,
   type JudgeContext,
 } from "vitest-evals";
 import { createRefundAgent } from "../src/refundAgent";
@@ -118,9 +118,9 @@ type RefundOutput = {
   status: "approved" | "denied";
 };
 
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({
+const FactualityJudge = {
+  name: "FactualityJudge",
+  async assess({
     input,
     output,
     metadata,
@@ -138,7 +138,7 @@ const FactualityJudge = createJudge(
       },
     };
   },
-);
+} satisfies Judge<JudgeContext<string, RefundOutput, RefundEvalMetadata>>;
 
 describeEval(
   "demo pi refund agent",
@@ -181,9 +181,9 @@ Harness-backed suites stay close to plain Vitest:
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, tool calls, and metadata
-- judges own their prompt, rubric, model call, and parsing; pass a judge-side
-  harness to `createJudge(...)` when multiple judges should reuse provider
-  setup or credentials without calling the app agent under test
+- judges own their prompt, rubric, model call, and parsing; `createJudge(...)`
+  is only a convenience for function-style judges or reusable judge-side
+  provider helpers
 - scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload

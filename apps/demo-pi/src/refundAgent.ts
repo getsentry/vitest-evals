@@ -197,7 +197,7 @@ export class RefundAgent {
     });
 
     return {
-      decision: parseRefundDecision(assistantText),
+      output: parseRefundDecision(assistantText),
       metrics: {
         provider: assistant.provider,
         model: assistant.model,

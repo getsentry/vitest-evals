@@ -41,9 +41,9 @@ npm install -D @vitest-evals/github-reporter
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, tool calls, and metadata
-- judges own their prompt, rubric, model call, and parsing; pass a judge-side
-  harness to `createJudge(...)` when multiple judges should reuse provider
-  setup or credentials without calling the app agent under test
+- judges own their prompt, rubric, model call, and parsing; `createJudge(...)`
+  is only a convenience for function-style judges or reusable judge-side
+  provider helpers
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
@@ -199,18 +199,14 @@ structured domain output mapping.
 First-party harness packages are conveniences, not the only supported path. If
 you need to test a full application flow, use `createHarness(...)` to run your
 app through its normal entrypoint and return the app-facing output. Judges own
-their prompt/rubric text separately from the system under test. When multiple
-judges should reuse the same provider setup or credentials, pass a judge-side
-harness to `createJudge(...)`; core binds run-scoped options such as the abort
-signal before your judge calls it.
+their prompt/rubric text separately from the system under test.
 
 ```ts
 import {
   createHarness,
-  createJudge,
   describeEval,
+  type Judge,
   type JudgeContext,
-  type JudgeHarness,
 } from "vitest-evals";
 
 type AppEvent = {
@@ -234,14 +230,6 @@ type AppOutput = {
   sideEffects: string[];
 };
 
-const appJudgeHarness = {
-  assess: (prompt, { signal }) =>
-    promptJudgeModel({
-      prompt,
-      signal,
-    }),
-} satisfies JudgeHarness<string, string>;
-
 const appHarness = createHarness<AppEvalInput, AppEvalMetadata, AppOutput>({
   name: "custom-app",
   run: async ({ input, signal }) => {
@@ -262,23 +250,19 @@ const appHarness = createHarness<AppEvalInput, AppEvalMetadata, AppOutput>({
   },
 });
 
-const AppRubricJudge = createJudge(
-  "AppRubricJudge",
-  appJudgeHarness,
-  async (
-    ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>,
-    judge,
-  ) => {
-    const verdict = await judge.assess(
-      formatRubricPrompt({
+const AppRubricJudge = {
+  name: "AppRubricJudge",
+  async assess(ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>) {
+    const verdict = await promptJudgeModel({
+      prompt: formatRubricPrompt({
         output: ctx.output,
         criteria: ctx.input.criteria,
       }),
-    );
+    });
 
     return parseRubricVerdict(verdict);
   },
-);
+} satisfies Judge<JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>>;
 
 describeEval(
   "app behavior",
@@ -351,15 +335,14 @@ await expect({ status: "approved" }).toSatisfyJudge(MyJudge, {
 });
 ```
 
-If you are writing a custom judge, wrap it with `createJudge(...)` so reporter
-output uses a stable label:
+A custom judge can be a plain named object:
 
 ```ts
-import { createJudge } from "vitest-evals";
+import type { Judge } from "vitest-evals";
 
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({ output }) => {
+const FactualityJudge = {
+  name: "FactualityJudge",
+  async assess({ output }) {
     const answer = output;
     const verdict = await judgeFactuality(answer);
 
@@ -370,16 +353,17 @@ const FactualityJudge = createJudge(
       },
     };
   },
-);
+} satisfies Judge;
 ```
 
 LLM-backed judges should provide their own judge prompt and rubric text.
 `vitest-evals` does not prescribe a rubric schema, scoring scale, model
-provider, or parser; those stay in the judge. If a judge needs a reusable
-provider client or credentials, pass a judge-side harness to `createJudge(...)`
-and call the bound `judge.assess(input)` helper. Calling `harness.run(...)`
-from a judge executes the application again, so use that only when a second run
-is intentional.
+provider, or parser; those stay in the judge. `createJudge(...)` remains
+available as a shorthand for function-style judges, and for the less common
+case where a reusable judge-side provider helper should receive curried
+run-scoped options such as abort signals. Calling `harness.run(...)` from a
+judge executes the application again, so use that only when a second run is
+intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered

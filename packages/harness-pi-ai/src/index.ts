@@ -31,6 +31,9 @@ import type {
 } from "vitest-evals/replay";
 
 type MaybePromise<T> = T | Promise<T>;
+type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
+  ? TValue
+  : JsonValue | undefined;
 type AgentSource<
   TAgent,
   TInput = string,
@@ -57,6 +60,12 @@ type PiAgentToolLike<
   name: string;
   execute: (toolCallId: string, args: Record<string, JsonValue>) => unknown;
 };
+
+type PiAiResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
+  ? TOutput
+  : TResult extends { output?: infer TOutput }
+    ? JsonOutput<TOutput>
+    : JsonValue | undefined;
 
 const ORIGINAL_NATIVE_EXECUTE = Symbol("vitest-evals.originalNativeExecute");
 
@@ -300,6 +309,144 @@ export type PiAiHarnessOptions<
       TOutput
     >;
 
+type PiAiHarnessWithToolsOptionsWithOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = PiAiHarnessWithToolsOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  TOutput
+> & {
+  output: PiAiHarnessOutputSelector<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools,
+    TOutput
+  >;
+};
+
+type PiAiHarnessInferredToolsOptionsWithOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TOutput extends JsonValue | undefined = JsonValue | undefined,
+> = PiAiHarnessInferredToolsOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TOutput
+> & {
+  output: PiAiHarnessOutputSelector<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    InferredPiAiToolset<TInput, TMetadata>,
+    TOutput
+  >;
+};
+
+type PiAiHarnessWithToolsRunOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  TTools,
+  JsonValue | undefined
+> & {
+  tools: TTools;
+  run: (
+    args: PiAiHarnessRunArgs<TAgent, TInput, TMetadata, TTools>,
+  ) => MaybePromise<TResult>;
+  output?: never;
+};
+
+type PiAiHarnessWithToolsAgentOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  unknown,
+  TTools,
+  JsonValue | undefined
+> & {
+  tools: TTools;
+  run?: never;
+  output?: never;
+};
+
+type PiAiHarnessInferredToolsRunOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  TResult,
+  InferredPiAiToolset<TInput, TMetadata>,
+  JsonValue | undefined
+> & {
+  tools?: undefined;
+  run: (
+    args: PiAiHarnessRunArgs<
+      TAgent,
+      TInput,
+      TMetadata,
+      InferredPiAiToolset<TInput, TMetadata>
+    >,
+  ) => MaybePromise<TResult>;
+  output?: never;
+};
+
+type PiAiHarnessInferredToolsAgentOptionsWithoutOutput<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> = PiAiHarnessBaseOptions<
+  TAgent,
+  TInput,
+  TMetadata,
+  unknown,
+  InferredPiAiToolset<TInput, TMetadata>,
+  JsonValue | undefined
+> & {
+  tools?: undefined;
+  run?: never;
+  output?: never;
+};
+
 type PiAiHarnessRunOptions<
   TAgent,
   TInput,
@@ -368,7 +515,7 @@ export function piAiHarness<
   >,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: PiAiHarnessWithToolsOptions<
+  options: PiAiHarnessWithToolsOptionsWithOutput<
     TAgent,
     TInput,
     TMetadata,
@@ -384,7 +531,7 @@ export function piAiHarness<
   TResult = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
-  options: PiAiHarnessInferredToolsOptions<
+  options: PiAiHarnessInferredToolsOptionsWithOutput<
     TAgent,
     TInput,
     TMetadata,
@@ -392,6 +539,64 @@ export function piAiHarness<
     TOutput
   >,
 ): Harness<TInput, TMetadata, TOutput>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: PiAiHarnessWithToolsRunOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult,
+    TTools
+  >,
+): Harness<TInput, TMetadata, PiAiResultOutput<Awaited<TResult>>>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata> = PiAiToolset<
+    TInput,
+    TMetadata
+  >,
+>(
+  options: PiAiHarnessWithToolsAgentOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TTools
+  >,
+): Harness<TInput, TMetadata, JsonValue | undefined>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+  TResult = unknown,
+>(
+  options: PiAiHarnessInferredToolsRunOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata,
+    TResult
+  >,
+): Harness<TInput, TMetadata, PiAiResultOutput<Awaited<TResult>>>;
+export function piAiHarness<
+  TAgent,
+  TInput = string,
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+>(
+  options: PiAiHarnessInferredToolsAgentOptionsWithoutOutput<
+    TAgent,
+    TInput,
+    TMetadata
+  >,
+): Harness<TInput, TMetadata, JsonValue | undefined>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -1304,12 +1509,7 @@ function resolveOutput(result: unknown): JsonValue | undefined {
     return toJsonValue(result);
   }
 
-  const candidates = [
-    "output",
-    "decision",
-    "result",
-    "final",
-  ] satisfies string[];
+  const candidates = ["output"] satisfies string[];
 
   for (const key of candidates) {
     const value = (result as Record<string, unknown>)[key];

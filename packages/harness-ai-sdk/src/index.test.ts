@@ -3,13 +3,47 @@ import { join } from "node:path";
 import type { ToolExecutionOptions } from "ai";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { HarnessContext } from "vitest-evals/harness";
+import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
 type DemoMetadata = {
   scenario?: string;
 };
+type RefundDecision = {
+  status: "approved" | "denied";
+};
+type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
+  T,
+>() => T extends TExpected ? 1 : 2
+  ? true
+  : false;
+type Expect<T extends true> = T;
+type HarnessOutput<THarness> = THarness extends Harness<any, any, infer TOutput>
+  ? TOutput
+  : never;
+
+const typedRunOutputHarness = aiSdkHarness({
+  run: async (): Promise<{ output: RefundDecision }> => ({
+    output: {
+      status: "approved",
+    },
+  }),
+});
+type _AiSdkRunOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunOutputHarness>, RefundDecision>
+>;
+
+const broadResultFieldHarness = aiSdkHarness({
+  run: async () => ({
+    result: {
+      status: "approved",
+    },
+  }),
+});
+type _AiSdkResultFieldOutput = Expect<
+  Equal<HarnessOutput<typeof broadResultFieldHarness>, JsonValue | undefined>
+>;
 
 let replayDir: string | undefined;
 

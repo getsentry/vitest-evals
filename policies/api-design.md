@@ -28,18 +28,19 @@ hatches for advanced cases.
   test; a judge assesses a run. Binding helpers should assemble context and
   delegate to that role method rather than becoming another owner of the
   behavior.
-- Keep assessment prompts, model choices, and parsers on the judge. If multiple
-  judges reuse provider setup, pass a small judge-side helper into the judge and
-  curry run-scoped options such as abort signals there instead of exposing
-  passthrough plumbing on the judge context.
+- Keep assessment prompts, model choices, and parsers on the judge. A judge can
+  be a plain `{ name, assess }` object; use helper binding only when multiple
+  judges reuse provider setup and need curried run-scoped options such as abort
+  signals.
 - Per-run factories should receive one contextual args object with the run
   input and harness context when the harness owns later instrumentation or
   execution.
 - Infer context from fixtures, registered runs, or the current test when that
   removes repetitive parameters and avoids caller mistakes.
 - Keep explicit overrides for values that cannot be inferred reliably.
-- Group advanced normalization or mapping hooks under a clearly named escape
-  hatch such as `normalize`; keep the default path free of those knobs.
+- Prefer typed `run()` output over mapping hooks. If a native provider result
+  needs projection into app output, expose one semantic selector such as
+  `output`; do not publish generic normalization knobs.
 - Keep compatibility aliases working when migration cost matters, but document
   and test the preferred spelling. Do not make new users choose between equally
   prominent aliases.

@@ -2,12 +2,52 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
-import type { HarnessContext, JsonValue } from "vitest-evals/harness";
+import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
 type DemoMetadata = {
   scenario?: string;
 };
+type RefundDecision = {
+  status: "approved" | "denied";
+};
+type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
+  T,
+>() => T extends TExpected ? 1 : 2
+  ? true
+  : false;
+type Expect<T extends true> = T;
+type HarnessOutput<THarness> = THarness extends Harness<any, any, infer TOutput>
+  ? TOutput
+  : never;
+
+const typedRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output: RefundDecision }> => ({
+    output: {
+      status: "approved",
+    },
+  }),
+});
+type _PiAiRunOutput = Expect<
+  Equal<HarnessOutput<typeof typedRunOutputHarness>, RefundDecision>
+>;
+
+const broadDecisionFieldHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async () => ({
+    decision: {
+      status: "approved",
+    },
+  }),
+});
+type _PiAiDecisionFieldOutput = Expect<
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, JsonValue | undefined>
+>;
 
 const agentFactory = vi.fn(() => ({
   id: "refund-agent",
@@ -53,7 +93,7 @@ const runAgent = vi.fn(
     runtime.events.assistant("approved");
 
     return {
-      decision: {
+      output: {
         status: "approved",
       },
       metrics: {
@@ -96,7 +136,7 @@ test("accepts agent as a factory", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -230,7 +270,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
               metrics: {
@@ -336,7 +376,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -429,7 +469,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -519,7 +559,7 @@ describeEval(
             runtime.events.assistant("approved");
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -609,7 +649,7 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details.refundable
+            output: toolResult.details.refundable
               ? { status: "approved" as const }
               : { status: "denied" as const, reason: "not refundable" },
           };
@@ -716,7 +756,7 @@ describeEval(
             });
 
             return {
-              decision: {
+              output: {
                 status: "approved",
               },
             };
@@ -771,7 +811,7 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
           });
 
           return {
-            decision: {
+            output: {
               status: "approved",
             },
           };
@@ -808,12 +848,12 @@ test("supports a typed output selector", async () => {
   const normalizedHarness = piAiHarness({
     agent: () => ({ id: "refund-agent" }),
     run: async () => ({
-      customDecision: {
+      providerDecision: {
         status: "approved",
       },
     }),
     output: ({ result }) =>
-      (result as { customDecision: { status: string } }).customDecision,
+      (result as { providerDecision: { status: string } }).providerDecision,
   });
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
@@ -902,7 +942,7 @@ test("attaches a partial run when the harness errors", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -995,7 +1035,7 @@ test("replays native agent tools without breaking the agent-facing result", asyn
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details.refundable
+            output: toolResult.details.refundable
               ? { status: "approved" as const }
               : { status: "denied" as const, reason: "not refundable" },
           };
@@ -1161,7 +1201,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: {
+            output: {
               status: "approved" as const,
             },
           };
@@ -1236,7 +1276,7 @@ test("passes run input and context to agent factory before native tool instrumen
           runtime.events.assistant(toolResult.content[0].text);
 
           return {
-            decision: toolResult.details,
+            output: toolResult.details,
           };
         },
       };
@@ -1325,7 +1365,7 @@ test("records and replays opt-in tools in auto mode", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -1408,7 +1448,7 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };
@@ -1454,7 +1494,7 @@ test("errors when strict mode is missing a recording", async () => {
       });
 
       return {
-        decision: {
+        output: {
           status: "approved",
         },
       };

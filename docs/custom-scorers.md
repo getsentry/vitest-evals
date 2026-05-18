@@ -9,11 +9,11 @@ scorer-first suite.
 ## Custom Judge Example
 
 ```ts
-import { createJudge } from "vitest-evals";
+import type { Judge } from "vitest-evals";
 
-export const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({ output }) => {
+export const FactualityJudge = {
+  name: "FactualityJudge",
+  async assess({ output }) {
     const answer = output;
     const verdict = await judgeFactuality(answer);
 
@@ -24,7 +24,7 @@ export const FactualityJudge = createJudge(
       },
     };
   },
-);
+} satisfies Judge;
 ```
 
 Use it as an automatic suite-level judge:
@@ -55,11 +55,11 @@ await expect(result).toSatisfyJudge(FactualityJudge);
 For simple response-level checks, a judge can just score `output`. When a judge
 needs normalized run context, type it with `JudgeContext` and read `metadata`,
 `toolCalls`, `session`, or `harness` from there. LLM-backed judges should own
-their prompt, rubric text, model call, and parser. If a judge needs reusable
-provider setup or credentials, pass a judge-side harness to `createJudge(...)`;
-core binds run-scoped options such as the abort signal before your judge calls
-it. Calling `harness.run(...)` inside a judge executes the app again, so
-reserve that for judges that intentionally need a second run.
+their prompt, rubric text, model call, and parser. `createJudge(...)` is
+available as a shorthand for function-style judges and for reusable judge-side
+provider helpers that need curried run-scoped options. Calling
+`harness.run(...)` inside a judge executes the app again, so reserve that for
+judges that intentionally need a second run.
 
 When rubric criteria are part of the scenario under test, keep them on
 `input`. Use per-run `metadata` for expectations or harness configuration
