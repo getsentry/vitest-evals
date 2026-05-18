@@ -78,11 +78,11 @@ can stay on the harness-first surface while older matching behavior remains
 available.
 
 All judges receive `JudgeContext`, which carries normalized run/session data,
-typed `input`, typed `output`, the configured `harness`, and the run abort
-signal when Vitest provides one. LLM-backed judges own their prompt, rubric
-text, model call, and parser. If a judge needs the same provider setup or
-credentials as the harness, share that app-local dependency directly with the
-judge.
+typed `input`, typed `output`, and the configured `harness`. LLM-backed judges
+own their prompt, rubric text, model call, and parser. If a judge needs
+reusable provider setup or credentials, pass a judge-side harness to
+`createJudge(...)`; core binds run-scoped options such as the abort signal
+before the judge calls it.
 
 ### `packages/vitest-evals/src/legacy/*`
 

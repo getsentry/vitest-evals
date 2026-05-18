@@ -13,7 +13,12 @@ npm install -D vitest-evals @vitest-evals/harness-pi-ai
 ```ts
 import { expect } from "vitest";
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  createJudge,
+  describeEval,
+  toolCalls,
+  type JudgeHarness,
+} from "vitest-evals";
 
 const harness = piAiHarness({
   agent: () => createRefundAgent(),
@@ -39,21 +44,32 @@ describeEval("refund agent", { harness }, (it) => {
 
 `run` executes the Pi agent under test. Judges are separate
 `createJudge(...)` objects; when they need the same provider setup or
-credentials, share that app-local provider helper directly with the judge
-instead of putting a judge model call on the harness.
+credentials, pass a judge-side harness to `createJudge(...)` instead of
+putting a judge model call on the app harness.
 
 ```ts
-const RefundRubricJudge = createJudge("RefundRubricJudge", async (ctx) => {
-  const verdict = await queryRefundJudgeModel({
-    prompt: formatJudgePrompt({
-      input: ctx.input,
-      output: ctx.output,
+const piJudgeHarness = {
+  assess: (prompt, { signal }) =>
+    queryRefundJudgeModel({
+      prompt,
+      signal,
     }),
-    signal: ctx.signal,
-  });
+} satisfies JudgeHarness<string, string>;
 
-  return parseJudgeVerdict(verdict);
-});
+const RefundRubricJudge = createJudge(
+  "RefundRubricJudge",
+  piJudgeHarness,
+  async (ctx, judge) => {
+    const verdict = await judge.assess(
+      formatJudgePrompt({
+        input: ctx.input,
+        output: ctx.output,
+      }),
+    );
+
+    return parseJudgeVerdict(verdict);
+  },
+);
 ```
 
 If the agent already exposes its own tools, the adapter will infer them from
@@ -73,9 +89,8 @@ the harness will call that method automatically.
 
 `agent` can be an object or a per-run factory. The factory receives the per-run
 input and harness context before the adapter infers and instruments native
-agent tools. Use that for scenario-specific
-instructions, tool closures, metadata, or seeded artifacts without leaving the
-default replay path:
+agent tools. Use that for scenario-specific instructions, tool closures, or
+metadata without leaving the default replay path:
 
 ```ts
 const harness = piAiHarness({
@@ -83,7 +98,6 @@ const harness = piAiHarness({
     createRefundAgent({
       instructions: buildInstructions(input),
       metadata: context.metadata,
-      setArtifact: context.setArtifact,
     }),
   toolReplay: {
     lookupInvoice: true,

@@ -54,12 +54,12 @@ await expect(result).toSatisfyJudge(FactualityJudge);
 
 For simple response-level checks, a judge can just score `output`. When a judge
 needs normalized run context, type it with `JudgeContext` and read `metadata`,
-`toolCalls`, `session`, `signal`, or `harness` from there. LLM-backed judges
-should own their prompt, rubric text, model call, and parser. If a judge needs
-the same provider setup or credentials as the harness, share that app-local
-dependency directly with the judge. Calling `harness.run(...)` inside a judge
-executes the app again, so reserve that for judges that intentionally need a
-second run.
+`toolCalls`, `session`, or `harness` from there. LLM-backed judges should own
+their prompt, rubric text, model call, and parser. If a judge needs reusable
+provider setup or credentials, pass a judge-side harness to `createJudge(...)`;
+core binds run-scoped options such as the abort signal before your judge calls
+it. Calling `harness.run(...)` inside a judge executes the app again, so
+reserve that for judges that intentionally need a second run.
 
 When rubric criteria are part of the scenario under test, keep them on
 `input`. Use per-run `metadata` for expectations or harness configuration

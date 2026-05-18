@@ -5,6 +5,7 @@ import {
   createHarness,
   describeEval,
   type JudgeContext,
+  type JudgeHarnessOptions,
   StructuredOutputJudge,
   ToolCallJudge,
   toolCalls,
@@ -103,10 +104,36 @@ const thresholdJudgeSpy = vi.fn(async (_opts: RefundJudgeContext) => ({
 
 const thresholdJudge = createJudge("ThresholdJudge", thresholdJudgeSpy);
 
+const judgeHarnessAssessSpy = vi.fn(
+  async (prompt: string, options: JudgeHarnessOptions) => {
+    return prompt === "Judge refund request Refund invoice inv_123" &&
+      options.signal
+      ? "approved"
+      : "denied";
+  },
+);
+
+const boundHarnessJudge = createJudge(
+  "BoundHarnessJudge",
+  {
+    assess: judgeHarnessAssessSpy,
+  },
+  async (ctx: RefundJudgeContext, judgeHarness) => {
+    const verdict = await judgeHarness.assess(
+      `Judge refund request ${ctx.input}`,
+    );
+
+    return {
+      score: verdict === ctx.output?.status ? 1 : 0,
+    };
+  },
+);
+
 beforeEach(() => {
   runSpy.mockClear();
   judgeSpy.mockClear();
   thresholdJudgeSpy.mockClear();
+  judgeHarnessAssessSpy.mockClear();
 });
 
 describeEval(
@@ -359,7 +386,6 @@ describeEval(
               status: "approved",
             },
           }),
-          signal: expect.any(AbortSignal),
         }),
       );
       expect(task.meta.eval).toEqual({
@@ -419,6 +445,33 @@ describeEval(
 );
 
 describeEval(
+  "harness mode with bound judge harness",
+  {
+    harness,
+    judges: [boundHarnessJudge],
+  },
+  (it) => {
+    it("curries run-scoped options into judge harness calls", async ({
+      run,
+    }) => {
+      await run("Refund invoice inv_123", {
+        metadata: {
+          name: "refund request with bound judge harness",
+          expectedStatus: "approved",
+        },
+      });
+
+      expect(judgeHarnessAssessSpy).toHaveBeenCalledWith(
+        "Judge refund request Refund invoice inv_123",
+        {
+          signal: expect.any(AbortSignal),
+        },
+      );
+    });
+  },
+);
+
+describeEval(
   "harness mode with explicit suite judge threshold",
   {
     harness,
@@ -459,6 +512,26 @@ describeEval(
 );
 
 describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
+  it("curries run-scoped options into explicit judge harness calls", async ({
+    run,
+  }) => {
+    const result = await run("Refund invoice inv_123", {
+      metadata: {
+        name: "refund request with explicit bound judge harness",
+        expectedStatus: "approved",
+      },
+    });
+
+    await expect(result).toSatisfyJudge(boundHarnessJudge);
+
+    expect(judgeHarnessAssessSpy).toHaveBeenCalledWith(
+      "Judge refund request Refund invoice inv_123",
+      {
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
   it("records explicit judge metadata on the task", async ({ run, task }) => {
     const result = await run("Refund invoice inv_123", {
       metadata: {
@@ -494,7 +567,6 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
           expectedStatus: "approved",
           name: "refund request with explicit judge matcher",
         },
-        signal: expect.any(AbortSignal),
       }),
     );
     expect(task.meta.eval).toEqual({

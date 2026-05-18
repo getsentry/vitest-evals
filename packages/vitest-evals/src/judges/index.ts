@@ -11,9 +11,13 @@ export {
 } from "./toolCallJudge";
 
 export type {
+  BoundJudgeHarness,
   Judge,
   JudgeAssessFn,
+  JudgeAssessWithHarnessFn,
   JudgeContext,
+  JudgeHarness,
+  JudgeHarnessOptions,
   JudgeOptions,
   JudgeResult,
 } from "./types";

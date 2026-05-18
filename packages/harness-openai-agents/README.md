@@ -14,7 +14,12 @@ npm install -D @openai/agents vitest-evals @vitest-evals/harness-openai-agents
 import { expect } from "vitest";
 import { Runner } from "@openai/agents";
 import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  createJudge,
+  describeEval,
+  toolCalls,
+  type JudgeHarness,
+} from "vitest-evals";
 
 const harness = openaiAgentsHarness({
   agent: () => createClassifierAgent(),
@@ -60,9 +65,8 @@ const harness = openaiAgentsHarness({
 
 `agent` and `runner` can be objects or per-run factories. An `agent` factory
 receives the per-run input and harness context before the adapter instruments
-local function tools. Use that when an agent needs
-scenario-specific tool closures, instructions, seeded artifacts, or metadata
-while staying on the native replay path:
+local function tools. Use that when an agent needs scenario-specific tool
+closures, instructions, or metadata while staying on the native replay path:
 
 ```ts
 const harness = openaiAgentsHarness({
@@ -70,7 +74,6 @@ const harness = openaiAgentsHarness({
     createClassifierAgent({
       bottleId: parseBottleId(input),
       metadata: context.metadata,
-      setArtifact: context.setArtifact,
     }),
   runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {
@@ -81,17 +84,28 @@ const harness = openaiAgentsHarness({
 
 `run` executes the OpenAI agent under test. Judges are separate
 `createJudge(...)` objects; when they need the same provider setup or
-credentials, share that app-local runner or model provider directly with the
-judge instead of putting a judge model call on the harness.
+credentials, pass a judge-side harness to `createJudge(...)` instead of
+putting a judge model call on the app harness.
 
 ```ts
-const ClassificationJudge = createJudge("ClassificationJudge", async (ctx) => {
-  const result = await judgeRunner.run(judgeAgent, formatJudgePrompt(ctx), {
-    signal: ctx.signal,
-  });
+const openAiJudgeHarness = {
+  assess: (prompt, { signal }) =>
+    judgeRunner
+      .run(judgeAgent, prompt, {
+        signal,
+      })
+      .then((result) => resolveResultText(result)),
+} satisfies JudgeHarness<string, string>;
 
-  return parseJudgeVerdict(resolveResultText(result));
-});
+const ClassificationJudge = createJudge(
+  "ClassificationJudge",
+  openAiJudgeHarness,
+  async (ctx, judge) => {
+    const result = await judge.assess(formatJudgePrompt(ctx));
+
+    return parseJudgeVerdict(result);
+  },
+);
 ```
 
 The adapter provides:

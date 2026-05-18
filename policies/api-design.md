@@ -28,9 +28,10 @@ hatches for advanced cases.
   test; a judge assesses a run. Binding helpers should assemble context and
   delegate to that role method rather than becoming another owner of the
   behavior.
-- Keep assessment prompts, model choices, and parsers on the judge. Reuse
-  provider clients or credentials by sharing app-local dependencies, not by
-  adding judge-call methods to the harness.
+- Keep assessment prompts, model choices, and parsers on the judge. If multiple
+  judges reuse provider setup, pass a small judge-side helper into the judge and
+  curry run-scoped options such as abort signals there instead of exposing
+  passthrough plumbing on the judge context.
 - Per-run factories should receive one contextual args object with the run
   input and harness context when the harness owns later instrumentation or
   execution.

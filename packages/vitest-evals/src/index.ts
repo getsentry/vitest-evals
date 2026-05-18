@@ -22,6 +22,8 @@ import type {
   JudgeContext,
   Judge,
   JudgeAssessFn,
+  JudgeAssessWithHarnessFn,
+  JudgeHarness,
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
@@ -623,7 +625,7 @@ function buildJudgeAssertionOptions<
     task,
   );
   const harness = options.harness ?? registeredContext?.harness;
-  const signal = options.signal ?? registeredContext?.signal;
+  const signal = registeredContext?.signal;
   const metadata = (options.metadata ??
     registeredContext?.metadata ??
     {}) as JudgeAssertionMetadata<TJudgeOptions>;
@@ -877,10 +879,45 @@ export function formatScores(scores: (JudgeResult & { name: string })[]) {
 export function createJudge<TOptions extends JudgeContext<any, any, any, any>>(
   name: string,
   assess: JudgeAssessFn<TOptions>,
+): Judge<TOptions>;
+export function createJudge<
+  TOptions extends JudgeContext<any, any, any, any>,
+  TInput,
+  TOutput,
+>(
+  name: string,
+  harness: JudgeHarness<TInput, TOutput>,
+  assess: JudgeAssessWithHarnessFn<TOptions, TInput, TOutput>,
+): Judge<TOptions>;
+export function createJudge<
+  TOptions extends JudgeContext<any, any, any, any>,
+  TInput,
+  TOutput,
+>(
+  name: string,
+  assessOrHarness: JudgeAssessFn<TOptions> | JudgeHarness<TInput, TOutput>,
+  assess?: JudgeAssessWithHarnessFn<TOptions, TInput, TOutput>,
 ): Judge<TOptions> {
+  if (!assess) {
+    return {
+      name,
+      assess: assessOrHarness as JudgeAssessFn<TOptions>,
+    };
+  }
+
+  const harness = assessOrHarness as JudgeHarness<TInput, TOutput>;
+
   return {
     name,
-    assess,
+    assess: (opts) =>
+      assess(opts, {
+        assess: (input) =>
+          Promise.resolve(
+            harness.assess(input, {
+              signal: (opts as { signal?: AbortSignal }).signal,
+            }),
+          ),
+      }),
   };
 }
 
@@ -925,9 +962,13 @@ export {
   type ToolCallJudgeOptions,
 } from "./judges";
 export type {
+  BoundJudgeHarness,
   Judge,
   JudgeAssessFn,
+  JudgeAssessWithHarnessFn,
   JudgeContext,
+  JudgeHarness,
+  JudgeHarnessOptions,
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";

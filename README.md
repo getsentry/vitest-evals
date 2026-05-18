@@ -180,10 +180,10 @@ Harness-backed suites stay close to plain Vitest:
 - judges layer in through `expect(...).toSatisfyJudge(...)`
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
-  normalized run/session, tool calls, metadata, and run abort signal
-- judges own their prompt, rubric, model call, and parsing; a judge can close
-  over the same provider client or credentials as the harness without calling
-  the app agent under test
+  normalized run/session, tool calls, and metadata
+- judges own their prompt, rubric, model call, and parsing; pass a judge-side
+  harness to `createJudge(...)` when multiple judges should reuse provider
+  setup or credentials without calling the app agent under test
 - scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload

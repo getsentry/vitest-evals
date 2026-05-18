@@ -15,7 +15,12 @@ import { expect } from "vitest";
 import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
-import { describeEval, toolCalls } from "vitest-evals";
+import {
+  createJudge,
+  describeEval,
+  toolCalls,
+  type JudgeHarness,
+} from "vitest-evals";
 
 const tools = {
   lookupInvoice: {
@@ -78,23 +83,34 @@ const harness = aiSdkHarness({
 ```
 
 `run` executes the system under test. Judges are separate `createJudge(...)`
-objects; when they need the same AI SDK provider setup or credentials, share
-that app-local client directly with the judge instead of putting a judge model
-call on the harness.
+objects; when they need the same AI SDK provider setup or credentials, pass a
+judge-side harness to `createJudge(...)` instead of putting a judge model call
+on the app harness.
 
 ```ts
-const FactualityJudge = createJudge("FactualityJudge", async (ctx) => {
-  const verdict = await generateText({
-    model: openai("gpt-4o-mini"),
-    prompt: formatJudgePrompt({
-      input: ctx.input,
-      output: ctx.output,
-    }),
-    abortSignal: ctx.signal,
-  });
+const aiSdkJudgeHarness = {
+  assess: (prompt, { signal }) =>
+    generateText({
+      model: openai("gpt-4o-mini"),
+      prompt,
+      abortSignal: signal,
+    }).then((result) => result.text),
+} satisfies JudgeHarness<string, string>;
 
-  return parseJudgeVerdict(verdict.text);
-});
+const FactualityJudge = createJudge(
+  "FactualityJudge",
+  aiSdkJudgeHarness,
+  async (ctx, judge) => {
+    const verdict = await judge.assess(
+      formatJudgePrompt({
+        input: ctx.input,
+        output: ctx.output,
+      }),
+    );
+
+    return parseJudgeVerdict(verdict);
+  },
+);
 ```
 
 The adapter infers:

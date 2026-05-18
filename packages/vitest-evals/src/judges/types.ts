@@ -38,7 +38,6 @@ export interface JudgeContext<
   metadata: Readonly<TMetadata>;
   run: HarnessRun<TOutput>;
   session: HarnessRun<TOutput>["session"];
-  signal?: AbortSignal;
   /** Harness associated with this judge context. */
   harness: THarness;
 }
@@ -58,6 +57,34 @@ export type JudgeOptions<
 export type JudgeAssessFn<
   TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = (opts: TOptions) => Promise<JudgeResult> | JudgeResult;
+
+/** Runtime options supplied by core when calling a judge-side harness. */
+export type JudgeHarnessOptions = {
+  signal?: AbortSignal;
+};
+
+/** Provider/model helper that a judge can use without running the app harness. */
+export type JudgeHarness<TInput = string, TOutput = string> = {
+  assess: (
+    input: TInput,
+    options: JudgeHarnessOptions,
+  ) => Promise<TOutput> | TOutput;
+};
+
+/** Judge-side harness after core binds run-scoped options such as abort signal. */
+export type BoundJudgeHarness<TInput = string, TOutput = string> = {
+  assess: (input: TInput) => Promise<TOutput>;
+};
+
+/** Function that assesses a context with a prebound judge-side harness. */
+export type JudgeAssessWithHarnessFn<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+  TInput = string,
+  TOutput = string,
+> = (
+  opts: TOptions,
+  judge: BoundJudgeHarness<TInput, TOutput>,
+) => Promise<JudgeResult> | JudgeResult;
 
 /** Named judge object consumed by suite-level judges and explicit assertions. */
 export interface Judge<
