@@ -35,6 +35,19 @@ type _PiAiRunOutput = Expect<
   Equal<HarnessOutput<typeof typedRunOutputHarness>, RefundDecision>
 >;
 
+const optionalRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output?: RefundDecision }> => ({}),
+});
+type _PiAiOptionalRunOutput = Expect<
+  Equal<
+    HarnessOutput<typeof optionalRunOutputHarness>,
+    RefundDecision | undefined
+  >
+>;
+
 const broadDecisionFieldHarness = piAiHarness({
   agent: {
     id: "refund-agent",
@@ -151,9 +164,6 @@ test("accepts agent as a factory", async () => {
 
   const result = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
       artifacts[name] = value;
@@ -660,9 +670,6 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -714,9 +721,6 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -822,9 +826,6 @@ test("prefers inferred non-empty runtime toolsets over empty placeholders", asyn
 
   const result = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -858,9 +859,6 @@ test("supports a typed output selector", async () => {
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -905,9 +903,6 @@ test("applies output selectors to HarnessRun-shaped results", async () => {
 
   const result = await normalizedHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -952,9 +947,6 @@ test("attaches a partial run when the harness errors", async () => {
   const error = await erroringHarness
     .run("Refund invoice inv_missing", {
       metadata: {},
-      task: {
-        meta: {},
-      },
       artifacts: {},
       setArtifact: vi.fn(),
     })
@@ -1046,9 +1038,6 @@ test("replays native agent tools without breaking the agent-facing result", asyn
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1127,9 +1116,6 @@ test("replays native agent tools without breaking the agent-facing result", asyn
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1212,9 +1198,6 @@ test("does not opt native agent tools into replay from tool objects", async () =
 
   const run = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1292,9 +1275,6 @@ test("passes run input and context to agent factory before native tool instrumen
   const context: HarnessContext<DemoMetadata> = {
     metadata: {
       scenario: "refund",
-    },
-    task: {
-      meta: {},
     },
     artifacts,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
@@ -1374,9 +1354,6 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const firstRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1411,9 +1388,6 @@ test("records and replays opt-in tools in auto mode", async () => {
 
   const secondRun = await replayHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1457,9 +1431,6 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
 
   const run = await harness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -1504,9 +1475,6 @@ test("errors when strict mode is missing a recording", async () => {
   const error = await replayHarness
     .run("Refund invoice inv_123", {
       metadata: {},
-      task: {
-        meta: {},
-      },
       artifacts: {},
       setArtifact: vi.fn(),
     })

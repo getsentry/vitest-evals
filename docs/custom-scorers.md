@@ -67,11 +67,12 @@ that are not part of the scenario payload.
 
 Explicit matcher calls on the branded result returned by fixture `run(...)`
 use the run's typed `output` and reuse registered input, metadata, and harness
-context. Inside an eval test, matcher calls on registered output objects or
-session objects reuse that exact run context; other raw values fall back to the
-current test's most recent `run(...)` context. Matcher calls outside that
-context, or on manually-created runs, should pass the context required by the
-judge in `toSatisfyJudge(...)` options.
+context. The matcher requires any custom judge params and rejects judges whose
+output type cannot assess the received value. Inside an eval test, matcher
+calls on registered output objects or session objects reuse that exact run
+context; other raw values fall back to the current test's most recent `run(...)`
+context. Matcher calls outside that context, or on manually-created runs,
+should pass the context required by the judge in `toSatisfyJudge(...)` options.
 
 ## Built-In Root Judges
 

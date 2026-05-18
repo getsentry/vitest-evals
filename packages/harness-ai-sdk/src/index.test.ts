@@ -34,6 +34,16 @@ type _AiSdkRunOutput = Expect<
   Equal<HarnessOutput<typeof typedRunOutputHarness>, RefundDecision>
 >;
 
+const optionalRunOutputHarness = aiSdkHarness({
+  run: async (): Promise<{ output?: RefundDecision }> => ({}),
+});
+type _AiSdkOptionalRunOutput = Expect<
+  Equal<
+    HarnessOutput<typeof optionalRunOutputHarness>,
+    RefundDecision | undefined
+  >
+>;
+
 const broadResultFieldHarness = aiSdkHarness({
   run: async () => ({
     result: {
@@ -60,9 +70,6 @@ function createHarnessContext<TMetadata extends Record<string, unknown>>(
 ) {
   return {
     metadata,
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   };

@@ -5,6 +5,7 @@ import {
   createHarness,
   describeEval,
   type JudgeContext,
+  type JudgeOptions,
   type JudgeAssessorOptions,
   StructuredOutputJudge,
   ToolCallJudge,
@@ -55,6 +56,37 @@ type _JudgeContextUsesTypedOutput = Expect<
 type _UntypedHarnessRunAllowsMissingOutput = Expect<
   Equal<HarnessRun["output"], JsonValue | undefined>
 >;
+
+const requiredParamJudge = createJudge(
+  "RequiredParamJudge",
+  async ({
+    expectedStatus,
+    output,
+  }: JudgeOptions<{ expectedStatus: string }, unknown, RefundOutput>) => ({
+    score: output.status === expectedStatus ? 1 : 0,
+  }),
+);
+
+const stringOutputJudge = createJudge(
+  "StringOutputJudge",
+  async ({ output }: JudgeContext<unknown, string>) => ({
+    score: output.length > 0 ? 1 : 0,
+  }),
+);
+
+async function assertMatcherTypes(result: HarnessRun<RefundOutput>) {
+  await expect(result).toSatisfyJudge(requiredParamJudge, {
+    expectedStatus: "approved",
+  });
+
+  // @ts-expect-error required custom judge params must be provided explicitly.
+  await expect(result).toSatisfyJudge(requiredParamJudge);
+
+  // @ts-expect-error the matcher output type must satisfy the judge output type.
+  await expect(result).toSatisfyJudge(stringOutputJudge);
+}
+
+void assertMatcherTypes;
 
 const runSpy = vi.fn(
   async (
@@ -260,9 +292,6 @@ test("createHarness drops non-normalized lightweight tool call fields", async ()
 
   const result = await lightweightHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -290,9 +319,6 @@ test("createHarness preserves typed lightweight output values", async () => {
 
   const result = await lightweightHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -320,9 +346,6 @@ test("createHarness preserves null lightweight output in the session", async () 
 
   const result = await lightweightHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -351,9 +374,6 @@ test("createHarness serializes Error objects in lightweight errors", async () =>
 
   const result = await lightweightHarness.run("Refund invoice inv_123", {
     metadata: {},
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -823,9 +843,6 @@ test("toSatisfyJudge reuses normalized harness run data", async () => {
       expectedStatus: "approved",
       name: "explicit judge",
     },
-    task: {
-      meta: {},
-    },
     artifacts: {},
     setArtifact: vi.fn(),
   });
@@ -887,9 +904,6 @@ test("automatic judges read per-run params from metadata", async () => {
     metadata: {
       expectedStatus: "approved",
       name: "compatibility judge",
-    },
-    task: {
-      meta: {},
     },
     artifacts: {},
     setArtifact: vi.fn(),

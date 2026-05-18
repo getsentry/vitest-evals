@@ -36,6 +36,19 @@ type _OpenAiRunOutput = Expect<
   Equal<HarnessOutput<typeof typedRunOutputHarness>, Classification>
 >;
 
+const optionalRunOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{ output?: Classification }> => ({}),
+});
+type _OpenAiOptionalRunOutput = Expect<
+  Equal<
+    HarnessOutput<typeof optionalRunOutputHarness>,
+    Classification | undefined
+  >
+>;
+
 const typedRunnerFinalOutputHarness = openaiAgentsHarness({
   agent: {
     name: "classifier",
@@ -87,9 +100,6 @@ function createHarnessContext<TMetadata extends Record<string, unknown>>(
 ) {
   const context = {
     metadata,
-    task: {
-      meta: {},
-    },
     artifacts: {} as Record<string, JsonValue>,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
       context.artifacts[name] = value;

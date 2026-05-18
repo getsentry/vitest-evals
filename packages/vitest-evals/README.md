@@ -368,7 +368,8 @@ that only when a second run is intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered
-input and metadata. Inside an eval test,
+input and metadata. It requires any custom judge params and rejects judges whose
+output type cannot assess the received value. Inside an eval test,
 matcher calls on registered output objects or session objects reuse that exact
 run context when the value can be registered by reference, so
 `expect(result.output).toSatisfyJudge(judge)` stays concise for structured

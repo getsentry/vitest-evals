@@ -44,6 +44,9 @@ hatches for advanced cases.
 - Preserve caller-owned types exactly. If `run()` declares a concrete output,
   downstream `result.output` and `ctx.output` should be concrete too; require
   `undefined` in the type only when missing output is a real state.
+- Matchers should preserve the same contract: a judge over string output should
+  not type-check against a structured object result, and required custom judge
+  params should stay required.
 - Keep overload helper types private when overloads are the intended API.
   Exporting implementation unions makes users annotate around the simpler
   contract and weakens the design.

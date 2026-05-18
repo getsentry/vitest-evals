@@ -187,21 +187,51 @@ type JudgeAssertionHarness<
       JudgeAssertionOutput<TJudgeOptions>
     >;
 
+type JudgeAssertionReservedKey =
+  | keyof JudgeContext<any, any, any, any>
+  | "signal"
+  | "threshold";
+
+type JudgeAssertionParams<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = Omit<TJudgeOptions, JudgeAssertionReservedKey>;
+
+type RequiredKeys<T> = {
+  [K in keyof T]-?: Record<string, never> extends Pick<T, K> ? never : K;
+}[keyof T];
+
+type JudgeAssertionArgs<
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = RequiredKeys<JudgeAssertionParams<TJudgeOptions>> extends never
+  ? [options?: JudgeAssertionOptions<TJudgeOptions>]
+  : [options: JudgeAssertionOptions<TJudgeOptions>];
+
+type MatcherOutput<TReceived> = TReceived extends EvalHarnessRun<
+  any,
+  any,
+  infer TOutput,
+  any
+>
+  ? TOutput
+  : TReceived extends HarnessRun<infer TOutput>
+    ? TOutput
+    : TReceived extends NormalizedSession
+      ? JsonValue | undefined
+      : TReceived extends JsonValue
+        ? TReceived
+        : JsonValue | undefined;
+
+type JudgeForReceived<
+  TReceived,
+  TJudgeOptions extends JudgeContext<any, any, any, any>,
+> = MatcherOutput<TReceived> extends JudgeAssertionOutput<TJudgeOptions>
+  ? Judge<TJudgeOptions>
+  : never;
+
 /** Optional overrides passed to `expect(...).toSatisfyJudge(...)`. */
 export type JudgeAssertionOptions<
   TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
-> = Partial<
-  Omit<
-    TJudgeOptions,
-    | "input"
-    | "output"
-    | "metadata"
-    | "toolCalls"
-    | "run"
-    | "session"
-    | "harness"
-  >
-> & {
+> = JudgeAssertionParams<TJudgeOptions> & {
   input?: JudgeAssertionInput<TJudgeOptions>;
   output?: JudgeAssertionOutput<TJudgeOptions>;
   metadata?: JudgeAssertionMetadata<TJudgeOptions>;
@@ -216,8 +246,8 @@ export type JudgeAssertionOptions<
 export type ToSatisfyJudge<TReceived = unknown> = <
   TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
-  judge: Judge<TJudgeOptions>,
-  options?: JudgeAssertionOptions<TJudgeOptions>,
+  judge: JudgeForReceived<TReceived, TJudgeOptions>,
+  ...args: JudgeAssertionArgs<TJudgeOptions>
 ) => Promise<TReceived>;
 
 export interface EvalMatchers<R = unknown> {
@@ -260,9 +290,6 @@ const evalTest = test
         const artifacts: HarnessContext["artifacts"] = {};
         const context: HarnessContext<HarnessMetadata> = {
           metadata,
-          task: {
-            meta: task.meta as Record<string, unknown>,
-          },
           signal,
           artifacts,
           setArtifact: (artifactName, value) => {
@@ -331,9 +358,10 @@ expect.extend({
   >(
     received: unknown,
     judge: Judge<TJudgeOptions>,
-    options: JudgeAssertionOptions<TJudgeOptions> = {},
+    options?: JudgeAssertionOptions<TJudgeOptions>,
   ) {
-    const { threshold = 1.0, ...context } = options;
+    const { threshold = 1.0, ...context } = (options ??
+      {}) as JudgeAssertionOptions<TJudgeOptions>;
     const judgeOptions = buildJudgeAssertionOptions(
       received,
       context,
@@ -716,13 +744,14 @@ function resolveJudgeRun<
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
   contextualRun?: HarnessRun,
 ): HarnessRun {
-  if (options.run) {
+  const explicitRun = options.run as HarnessRun | undefined;
+  if (explicitRun) {
     return options.session
       ? {
-          ...options.run,
+          ...explicitRun,
           session: options.session,
         }
-      : options.run;
+      : explicitRun;
   }
 
   if (isHarnessRun(received)) {

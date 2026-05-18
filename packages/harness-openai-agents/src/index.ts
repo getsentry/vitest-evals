@@ -37,17 +37,26 @@ type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
   : JsonValue | undefined;
+type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
+  [K in TKey]?: infer TOutput;
+}
+  ? TKey extends keyof TResult
+    ? Record<string, never> extends Pick<TResult, TKey>
+      ? JsonOutput<TOutput> | undefined
+      : JsonOutput<TOutput>
+    : JsonOutput<TOutput> | undefined
+  : JsonValue | undefined;
 
 type OpenAiAgentsResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
 >
   ? TOutput
-  : TResult extends { finalOutput?: infer TOutput }
-    ? JsonOutput<TOutput>
-    : TResult extends { final_output?: infer TOutput }
-      ? JsonOutput<TOutput>
-      : TResult extends { output?: infer TOutput }
-        ? JsonOutput<TOutput>
+  : TResult extends { finalOutput?: unknown }
+    ? ResultFieldOutput<TResult, "finalOutput">
+    : TResult extends { final_output?: unknown }
+      ? ResultFieldOutput<TResult, "final_output">
+      : TResult extends { output?: unknown }
+        ? ResultFieldOutput<TResult, "output">
         : JsonValue | undefined;
 
 export type OpenAiAgentsReplayMode = ReplayMode;

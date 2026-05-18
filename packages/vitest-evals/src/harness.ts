@@ -76,9 +76,6 @@ export type HarnessContext<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   metadata: Readonly<TMetadata>;
-  task: {
-    meta: Record<string, unknown>;
-  };
   signal?: AbortSignal;
   artifacts: Record<string, JsonValue>;
   setArtifact: (name: string, value: JsonValue) => void;

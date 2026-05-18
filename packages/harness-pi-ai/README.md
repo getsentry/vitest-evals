@@ -97,8 +97,8 @@ const harness = piAiHarness({
 
 You should not need to configure output/session/usage basics for the normal Pi
 path. Pass your agent and let the adapter infer both the toolset and the
-normalized result from common Pi-style return values such as `decision` or
-`output`.
+normalized result from the agent transcript. When your app returns a structured
+domain value, return it as `output`.
 
 If the agent completely hides its tools, `tools` still exists as a low-level
 override:

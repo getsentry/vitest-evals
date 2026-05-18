@@ -48,6 +48,15 @@ type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
   : JsonValue | undefined;
+type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
+  [K in TKey]?: infer TOutput;
+}
+  ? TKey extends keyof TResult
+    ? Record<string, never> extends Pick<TResult, TKey>
+      ? JsonOutput<TOutput> | undefined
+      : JsonOutput<TOutput>
+    : JsonOutput<TOutput> | undefined
+  : JsonValue | undefined;
 type AgentSource<
   TAgent,
   TInput = string,
@@ -91,14 +100,14 @@ type AiSdkLikeResult = {
 
 type AiSdkResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
   ? TOutput
-  : TResult extends { output?: infer TOutput }
-    ? JsonOutput<TOutput>
-    : TResult extends { object?: infer TOutput }
-      ? JsonOutput<TOutput>
-      : TResult extends { experimental_output?: infer TOutput }
-        ? JsonOutput<TOutput>
-        : TResult extends { text?: infer TOutput }
-          ? JsonOutput<TOutput>
+  : TResult extends { output?: unknown }
+    ? ResultFieldOutput<TResult, "output">
+    : TResult extends { object?: unknown }
+      ? ResultFieldOutput<TResult, "object">
+      : TResult extends { experimental_output?: unknown }
+        ? ResultFieldOutput<TResult, "experimental_output">
+        : TResult extends { text?: unknown }
+          ? ResultFieldOutput<TResult, "text">
           : JsonValue | undefined;
 
 export interface AiSdkToolContext<

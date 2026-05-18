@@ -105,8 +105,8 @@ surface.
 1. `describeEval` selects one harness for the suite.
 2. Core overrides that harness onto a fixture-backed Vitest `it`.
 3. A test calls `run(input, { metadata? })`.
-4. Core creates a `HarnessContext` containing reporter plumbing, artifacts, and
-   the test signal.
+4. Core creates a `HarnessContext` containing metadata, artifacts, and the test
+   signal.
 5. The harness creates or receives the existing agent/application instance.
 6. The harness runs the application with the provided input and injected test
    dependencies.
