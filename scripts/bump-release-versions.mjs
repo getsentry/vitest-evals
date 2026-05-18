@@ -13,6 +13,7 @@ const files = [
   "packages/harness-ai-sdk/package.json",
   "packages/harness-openai-agents/package.json",
   "packages/harness-pi-ai/package.json",
+  "packages/github-reporter/package.json",
 ];
 
 for (const relativePath of files) {
