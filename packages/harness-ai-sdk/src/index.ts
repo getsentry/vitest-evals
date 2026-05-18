@@ -186,7 +186,7 @@ export interface AiSdkHarnessResultArgs<
   result: TResult;
 }
 
-type AiSdkResultOverrides<
+export type AiSdkHarnessNormalizeOptions<
   TAgent,
   TInput,
   TMetadata extends HarnessMetadata,
@@ -209,14 +209,6 @@ type AiSdkResultOverrides<
     args: AiSdkHarnessResultArgs<TAgent, TInput, TMetadata, TResult, TTools>,
   ) => MaybePromise<Array<Record<string, JsonValue>>>;
 };
-
-export interface AiSdkHarnessNormalizeOptions<
-  TAgent,
-  TInput,
-  TMetadata extends HarnessMetadata,
-  TResult,
-  TTools extends AiSdkToolset<TInput, TMetadata>,
-> extends AiSdkResultOverrides<TAgent, TInput, TMetadata, TResult, TTools> {}
 
 export type AiSdkHarnessOptions<
   TAgent = unknown,
