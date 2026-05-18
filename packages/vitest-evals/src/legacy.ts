@@ -38,6 +38,7 @@ export {
   type ToolCallScorerOptions,
 } from "./legacy/scorers";
 
+/** Options for the temporary scorer-first `describeEval(...)` compatibility API. */
 export interface LegacyDescribeEvalOptions {
   data: () => Promise<
     Array<{ input: string; name?: string } & Record<string, any>>
@@ -51,6 +52,7 @@ export interface LegacyDescribeEvalOptions {
   afterEach?: () => void | Promise<void>;
 }
 
+/** Legacy Vitest matcher function used by `expect(input).toEval(...)`. */
 export type ToEval<R = unknown> = (
   expected: any,
   taskFn: TaskFn,
@@ -94,6 +96,7 @@ expect.extend({
   },
 });
 
+/** Defines a scorer-first legacy eval suite. Prefer root `describeEval(...)`. */
 export function describeEval(
   name: string,
   options: LegacyDescribeEvalOptions,

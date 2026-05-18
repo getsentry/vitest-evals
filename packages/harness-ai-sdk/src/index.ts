@@ -110,6 +110,7 @@ type AiSdkResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
           ? ResultFieldOutput<TResult, "text">
           : JsonValue | undefined;
 
+/** Context passed to instrumented AI SDK tool executions. */
 export interface AiSdkToolContext<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -121,13 +122,16 @@ export interface AiSdkToolContext<
   execution: ToolExecutionOptions;
 }
 
+/** Replay mode alias used by the AI SDK harness package. */
 export type AiSdkReplayMode = ReplayMode;
 
+/** Tool replay recording shape for AI SDK tools. */
 export type AiSdkToolRecording<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
 > = ToolRecording<TArgs, TResult>;
 
+/** Replay configuration for an AI SDK tool. */
 export type AiSdkToolReplayConfig<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
@@ -135,6 +139,7 @@ export type AiSdkToolReplayConfig<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = ToolReplayConfig<TArgs, TResult, AiSdkToolContext<TInput, TMetadata>>;
 
+/** AI SDK tool definition accepted by the harness. */
 export type AiSdkToolDefinition<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
@@ -142,21 +147,25 @@ export type AiSdkToolDefinition<
   _TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Tool<TArgs, TResult>;
 
+/** Replay policy for one AI SDK tool. */
 export type AiSdkToolReplayPolicy<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = boolean | AiSdkToolReplayConfig<JsonValue, JsonValue, TInput, TMetadata>;
 
+/** Replay policy map keyed by AI SDK tool name. */
 export type AiSdkToolReplayPolicies<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, AiSdkToolReplayPolicy<TInput, TMetadata>>;
 
+/** Toolset shape accepted by the AI SDK harness. */
 export type AiSdkToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = AnyAiSdkToolset<TInput, TMetadata>;
 
+/** Runtime toolset exposed to the system under test. */
 export type AiSdkRuntimeToolset<TTools extends AnyAiSdkToolset<any, any>> = {
   [K in keyof TTools]: TTools[K] extends AiSdkToolDefinition<
     infer TArgs extends JsonValue,
@@ -170,6 +179,7 @@ export type AiSdkRuntimeToolset<TTools extends AnyAiSdkToolset<any, any>> = {
     : TTools[K];
 };
 
+/** Runtime object passed into AI SDK-style agent entrypoints. */
 export interface AiSdkRuntime<
   TTools extends AiSdkToolset<TInput, TMetadata>,
   TInput = string,
@@ -179,6 +189,7 @@ export interface AiSdkRuntime<
   signal?: AbortSignal;
 }
 
+/** Arguments passed to per-run AI SDK agent factories. */
 export interface AiSdkCreateAgentArgs<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -187,6 +198,7 @@ export interface AiSdkCreateAgentArgs<
   context: HarnessContext<TMetadata>;
 }
 
+/** Arguments passed to custom AI SDK harness run callbacks. */
 export interface AiSdkHarnessRunArgs<
   TAgent,
   TInput,
@@ -200,6 +212,7 @@ export interface AiSdkHarnessRunArgs<
   tools: AiSdkRuntimeToolset<TTools>;
 }
 
+/** Arguments passed to AI SDK harness output selectors. */
 export interface AiSdkHarnessResultArgs<
   TAgent,
   TInput,
@@ -368,6 +381,7 @@ type AiSdkGeneratableAgent<
   ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 };
 
+/** Adapts an AI SDK-style workflow into a normalized eval harness. */
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,

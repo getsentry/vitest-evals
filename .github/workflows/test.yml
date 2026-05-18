@@ -49,6 +49,9 @@ jobs:
       - name: Run linter
         run: pnpm lint
 
+      - name: Check public API docs
+        run: pnpm docs:check
+
       - name: Run typecheck
         run: pnpm typecheck
 

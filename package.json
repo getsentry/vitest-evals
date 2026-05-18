@@ -7,6 +7,7 @@
     "evals": "node ./scripts/run-workspace-evals.mjs",
     "evals:verbose": "node ./scripts/run-workspace-evals.mjs -v",
     "evals:fail": "node ./scripts/run-workspace-evals.mjs --fail",
+    "docs:check": "node ./scripts/check-public-docs.mjs",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

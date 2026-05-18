@@ -132,6 +132,7 @@ export interface EvalTestContext<
   run: EvalRun<TInput, TOutput, TMetadata, THarness>;
 }
 
+/** Fixture-backed Vitest test API exposed inside `describeEval(...)`. */
 export type EvalTestAPI<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -245,6 +246,7 @@ export type JudgeAssertionOptions<
   threshold?: number | null;
 };
 
+/** Function type installed as the `toSatisfyJudge(...)` matcher. */
 export type ToSatisfyJudge<TReceived = unknown> = <
   TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 >(
@@ -252,6 +254,7 @@ export type ToSatisfyJudge<TReceived = unknown> = <
   ...args: JudgeAssertionArgs<TJudgeOptions>
 ) => Promise<TReceived>;
 
+/** Vitest matcher extension surface added by `vitest-evals`. */
 export interface EvalMatchers<R = unknown> {
   toSatisfyJudge: ToSatisfyJudge<R>;
 }

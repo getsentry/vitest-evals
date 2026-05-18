@@ -1,10 +1,13 @@
+/** Primitive scalar values allowed in normalized JSON-safe eval data. */
 export type JsonPrimitive = string | number | boolean | null;
 
+/** JSON-safe value shape used by normalized sessions, artifacts, and errors. */
 export type JsonValue =
   | JsonPrimitive
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+/** Normalized record for one tool call observed during a harness run. */
 export type ToolCallRecord = {
   id?: string;
   name: string;
@@ -21,6 +24,7 @@ export type ToolCallRecord = {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Normalized message recorded in a harness session transcript. */
 export type NormalizedMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content?: JsonValue;
@@ -28,6 +32,7 @@ export type NormalizedMessage = {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Provider usage summary attached to a normalized harness run. */
 export type UsageSummary = {
   provider?: string;
   model?: string;
@@ -41,11 +46,13 @@ export type UsageSummary = {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Timing summary attached to a normalized harness run. */
 export type TimingSummary = {
   totalMs?: number;
   metadata?: Record<string, JsonValue>;
 };
 
+/** JSON-serializable transcript produced by the system under test. */
 export type NormalizedSession = {
   messages: NormalizedMessage[];
   provider?: string;
@@ -56,6 +63,7 @@ export type NormalizedSession = {
 type OutputField<TOutput extends JsonValue | undefined> =
   undefined extends TOutput ? { output?: TOutput } : { output: TOutput };
 
+/** Normalized result returned by every harness execution. */
 export type HarnessRun<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OutputField<TOutput> & {
@@ -66,12 +74,15 @@ export type HarnessRun<
   errors: Array<Record<string, JsonValue>>;
 };
 
+/** Error value with an attached partial or complete normalized harness run. */
 export type HarnessRunError = Error & {
   vitestEvalsRun: HarnessRun;
 };
 
+/** Per-run metadata shape accepted by harnesses and eval tests. */
 export type HarnessMetadata = Record<string, unknown>;
 
+/** Runtime context passed from the eval fixture into a harness run. */
 export type HarnessContext<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
@@ -81,6 +92,7 @@ export type HarnessContext<
   setArtifact: (name: string, value: JsonValue) => void;
 };
 
+/** Adapter that executes the system under test and returns a normalized run. */
 export type Harness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -93,8 +105,10 @@ export type Harness<
   ) => Promise<HarnessRun<TOutput>>;
 };
 
+/** Value or promise accepted by lightweight harness callbacks. */
 export type MaybePromise<T> = T | Promise<T>;
 
+/** Lightweight tool-call record accepted by `createHarness(...)` results. */
 export type SimpleToolCallRecord = Omit<
   ToolCallRecord,
   "arguments" | "result" | "error" | "metadata"
@@ -105,6 +119,7 @@ export type SimpleToolCallRecord = Omit<
   metadata?: Record<string, unknown>;
 };
 
+/** Lightweight result shape normalized by `createHarness(...)`. */
 export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OutputField<TOutput> & {
@@ -117,10 +132,12 @@ export type SimpleHarnessResult<
   errors?: unknown[];
 };
 
+/** Either a complete normalized run or a lightweight result to normalize. */
 export type HarnessResultLike<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = HarnessRun<TOutput> | SimpleHarnessResult<TOutput>;
 
+/** Arguments passed to the `createHarness(...)` convenience callback. */
 export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
   input: TInput;
   metadata: Readonly<TMetadata>;
@@ -129,6 +146,7 @@ export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 };
 
+/** Options for creating a lightweight custom application harness. */
 export type CreateHarnessOptions<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,

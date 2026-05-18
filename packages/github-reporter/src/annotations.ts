@@ -8,10 +8,12 @@ import {
   truncate,
 } from "./utils";
 
+/** Options for limiting rendered GitHub annotations. */
 export type AnnotationOptions = {
   maxAnnotations?: number;
 };
 
+/** GitHub Check Run annotation payload. */
 export type CheckAnnotation = {
   path: string;
   start_line: number;

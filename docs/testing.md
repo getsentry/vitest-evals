@@ -139,6 +139,7 @@ Common commands:
 
 ```bash
 pnpm typecheck
+pnpm docs:check
 pnpm test
 pnpm build
 pnpm evals

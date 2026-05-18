@@ -1,14 +1,17 @@
+/** Shared configuration for legacy and built-in value matchers. */
 export interface BaseMatcherConfig {
   requireAll?: boolean;
   allowExtras?: boolean;
   debug?: boolean;
 }
 
+/** Matching strategy used by structured-output and tool-call scorers. */
 export type MatchStrategy<T = unknown> =
   | "strict"
   | "fuzzy"
   | ((expected: T, actual: T, context?: string) => boolean);
 
+/** Options controlling fuzzy matcher behavior. */
 export interface FuzzyMatchOptions {
   caseInsensitive?: boolean;
   substring?: boolean;
@@ -23,6 +26,7 @@ type Mismatch = {
   actual: unknown;
 };
 
+/** Debug logger interface accepted by matcher helpers. */
 export interface Logger {
   log: (message: string, ...args: unknown[]) => void;
 }

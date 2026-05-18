@@ -85,8 +85,10 @@ type NativeToolExecute<
   [ORIGINAL_NATIVE_EXECUTE]?: PiAgentToolLike<TInput, TMetadata>["execute"];
 };
 
+/** Replay mode alias used by the Pi AI harness package. */
 export type PiAiReplayMode = ReplayMode;
 
+/** Event sink for recording Pi AI transcript messages. */
 export interface PiAiEventSink {
   message: (message: NormalizedMessage) => void;
   system: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
@@ -99,6 +101,7 @@ export interface PiAiEventSink {
   ) => void;
 }
 
+/** Context passed to instrumented Pi AI tool executions. */
 export interface PiAiToolContext<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -109,11 +112,13 @@ export interface PiAiToolContext<
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 }
 
+/** Tool replay recording shape for Pi AI tools. */
 export type PiAiToolRecording<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
 > = ToolRecording<TArgs, TResult>;
 
+/** Replay configuration for a Pi AI tool. */
 export type PiAiToolReplayConfig<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -121,6 +126,7 @@ export type PiAiToolReplayConfig<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = ToolReplayConfig<TArgs, TResult, PiAiToolContext<TInput, TMetadata>>;
 
+/** Replay policy for one Pi AI tool. */
 export type PiAiToolReplayPolicy<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -133,11 +139,13 @@ export type PiAiToolReplayPolicy<
       TMetadata
     >;
 
+/** Replay policy map keyed by Pi AI tool name. */
 export type PiAiToolReplayPolicies<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, PiAiToolReplayPolicy<TInput, TMetadata>>;
 
+/** Tool definition accepted by the Pi AI harness runtime. */
 export interface PiAiToolDefinition<
   TArgs extends Record<string, JsonValue> = Record<string, JsonValue>,
   TResult extends JsonValue = JsonValue,
@@ -151,6 +159,7 @@ export interface PiAiToolDefinition<
   ) => MaybePromise<TResult>;
 }
 
+/** Toolset shape accepted by the Pi AI harness. */
 export type PiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -174,6 +183,7 @@ type ToolResult<TTool> = TTool extends PiAiToolDefinition<
   ? TResult
   : never;
 
+/** Runtime object passed into Pi AI agent entrypoints. */
 export type PiAiRuntime<
   TTools extends PiAiToolset<TInput, TMetadata>,
   TInput = string,
@@ -188,6 +198,7 @@ export type PiAiRuntime<
   signal?: AbortSignal;
 };
 
+/** Arguments passed to custom Pi AI harness run callbacks. */
 export interface PiAiHarnessRunArgs<
   TAgent,
   TInput,
@@ -200,6 +211,7 @@ export interface PiAiHarnessRunArgs<
   runtime: PiAiRuntime<TTools, TInput, TMetadata>;
 }
 
+/** Arguments passed to Pi AI harness output selectors. */
 export interface PiAiHarnessResultArgs<
   TAgent,
   TInput,
@@ -210,6 +222,7 @@ export interface PiAiHarnessResultArgs<
   result: TResult;
 }
 
+/** Arguments passed to per-run Pi AI agent factories. */
 export interface PiAiCreateAgentArgs<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,

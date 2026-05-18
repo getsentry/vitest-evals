@@ -2,6 +2,7 @@ import { buildCheckAnnotations } from "./annotations";
 import { renderJobSummary, type SummaryOptions } from "./summary";
 import type { EvalReport } from "./types";
 
+/** Options for creating or updating a GitHub Check Run. */
 export type PublishCheckRunOptions = SummaryOptions & {
   token?: string;
   repository?: string;
@@ -12,6 +13,7 @@ export type PublishCheckRunOptions = SummaryOptions & {
   maxAnnotations?: number;
 };
 
+/** Result of attempting to publish a GitHub Check Run. */
 export type PublishCheckRunResult =
   | {
       status: "skipped";

@@ -59,8 +59,10 @@ type OpenAiAgentsResultOutput<TResult> = TResult extends HarnessRun<
         ? ResultFieldOutput<TResult, "output">
         : JsonValue | undefined;
 
+/** Replay mode alias used by the OpenAI Agents harness package. */
 export type OpenAiAgentsReplayMode = ReplayMode;
 
+/** Runtime context object passed through OpenAI Agents run options. */
 export interface OpenAiAgentsRuntimeContext<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > {
@@ -69,6 +71,7 @@ export interface OpenAiAgentsRuntimeContext<
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 }
 
+/** Run options forwarded to OpenAI Agents runners. */
 export type OpenAiAgentsRunOptions<TContext = unknown> = Record<
   string,
   unknown
@@ -78,6 +81,7 @@ export type OpenAiAgentsRunOptions<TContext = unknown> = Record<
   stream?: boolean;
 };
 
+/** Minimal runner interface used by the OpenAI Agents harness. */
 export interface OpenAiAgentsRunner<
   TAgent,
   TInput,
@@ -92,6 +96,7 @@ export interface OpenAiAgentsRunner<
   ) => MaybePromise<TResult | HarnessRun<TOutput>>;
 }
 
+/** Runtime object prepared for OpenAI Agents harness executions. */
 export interface OpenAiAgentsRuntime<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -103,6 +108,7 @@ export interface OpenAiAgentsRuntime<
   tools: OpenAiAgentsTool<TInput, TMetadata>[];
 }
 
+/** Arguments passed to per-run OpenAI agent factories. */
 export interface OpenAiAgentsCreateAgentArgs<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -111,6 +117,7 @@ export interface OpenAiAgentsCreateAgentArgs<
   context: HarnessContext<TMetadata>;
 }
 
+/** Arguments passed to custom OpenAI Agents harness run callbacks. */
 export interface OpenAiAgentsHarnessRunArgs<
   TAgent,
   TInput,
@@ -171,6 +178,7 @@ type OpenAiAgentsRunnerResult<TAgent, TInput, TContext, TRunner> =
     ? Awaited<TResult>
     : unknown;
 
+/** Arguments passed to OpenAI Agents harness output selectors. */
 export interface OpenAiAgentsHarnessResultArgs<
   TAgent,
   TInput,
@@ -189,6 +197,7 @@ export interface OpenAiAgentsHarnessResultArgs<
   result: TResult;
 }
 
+/** Context passed to instrumented OpenAI Agents tools. */
 export interface OpenAiAgentsToolContext<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -202,11 +211,13 @@ export interface OpenAiAgentsToolContext<
   tool: OpenAiAgentsTool<TInput, TMetadata>;
 }
 
+/** Tool replay recording shape for OpenAI Agents tools. */
 export type OpenAiAgentsToolRecording<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
 > = ToolRecording<TArgs, TResult>;
 
+/** Replay configuration for an OpenAI Agents tool. */
 export type OpenAiAgentsToolReplayConfig<
   TArgs extends JsonValue = JsonValue,
   TResult extends JsonValue = JsonValue,
@@ -218,6 +229,7 @@ export type OpenAiAgentsToolReplayConfig<
   OpenAiAgentsToolContext<TInput, TMetadata>
 >;
 
+/** Replay policy for one OpenAI Agents tool. */
 export type OpenAiAgentsToolReplayPolicy<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -225,6 +237,7 @@ export type OpenAiAgentsToolReplayPolicy<
   | boolean
   | OpenAiAgentsToolReplayConfig<JsonValue, JsonValue, TInput, TMetadata>;
 
+/** Replay policy map keyed by OpenAI Agents tool name. */
 export type OpenAiAgentsToolReplayPolicies<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -232,6 +245,7 @@ export type OpenAiAgentsToolReplayPolicies<
 
 type OpenAiAgentsInvoke = (...args: unknown[]) => unknown;
 
+/** Minimal OpenAI Agents tool shape instrumented by the harness. */
 export type OpenAiAgentsTool<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,

@@ -12,15 +12,18 @@ type StructuredOutputJudgeMetadata = HarnessMetadata & {
   expected?: StructuredOutputJudgeExpected;
 };
 
+/** Matcher context accepted by `StructuredOutputJudge()`. */
 export interface StructuredOutputJudgeOptions
   extends JudgeContext<any, any, HarnessMetadata, any>,
     Omit<StructuredOutputScorerOptions, "input" | "output" | "toolCalls"> {
   expected?: StructuredOutputJudgeExpected;
 }
 
+/** Configuration for the deterministic structured-output judge. */
 export interface StructuredOutputJudgeConfig
   extends StructuredOutputScorerConfig {}
 
+/** Creates a deterministic judge that compares structured output fields. */
 export function StructuredOutputJudge(
   config: StructuredOutputJudgeConfig = {},
 ): Judge<StructuredOutputJudgeOptions> {

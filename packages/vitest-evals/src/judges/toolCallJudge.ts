@@ -13,12 +13,14 @@ type ExpectedTool =
       arguments?: unknown;
     };
 
+/** Configuration for the deterministic tool-call judge. */
 export interface ToolCallJudgeConfig extends ToolCallScorerConfig {}
 
 type ToolCallJudgeMetadata = HarnessMetadata & {
   expectedTools?: ExpectedTool[];
 };
 
+/** Matcher context accepted by `ToolCallJudge()`. */
 export interface ToolCallJudgeOptions
   extends JudgeContext<any, any, HarnessMetadata, any>,
     Omit<
@@ -28,6 +30,7 @@ export interface ToolCallJudgeOptions
   expectedTools?: ExpectedTool[];
 }
 
+/** Creates a deterministic judge that checks expected tool calls. */
 export function ToolCallJudge(
   config: ToolCallJudgeConfig = {},
 ): Judge<ToolCallJudgeOptions> {
