@@ -537,12 +537,12 @@ describe("renderJobSummary", () => {
     );
     expect(summary).toContain("| Metric | Value |");
     expect(summary).toContain("| Status | failed |");
-    expect(summary).toContain("| Tests | 1 passed, 1 failed, 2 total |");
     expect(summary).toContain("| Evals | 0 passed, 1 failed, 1 total |");
+    expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
     expect(summary).not.toContain("| Usage |");
-    expect(summary).toContain("Score distribution");
-    expect(summary.indexOf("Score distribution")).toBeLessThan(
+    expect(summary).toContain("## Scores");
+    expect(summary.indexOf("## Scores")).toBeLessThan(
       summary.indexOf("## Results"),
     );
     expect(summary).toContain("20-39%  | #################### 1");
@@ -613,6 +613,7 @@ describe("renderJobSummary", () => {
 
     expect(summary).toContain("| Status | failed |");
     expect(summary).toContain("| Evals | 0 passed, 0 failed, 0 total |");
+    expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Other Failures | 1 non-eval test failure |");
     expect(summary).toContain("## Results");
     expect(summary).toContain("No eval metadata was found");

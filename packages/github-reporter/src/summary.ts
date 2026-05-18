@@ -81,14 +81,6 @@ function renderSummaryTable(report: EvalReport, nonEvalFailures: number) {
   const rows: Array<[string, string]> = [
     ["Status", report.status],
     [
-      "Tests",
-      formatCountLine(
-        report.totals.passed,
-        report.totals.failed,
-        report.totals.total,
-      ),
-    ],
-    [
       "Evals",
       formatCountLine(
         report.totals.evalPassed,
@@ -158,7 +150,7 @@ function renderScoreDistribution(report: EvalReport) {
 
   const maxCount = Math.max(...counts);
   return [
-    "Score distribution",
+    "## Scores",
     "",
     "```text",
     ...SCORE_DISTRIBUTION_BUCKETS.map((label, index) =>

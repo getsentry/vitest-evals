@@ -312,7 +312,7 @@ jobs:
 
           grep -F "# vitest-evals" "$GITHUB_STEP_SUMMARY"
           grep -F "| Metric | Value |" "$GITHUB_STEP_SUMMARY"
-          grep -F "Score distribution" "$GITHUB_STEP_SUMMARY"
+          grep -F "## Scores" "$GITHUB_STEP_SUMMARY"
           grep -F "0-19%   | #######              1" "$GITHUB_STEP_SUMMARY"
           grep -F "20-39%  | #############        2" "$GITHUB_STEP_SUMMARY"
           grep -F "40-59%  | #############        2" "$GITHUB_STEP_SUMMARY"
@@ -335,9 +335,12 @@ jobs:
           grep -F "Tool           Status  Duration" "$GITHUB_STEP_SUMMARY"
           grep -F "lookupInvoice  ok      7ms" "$GITHUB_STEP_SUMMARY"
           grep -F "| Status | failed |" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Tests | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"
+          if grep -F "| Tests |" "$GITHUB_STEP_SUMMARY"; then
+            echo "test totals row should not be shown"
+            exit 1
+          fi
           if grep -F "| Usage |" "$GITHUB_STEP_SUMMARY"; then
             echo "top-level usage row should not be shown"
             exit 1
