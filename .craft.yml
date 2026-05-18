@@ -17,3 +17,7 @@ targets:
     id: "@vitest-evals/harness-pi-ai"
     access: public
     includeNames: /^vitest-evals-harness-pi-ai-\d.*\.tgz$/
+  - name: npm
+    id: "@vitest-evals/github-reporter"
+    access: public
+    includeNames: /^vitest-evals-github-reporter-\d.*\.tgz$/
