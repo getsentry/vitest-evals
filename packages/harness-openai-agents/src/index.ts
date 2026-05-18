@@ -36,32 +36,43 @@ import type {
 type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
-  : JsonValue | undefined;
-type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
-  [K in TKey]?: infer TOutput;
-}
-  ? TKey extends keyof TResult
-    ? Record<string, never> extends Pick<TResult, TKey>
-      ? JsonOutput<TOutput> | undefined
-      : JsonOutput<TOutput>
-    : JsonOutput<TOutput> | undefined
-  : JsonValue | undefined;
+  : undefined;
+type ResultFieldOutput<
+  TResult,
+  TKey extends string,
+> = TKey extends keyof TResult
+  ? Record<string, never> extends Pick<TResult, TKey>
+    ? JsonOutput<TResult[TKey]> | undefined
+    : JsonOutput<TResult[TKey]>
+  : undefined;
 
 type OpenAiAgentsRunResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
 >
   ? TOutput
-  : TResult extends { finalOutput?: unknown }
+  : "finalOutput" extends keyof TResult
     ? ResultFieldOutput<TResult, "finalOutput">
-    : TResult extends { output?: unknown }
-      ? ResultFieldOutput<TResult, "output">
-      : undefined;
+    : TResult extends OpenAiAgentsNativeResultLike
+      ? undefined
+      : "output" extends keyof TResult
+        ? ResultFieldOutput<TResult, "output">
+        : undefined;
+
+type OpenAiAgentsNativeResultLike =
+  | { newItems: unknown }
+  | { rawResponses: unknown }
+  | { lastAgent: unknown }
+  | { state: unknown }
+  | { history: unknown }
+  | { inputGuardrailResults: unknown }
+  | { outputGuardrailResults: unknown }
+  | { interruptions: unknown };
 
 type OpenAiAgentsRunnerResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
 >
   ? TOutput
-  : TResult extends { finalOutput?: unknown }
+  : "finalOutput" extends keyof TResult
     ? ResultFieldOutput<TResult, "finalOutput">
     : undefined;
 
@@ -1339,18 +1350,80 @@ function resolveOutput(
     return undefined;
   }
 
-  const finalOutput = toJsonValue(
+  const finalOutput = toOutputValue(
     (result as Record<string, unknown>).finalOutput,
   );
   if (finalOutput !== undefined) {
     return finalOutput;
   }
 
-  if (options.allowOutputField) {
-    const output = toJsonValue((result as { output?: unknown }).output);
+  if (options.allowOutputField && !isOpenAiAgentsRunResult(result)) {
+    const output = toOutputValue((result as { output?: unknown }).output);
     if (output !== undefined) {
       return output;
     }
+  }
+
+  return undefined;
+}
+
+function isOpenAiAgentsRunResult(result: object) {
+  return (
+    "newItems" in result ||
+    "rawResponses" in result ||
+    "lastAgent" in result ||
+    "state" in result ||
+    "history" in result ||
+    "inputGuardrailResults" in result ||
+    "outputGuardrailResults" in result ||
+    "interruptions" in result
+  );
+}
+
+function toOutputValue(value: unknown): JsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const items: JsonValue[] = [];
+    for (const item of value) {
+      const normalized = toOutputValue(item);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      items.push(normalized);
+    }
+    return items;
+  }
+
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return undefined;
+    }
+
+    const record: Record<string, JsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const normalized = toOutputValue(entry);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      record[key] = normalized;
+    }
+    return record;
   }
 
   return undefined;

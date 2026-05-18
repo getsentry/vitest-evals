@@ -116,6 +116,9 @@ The adapter infers:
 - typed `run.output` from explicit `run()` results that return `output`, from
   common AI SDK provider fields such as `object` and `text`, or from a typed
   `output` selector when the app deliberately returns a raw provider result
+- native app output is accepted only when it is already JSON-safe; arbitrary
+  fields, primitive raw results, and non-JSON values require an explicit
+  `output` selector
 - replay/cassette metadata for local tools configured with `toolReplay`
 
 See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in

@@ -115,6 +115,8 @@ The adapter provides:
 - app-facing `run.output` from native `finalOutput`, a custom `run()` result's
   `output`, or an explicit `output` selector; native OpenAI Agents `output`
   items stay in the normalized session trace
+- native app output is accepted only when it is already JSON-safe; non-JSON
+  values require an explicit `output` selector
 - opt-in replay metadata for local function tools configured with `toolReplay`
 
 ## Tool Replay

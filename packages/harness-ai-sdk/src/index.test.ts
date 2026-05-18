@@ -44,6 +44,59 @@ type _AiSdkOptionalRunOutput = Expect<
   >
 >;
 
+const typedObjectOutputHarness = aiSdkHarness({
+  run: async (): Promise<{ object: RefundDecision }> => ({
+    object: {
+      status: "approved",
+    },
+  }),
+});
+type _AiSdkObjectOutput = Expect<
+  Equal<HarnessOutput<typeof typedObjectOutputHarness>, RefundDecision>
+>;
+
+const typedTextOutputHarness = aiSdkHarness({
+  run: async (): Promise<{ text: string }> => ({
+    text: "approved",
+  }),
+});
+type _AiSdkTextOutput = Expect<
+  Equal<HarnessOutput<typeof typedTextOutputHarness>, string>
+>;
+
+const nonJsonRunOutputHarness = aiSdkHarness({
+  run: async (): Promise<{ output: Date }> => ({
+    output: new Date("2026-01-01T00:00:00.000Z"),
+  }),
+});
+type _AiSdkNonJsonRunOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonRunOutputHarness>, undefined>
+>;
+
+const typedAgentOutputHarness = aiSdkHarness({
+  agent: {
+    run: async (_input: string): Promise<{ output: RefundDecision }> => ({
+      output: {
+        status: "approved",
+      },
+    }),
+  },
+});
+type _AiSdkAgentOutput = Expect<
+  Equal<HarnessOutput<typeof typedAgentOutputHarness>, RefundDecision>
+>;
+
+const nonJsonAgentOutputHarness = aiSdkHarness({
+  agent: {
+    generate: async (_input: string): Promise<{ output: Date }> => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  },
+});
+type _AiSdkNonJsonAgentOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonAgentOutputHarness>, undefined>
+>;
+
 const broadResultFieldHarness = aiSdkHarness({
   run: async () => ({
     result: {
@@ -52,7 +105,7 @@ const broadResultFieldHarness = aiSdkHarness({
   }),
 });
 type _AiSdkResultFieldOutput = Expect<
-  Equal<HarnessOutput<typeof broadResultFieldHarness>, JsonValue | undefined>
+  Equal<HarnessOutput<typeof broadResultFieldHarness>, undefined>
 >;
 
 let replayDir: string | undefined;
@@ -511,6 +564,41 @@ test("supports run as the custom entrypoint", async () => {
     status: "approved",
     input: "Refund invoice inv_123",
   });
+});
+
+test("does not infer app output from arbitrary custom result shapes", async () => {
+  const objectHarness = aiSdkHarness({
+    run: async () => ({
+      decision: {
+        status: "approved",
+      },
+    }),
+  });
+  const primitiveHarness = aiSdkHarness({
+    run: async () => "approved",
+  });
+  const nonJsonOutputHarness = aiSdkHarness({
+    run: async () => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  });
+
+  const objectResult = await objectHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+  const primitiveResult = await primitiveHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+  const nonJsonOutputResult = await nonJsonOutputHarness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(objectResult.output).toBeUndefined();
+  expect(primitiveResult.output).toBeUndefined();
+  expect(nonJsonOutputResult.output).toBeUndefined();
 });
 
 test("supports a typed output selector with inferred diagnostics", async () => {
@@ -1209,11 +1297,10 @@ test("normalizes arrays and empty objects without dropping positions", async () 
   const harness = aiSdkHarness({
     run: async () => ({
       object: {
-        values: [1, undefined, { skipped: undefined }, 3],
+        values: [1, null, {}, 3],
         empty: {},
         nested: {
           kept: "yes",
-          skipped: undefined,
         },
       },
       steps: [

@@ -47,16 +47,15 @@ import type {
 type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
-  : JsonValue | undefined;
-type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
-  [K in TKey]?: infer TOutput;
-}
-  ? TKey extends keyof TResult
-    ? Record<string, never> extends Pick<TResult, TKey>
-      ? JsonOutput<TOutput> | undefined
-      : JsonOutput<TOutput>
-    : JsonOutput<TOutput> | undefined
-  : JsonValue | undefined;
+  : undefined;
+type ResultFieldOutput<
+  TResult,
+  TKey extends string,
+> = TKey extends keyof TResult
+  ? Record<string, never> extends Pick<TResult, TKey>
+    ? JsonOutput<TResult[TKey]> | undefined
+    : JsonOutput<TResult[TKey]>
+  : undefined;
 type AgentSource<
   TAgent,
   TInput = string,
@@ -90,8 +89,6 @@ type AiSdkLikeResult = {
   totalUsage?: LanguageModelUsage;
   output?: unknown;
   object?: unknown;
-  experimental_output?: unknown;
-  result?: unknown;
   text?: string;
   session?: NormalizedSession;
   trace?: NormalizedSession;
@@ -100,15 +97,33 @@ type AiSdkLikeResult = {
 
 type AiSdkResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
   ? TOutput
-  : TResult extends { output?: unknown }
+  : "output" extends keyof TResult
     ? ResultFieldOutput<TResult, "output">
-    : TResult extends { object?: unknown }
+    : "object" extends keyof TResult
       ? ResultFieldOutput<TResult, "object">
-      : TResult extends { experimental_output?: unknown }
-        ? ResultFieldOutput<TResult, "experimental_output">
-        : TResult extends { text?: unknown }
-          ? ResultFieldOutput<TResult, "text">
-          : JsonValue | undefined;
+      : "text" extends keyof TResult
+        ? ResultFieldOutput<TResult, "text">
+        : undefined;
+type AiSdkAgentResult<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TTools extends AiSdkToolset<TInput, TMetadata>,
+> = TAgent extends {
+  run: (
+    input: TInput,
+    runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
+  ) => MaybePromise<infer TResult>;
+}
+  ? Awaited<TResult>
+  : TAgent extends {
+        generate: (
+          input: TInput,
+          runtime: AiSdkRuntime<TTools, TInput, TMetadata>,
+        ) => MaybePromise<infer TResult>;
+      }
+    ? Awaited<TResult>
+    : unknown;
 
 /** Context passed to instrumented AI SDK tool executions. */
 export interface AiSdkToolContext<
@@ -435,7 +450,11 @@ export function aiSdkHarness<
     TMetadata,
     TTools
   >,
-): Harness<TInput, JsonValue | undefined, TMetadata>;
+): Harness<
+  TInput,
+  AiSdkResultOutput<AiSdkAgentResult<TAgent, TInput, TMetadata, TTools>>,
+  TMetadata
+>;
 export function aiSdkHarness<
   TAgent = unknown,
   TInput = string,
@@ -951,22 +970,66 @@ async function executeToolWithReplay<
 
 function resolveOutput(result: unknown): JsonValue | undefined {
   if (!result || typeof result !== "object") {
-    return toJsonValue(result);
+    return undefined;
   }
 
-  const candidates = [
-    "output",
-    "object",
-    "experimental_output",
-    "text",
-  ] satisfies string[];
+  const candidates = ["output", "object", "text"] satisfies string[];
 
   for (const key of candidates) {
     const value = (result as Record<string, unknown>)[key];
-    const normalized = toJsonValue(value);
+    const normalized = toOutputValue(value);
     if (normalized !== undefined) {
       return normalized;
     }
+  }
+
+  return undefined;
+}
+
+function toOutputValue(value: unknown): JsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const items: JsonValue[] = [];
+    for (const item of value) {
+      const normalized = toOutputValue(item);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      items.push(normalized);
+    }
+    return items;
+  }
+
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return undefined;
+    }
+
+    const record: Record<string, JsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const normalized = toOutputValue(entry);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      record[key] = normalized;
+    }
+    return record;
   }
 
   return undefined;

@@ -65,6 +65,20 @@ type _OpenAiRunnerFinalOutput = Expect<
   Equal<HarnessOutput<typeof typedRunnerFinalOutputHarness>, Classification>
 >;
 
+const nonJsonRunnerFinalOutputHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  runner: {
+    run: async (): Promise<{ finalOutput: Date }> => ({
+      finalOutput: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  },
+});
+type _OpenAiNonJsonRunnerFinalOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonRunnerFinalOutputHarness>, undefined>
+>;
+
 const runnerOutputItemsHarness = openaiAgentsHarness({
   agent: {
     name: "classifier",
@@ -77,6 +91,22 @@ const runnerOutputItemsHarness = openaiAgentsHarness({
 });
 type _OpenAiRunnerOutputItems = Expect<
   Equal<HarnessOutput<typeof runnerOutputItemsHarness>, undefined>
+>;
+
+const customRunNativeItemsHarness = openaiAgentsHarness({
+  agent: {
+    name: "classifier",
+  },
+  run: async (): Promise<{
+    output: JsonValue[];
+    state: Record<string, JsonValue>;
+  }> => ({
+    output: [],
+    state: {},
+  }),
+});
+type _OpenAiCustomRunNativeItems = Expect<
+  Equal<HarnessOutput<typeof customRunNativeItemsHarness>, undefined>
 >;
 
 const broadDecisionFieldHarness = openaiAgentsHarness({
@@ -312,6 +342,60 @@ test("does not use OpenAI Agents output items as app output", async () => {
       }),
     ]),
   );
+});
+
+test("does not use custom run raw OpenAI Agents output items as app output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    run: vi.fn(async () => ({
+      output: runResult.newItems,
+      state: runResult.state,
+      lastAgent: runResult.lastAgent,
+    })),
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-items",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
+  expect(result.session.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: '{"status":"classified","category":"bourbon"}',
+      }),
+    ]),
+  );
+});
+
+test("does not coerce non-JSON OpenAI Agents final output", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: new Date("2026-01-01T00:00:00.000Z"),
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "native-final-output",
+    }),
+  );
+
+  expect(result.output).toBeUndefined();
 });
 
 test("supports custom app output mapping", async () => {

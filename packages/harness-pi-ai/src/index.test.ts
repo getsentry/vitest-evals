@@ -48,6 +48,42 @@ type _PiAiOptionalRunOutput = Expect<
   >
 >;
 
+const nonJsonRunOutputHarness = piAiHarness({
+  agent: {
+    id: "refund-agent",
+  },
+  run: async (): Promise<{ output: Date }> => ({
+    output: new Date("2026-01-01T00:00:00.000Z"),
+  }),
+});
+type _PiAiNonJsonRunOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonRunOutputHarness>, undefined>
+>;
+
+const typedAgentOutputHarness = piAiHarness({
+  agent: {
+    run: async (_input: string): Promise<{ output: RefundDecision }> => ({
+      output: {
+        status: "approved",
+      },
+    }),
+  },
+});
+type _PiAiAgentOutput = Expect<
+  Equal<HarnessOutput<typeof typedAgentOutputHarness>, RefundDecision>
+>;
+
+const nonJsonAgentOutputHarness = piAiHarness({
+  agent: {
+    run: async (_input: string): Promise<{ output: Date }> => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  },
+});
+type _PiAiNonJsonAgentOutput = Expect<
+  Equal<HarnessOutput<typeof nonJsonAgentOutputHarness>, undefined>
+>;
+
 const broadDecisionFieldHarness = piAiHarness({
   agent: {
     id: "refund-agent",
@@ -59,7 +95,7 @@ const broadDecisionFieldHarness = piAiHarness({
   }),
 });
 type _PiAiDecisionFieldOutput = Expect<
-  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, JsonValue | undefined>
+  Equal<HarnessOutput<typeof broadDecisionFieldHarness>, undefined>
 >;
 
 const agentFactory = vi.fn(() => ({
@@ -183,6 +219,55 @@ test("accepts agent as a factory", async () => {
     preparedInput: "Refund invoice inv_123",
     agentId: "refund-agent",
   });
+});
+
+test("does not infer app output from arbitrary custom result shapes", async () => {
+  const objectHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      decision: {
+        status: "approved",
+      },
+    }),
+  });
+  const primitiveHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => "approved",
+  });
+  const nonJsonOutputHarness = piAiHarness({
+    agent: {
+      id: "refund-agent",
+    },
+    run: async () => ({
+      output: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  });
+  const context = {
+    metadata: {},
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+
+  const objectResult = await objectHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+  const primitiveResult = await primitiveHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+  const nonJsonOutputResult = await nonJsonOutputHarness.run(
+    "Refund invoice inv_123",
+    context,
+  );
+
+  expect(objectResult.output).toBeUndefined();
+  expect(primitiveResult.output).toBeUndefined();
+  expect(nonJsonOutputResult.output).toBeUndefined();
 });
 
 describeEval(

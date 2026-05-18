@@ -127,6 +127,9 @@ The adapter provides:
 - a runtime/tool injection seam for an existing agent
 - normalized session capture from emitted events and wrapped tool calls
 - usage capture plus typed app output from `run()` results that return `output`
+- native app output is accepted only when it is already JSON-safe; arbitrary
+  fields, primitive raw results, and non-JSON values require an explicit
+  `output` selector
 - opt-in tool replay/recording from harness-level `toolReplay`
 
 See the workspace demo in `apps/demo-pi`.

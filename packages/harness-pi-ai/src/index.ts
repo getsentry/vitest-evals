@@ -33,16 +33,15 @@ import type {
 type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
-  : JsonValue | undefined;
-type ResultFieldOutput<TResult, TKey extends string> = TResult extends {
-  [K in TKey]?: infer TOutput;
-}
-  ? TKey extends keyof TResult
-    ? Record<string, never> extends Pick<TResult, TKey>
-      ? JsonOutput<TOutput> | undefined
-      : JsonOutput<TOutput>
-    : JsonOutput<TOutput> | undefined
-  : JsonValue | undefined;
+  : undefined;
+type ResultFieldOutput<
+  TResult,
+  TKey extends string,
+> = TKey extends keyof TResult
+  ? Record<string, never> extends Pick<TResult, TKey>
+    ? JsonOutput<TResult[TKey]> | undefined
+    : JsonOutput<TResult[TKey]>
+  : undefined;
 type AgentSource<
   TAgent,
   TInput = string,
@@ -72,9 +71,22 @@ type PiAgentToolLike<
 
 type PiAiResultOutput<TResult> = TResult extends HarnessRun<infer TOutput>
   ? TOutput
-  : TResult extends { output?: unknown }
+  : "output" extends keyof TResult
     ? ResultFieldOutput<TResult, "output">
-    : JsonValue | undefined;
+    : undefined;
+type PiAiAgentResult<
+  TAgent,
+  TInput,
+  TMetadata extends HarnessMetadata,
+  TTools extends PiAiToolset<TInput, TMetadata>,
+> = TAgent extends {
+  run: (
+    input: TInput,
+    runtime: PiAiRuntime<TTools, TInput, TMetadata>,
+  ) => MaybePromise<infer TResult>;
+}
+  ? Awaited<TResult>
+  : unknown;
 
 const ORIGINAL_NATIVE_EXECUTE = Symbol("vitest-evals.originalNativeExecute");
 
@@ -594,7 +606,11 @@ export function piAiHarness<
     TMetadata,
     TTools
   >,
-): Harness<TInput, JsonValue | undefined, TMetadata>;
+): Harness<
+  TInput,
+  PiAiResultOutput<PiAiAgentResult<TAgent, TInput, TMetadata, TTools>>,
+  TMetadata
+>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -618,7 +634,18 @@ export function piAiHarness<
     TInput,
     TMetadata
   >,
-): Harness<TInput, JsonValue | undefined, TMetadata>;
+): Harness<
+  TInput,
+  PiAiResultOutput<
+    PiAiAgentResult<
+      TAgent,
+      TInput,
+      TMetadata,
+      InferredPiAiToolset<TInput, TMetadata>
+    >
+  >,
+  TMetadata
+>;
 export function piAiHarness<
   TAgent,
   TInput = string,
@@ -1528,17 +1555,66 @@ function createRuntime<
 
 function resolveOutput(result: unknown): JsonValue | undefined {
   if (!result || typeof result !== "object") {
-    return toJsonValue(result);
+    return undefined;
   }
 
   const candidates = ["output"] satisfies string[];
 
   for (const key of candidates) {
     const value = (result as Record<string, unknown>)[key];
-    const normalized = toJsonValue(value);
+    const normalized = toOutputValue(value);
     if (normalized !== undefined) {
       return normalized;
     }
+  }
+
+  return undefined;
+}
+
+function toOutputValue(value: unknown): JsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const items: JsonValue[] = [];
+    for (const item of value) {
+      const normalized = toOutputValue(item);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      items.push(normalized);
+    }
+    return items;
+  }
+
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return undefined;
+    }
+
+    const record: Record<string, JsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const normalized = toOutputValue(entry);
+      if (normalized === undefined) {
+        return undefined;
+      }
+      record[key] = normalized;
+    }
+    return record;
   }
 
   return undefined;
