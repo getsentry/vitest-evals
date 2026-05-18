@@ -1,86 +1,74 @@
 # @vitest-evals/github-reporter
 
-GitHub Actions reporting for `vitest-evals` runs.
+GitHub Actions reporting internals for `vitest-evals` runs.
 
-This package reads Vitest's built-in JSON report. Vitest JSON includes each
-test's `meta` field, which is where `vitest-evals` records harness runs,
-scores, judge rationales, usage, and tool calls.
+The user-facing API is the native GitHub Action:
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results.json
+```
+
+The action reads Vitest's built-in JSON report. Vitest JSON includes each test's
+`meta` field, which is where `vitest-evals` records harness runs, scores, judge
+rationales, usage, and tool calls.
 
 JUnit XML can still be emitted for CI systems that expect it, but it is not the
 source of truth for eval reporting.
 
-## Usage
-
-```sh
-pnpm exec vitest run apps packages \
-  --config=./vitest.config.ts \
-  --reporter=vitest-evals/reporter \
-  --reporter=json \
-  --outputFile.json=vitest-results.json
-
-pnpm exec vitest-evals-github-report
-```
-
-In GitHub Actions, the reporter writes to `GITHUB_STEP_SUMMARY` when available
-and emits terse workflow-command annotations for failed evals.
-
 ## Check Run
-
-To publish a separate `vitest-evals` Check Run, opt in explicitly:
-
-```sh
-GITHUB_TOKEN=... pnpm exec vitest-evals-github-report --check-run
-```
-
-The Check Run path requires the normal GitHub Actions environment plus a token
-with `checks: write`. If configuration or permission is missing, the command
-keeps the job summary and workflow annotations and warns instead of failing.
 
 ```yaml
 permissions:
   contents: read
   checks: write
+
+steps:
+  - uses: getsentry/vitest-evals@v0
+    if: always()
+    with:
+      results: vitest-results.json
+      publish-check: true
 ```
 
-## Recommended Workflow
+If configuration or permission is missing, the action keeps the job summary and
+workflow annotations and warns instead of failing.
+
+## Sharded Reports
+
+Upload one JSON artifact per shard, then publish one combined report from a
+final reducer job:
 
 ```yaml
-jobs:
-  evals:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install
+- uses: actions/download-artifact@v4
+  with:
+    pattern: vitest-evals-*
+    path: eval-results
+    merge-multiple: true
 
-      - name: Run evals
-        run: |
-          pnpm exec vitest run apps packages \
-            --config=./vitest.config.ts \
-            --reporter=vitest-evals/reporter \
-            --reporter=json \
-            --outputFile.json=vitest-results.json
-
-      - name: Publish eval report
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          pnpm exec vitest-evals-github-report --check-run
+- uses: getsentry/vitest-evals@v0
+  with:
+    results: eval-results/*.json
+    publish-check: true
 ```
 
-## Output Rules
+## Inputs
 
-- Job summary is the primary human-readable report.
-- Failure lists use numbered key/value blocks, not wide tables.
-- Long judge reasons live inside `<details>` blocks and fenced text.
-- Workflow annotations include only the first useful failure line.
-- Check Run annotations include richer `raw_details` when available.
-- Output is plain ASCII markdown.
+| Input | Default | Description |
+| --- | --- | --- |
+| `results` | `vitest-results.json` | Vitest JSON result files. Supports paths, `*` and `**` globs, and newline-separated entries. |
+| `publish-summary` | `true` | Write a GitHub Actions job summary. |
+| `publish-annotations` | `true` | Emit GitHub workflow annotations for failed evals. |
+| `publish-check` | `false` | Publish one GitHub Check Run for the combined report. |
+| `check-name` | `vitest-evals` | Name of the GitHub Check Run. |
+| `github-token` | `${{ github.token }}` | Token used for Check Run publishing. |
+| `fail-on-failures` | `false` | Fail the action when the combined report failed. |
+| `max-annotations` | unset | Maximum number of failure annotations to publish. Check Run annotations are capped at 50 by GitHub. |
+| `max-failures` | unset | Maximum number of detailed failures to include in summaries and checks. |
+
+## CLI
+
+The package still ships `vitest-evals-github-report` for local debugging and
+backward compatibility. GitHub workflows should use the native action.

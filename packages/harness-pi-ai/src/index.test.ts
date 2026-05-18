@@ -1019,6 +1019,50 @@ test("applies output selectors to HarnessRun-shaped results", async () => {
   expect(result.usage.totalTokens).toBe(7);
 });
 
+test("moves provider-specific usage fields into metadata", async () => {
+  const normalizedHarness = piAiHarness({
+    agent: () => ({ id: "refund-agent" }),
+    run: async () => ({
+      output: {
+        status: "approved",
+      },
+      usage: {
+        provider: "pi-ai",
+        model: "refund-model",
+        totalTokens: 7,
+        toolCalls: 0,
+        retries: 1,
+        costUSD: 20,
+        estimatedCost: 20,
+        metadata: {
+          cacheReadTokens: 3,
+        },
+      },
+    }),
+  });
+
+  const result = await normalizedHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.usage).toMatchObject({
+    provider: "pi-ai",
+    model: "refund-model",
+    totalTokens: 7,
+    toolCalls: 0,
+    retries: 1,
+    metadata: {
+      cacheReadTokens: 3,
+      costUSD: 20,
+      estimatedCost: 20,
+    },
+  });
+  expect("costUSD" in result.usage).toBe(false);
+  expect("estimatedCost" in result.usage).toBe(false);
+});
+
 test("attaches a partial run when the harness errors", async () => {
   const erroringHarness = piAiHarness({
     agent: () => ({ id: "refund-agent" }),

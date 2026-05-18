@@ -208,7 +208,6 @@ function getUsage(value: Record<string, unknown>): UsageSummary {
     outputTokens: numberField(value.outputTokens),
     reasoningTokens: numberField(value.reasoningTokens),
     totalTokens: numberField(value.totalTokens),
-    estimatedCost: numberField(value.estimatedCost),
     toolCalls: numberField(value.toolCalls),
   };
 }
@@ -304,7 +303,6 @@ function sumUsage(cases: EvalCase[]) {
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
-    estimatedCost: 0,
     toolCalls: 0,
   };
 
@@ -318,7 +316,6 @@ function sumUsage(cases: EvalCase[]) {
       (caseUsage?.inputTokens ?? 0) +
         (caseUsage?.outputTokens ?? 0) +
         (caseUsage?.reasoningTokens ?? 0);
-    usage.estimatedCost += caseUsage?.estimatedCost ?? 0;
     usage.toolCalls +=
       caseUsage?.toolCalls ?? testCase.harness?.toolCalls.length ?? 0;
   }

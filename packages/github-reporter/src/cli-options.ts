@@ -1,9 +1,10 @@
 export type CliOptions = {
-  jsonPath: string;
+  resultPatterns: string[];
   summaryPath?: string;
   summaryEnabled: boolean;
   annotations: boolean;
   checkRun: boolean;
+  failOnFailures: boolean;
   failOnCheckError: boolean;
   maxAnnotations?: number;
   maxFailures?: number;
@@ -16,8 +17,8 @@ export type CliOptions = {
   help: boolean;
 };
 
-type MutableCliOptions = Omit<CliOptions, "jsonPath"> & {
-  jsonPath?: string;
+type MutableCliOptions = Omit<CliOptions, "resultPatterns"> & {
+  resultPatterns: string[];
 };
 
 /** Parses GitHub reporter CLI arguments, with explicit arguments taking precedence over environment defaults. */
@@ -30,7 +31,9 @@ export function parseCliArgs(
     summaryEnabled: true,
     annotations: env.GITHUB_ACTIONS === "true",
     checkRun: false,
+    failOnFailures: false,
     failOnCheckError: false,
+    resultPatterns: [],
     help: false,
   };
 
@@ -38,7 +41,7 @@ export function parseCliArgs(
     const arg = args[index];
     switch (arg) {
       case "--json":
-        options.jsonPath = readValue(args, ++index, arg);
+        options.resultPatterns.push(readValue(args, ++index, arg));
         break;
       case "--summary":
         options.summaryPath = readValue(args, ++index, arg);
@@ -55,6 +58,9 @@ export function parseCliArgs(
         break;
       case "--check-run":
         options.checkRun = true;
+        break;
+      case "--fail-on-failures":
+        options.failOnFailures = true;
         break;
       case "--fail-on-check-error":
         options.failOnCheckError = true;
@@ -89,8 +95,8 @@ export function parseCliArgs(
         options.help = true;
         return withDefaultJsonPath(options, env);
       default:
-        if (!arg.startsWith("-") && !options.jsonPath) {
-          options.jsonPath = arg;
+        if (!arg.startsWith("-")) {
+          options.resultPatterns.push(arg);
           break;
         }
         throw new Error(`Unknown argument: ${arg}`);
@@ -106,8 +112,10 @@ function withDefaultJsonPath(
 ): CliOptions {
   return {
     ...options,
-    jsonPath:
-      options.jsonPath || env.VITEST_EVALS_JSON_REPORT || "vitest-results.json",
+    resultPatterns:
+      options.resultPatterns.length > 0
+        ? options.resultPatterns
+        : [env.VITEST_EVALS_JSON_REPORT || "vitest-results.json"],
   };
 }
 
@@ -120,9 +128,9 @@ function readValue(args: string[], index: number, flag: string) {
 }
 
 function readInteger(args: string[], index: number, flag: string) {
-  const value = Number.parseInt(readValue(args, index, flag), 10);
-  if (!Number.isFinite(value) || value < 0) {
+  const rawValue = readValue(args, index, flag);
+  if (!/^\d+$/.test(rawValue)) {
     throw new Error(`Invalid integer for ${flag}`);
   }
-  return value;
+  return Number(rawValue);
 }

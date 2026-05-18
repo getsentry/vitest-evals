@@ -66,20 +66,28 @@ The JSON report preserves `task.meta`, including eval scores, harness runs,
 usage, and tool calls. JUnit can still be emitted alongside it for CI systems
 that expect XML.
 
-```sh
-pnpm exec vitest run apps packages \
-  --config=./vitest.config.ts \
-  --reporter=vitest-evals/reporter \
-  --reporter=json \
-  --outputFile.json=vitest-results.json
+```yaml
+steps:
+  - name: Run evals
+    run: |
+      pnpm exec vitest run apps packages \
+        --config=./vitest.config.ts \
+        --reporter=vitest-evals/reporter \
+        --reporter=json \
+        --outputFile.json=vitest-results.json
 
-pnpm exec vitest-evals-github-report --check-run
+  - uses: getsentry/vitest-evals@v0
+    if: always()
+    with:
+      results: vitest-results.json
+      publish-check: true
 ```
 
-The reporter writes a plain ASCII job summary through `GITHUB_STEP_SUMMARY`,
-emits terse annotations for failed evals, and publishes a separate Check Run
-only when `--check-run` is set, `GITHUB_TOKEN` is available, and `checks: write`
-permission is configured.
+The reporter action writes a plain ASCII job summary through
+`GITHUB_STEP_SUMMARY`, emits terse annotations for failed evals, and publishes a
+separate Check Run when `publish-check` is enabled and `checks: write`
+permission is configured. It can also reduce sharded eval JSON artifacts into
+one combined report.
 See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow.
 
 ## Releases
@@ -93,6 +101,13 @@ For a preview release that should not become the main stable version, set
 `bump=major` produces `1.0.0-beta.0`; running prerelease again from
 `1.0.0-beta.0` produces `1.0.0-beta.1`. Craft publishes npm prereleases under a
 prerelease dist-tag so the stable `latest` line is not moved.
+
+Release tags are updated after publish with the bundled `github-reporter`
+action so workflows can use `getsentry/vitest-evals@v0`. The release workflow
+keeps `vX.Y.Z-src` on the source commit for Craft's next changelog baseline,
+then moves `vX.Y.Z` and the stable `vX` tag to the bundled action commit. The
+Craft GitHub target creates the release but is filtered away from package
+artifacts so it does not upload npm package contents as release assets.
 
 ## Example
 

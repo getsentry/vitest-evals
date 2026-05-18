@@ -62,8 +62,10 @@ export function buildCheckAnnotations(
   report: EvalReport,
   options: AnnotationOptions = {},
 ): CheckAnnotation[] {
-  const maxAnnotations =
-    options.maxAnnotations ?? DEFAULT_MAX_CHECK_ANNOTATIONS;
+  const maxAnnotations = Math.min(
+    options.maxAnnotations ?? DEFAULT_MAX_CHECK_ANNOTATIONS,
+    DEFAULT_MAX_CHECK_ANNOTATIONS,
+  );
 
   return report.failures
     .filter(hasAnnotationLocation)

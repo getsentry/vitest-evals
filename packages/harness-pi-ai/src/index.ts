@@ -14,6 +14,7 @@ import {
   attachHarnessRunToError,
   isHarnessRun,
   isNormalizedSession,
+  normalizeMetadata,
   normalizeContent,
   resolveHarnessRunErrors,
   serializeError,
@@ -1764,16 +1765,74 @@ function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {
     (result as Record<string, unknown>).usage ??
     (result as Record<string, unknown>).metrics;
 
-  const usage =
-    usageValue && typeof usageValue === "object"
-      ? ({ ...(usageValue as Record<string, unknown>) } as UsageSummary)
-      : {};
+  if (
+    !usageValue ||
+    typeof usageValue !== "object" ||
+    Array.isArray(usageValue)
+  ) {
+    return toolCallCount > 0 ? { toolCalls: toolCallCount } : {};
+  }
+
+  const usageRecord = usageValue as Record<string, unknown>;
+  const usage: UsageSummary = {
+    provider: stringField(usageRecord.provider),
+    model: stringField(usageRecord.model),
+    inputTokens: numberField(usageRecord.inputTokens),
+    outputTokens: numberField(usageRecord.outputTokens),
+    reasoningTokens: numberField(usageRecord.reasoningTokens),
+    totalTokens: numberField(usageRecord.totalTokens),
+    toolCalls: numberField(usageRecord.toolCalls),
+    retries: numberField(usageRecord.retries),
+    metadata: collectUsageMetadata(usageRecord),
+  };
 
   if (usage.toolCalls === undefined && toolCallCount > 0) {
     usage.toolCalls = toolCallCount;
   }
 
   return usage;
+}
+
+function collectUsageMetadata(usage: Record<string, unknown>) {
+  const metadata: Record<string, unknown> = {};
+  const nestedMetadata = usage.metadata;
+  if (
+    nestedMetadata &&
+    typeof nestedMetadata === "object" &&
+    !Array.isArray(nestedMetadata)
+  ) {
+    Object.assign(metadata, nestedMetadata);
+  }
+
+  for (const [key, value] of Object.entries(usage)) {
+    if (key === "metadata" || USAGE_SUMMARY_KEYS.has(key)) {
+      continue;
+    }
+    metadata[key] = value;
+  }
+
+  return normalizeMetadata(metadata);
+}
+
+const USAGE_SUMMARY_KEYS = new Set([
+  "provider",
+  "model",
+  "inputTokens",
+  "outputTokens",
+  "reasoningTokens",
+  "totalTokens",
+  "toolCalls",
+  "retries",
+]);
+
+function stringField(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberField(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function resolveSession(

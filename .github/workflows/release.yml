@@ -46,7 +46,7 @@ jobs:
       with:
         app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
         private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v2
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       with:
         token: ${{ steps.token.outputs.token }}
         fetch-depth: 0
@@ -55,7 +55,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
-        node-version: "20"
+        node-version: "24"
 
     - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
       name: Install pnpm
@@ -76,6 +76,52 @@ jobs:
           "$CURRENT" "$BUMP" "$PRERELEASE" "$PRERELEASE_ID")
         echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
         echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+    # Craft uses `git describe --tags` to find the previous version. Published
+    # action tags point to bundled artifact commits, so the previous release
+    # must leave a reachable source tag for the next changelog baseline.
+    - name: Verify previous source tag
+      run: |
+        set -euo pipefail
+        VERSION="${{ steps.version.outputs.current }}"
+        SOURCE_TAG="v${VERSION}-src"
+        CURRENT_TAG="v${VERSION}"
+        DESCRIBED_TAG="$(git describe --tags --abbrev=0)"
+        DESCRIBED_SHA="$(git rev-parse "$DESCRIBED_TAG^{commit}")"
+
+        if git rev-parse "$SOURCE_TAG^{commit}" >/dev/null 2>&1; then
+          SOURCE_SHA="$(git rev-parse "$SOURCE_TAG^{commit}")"
+
+          if [ "$DESCRIBED_SHA" != "$SOURCE_SHA" ]; then
+            echo "::error::Expected git describe to resolve to $SOURCE_TAG ($SOURCE_SHA), got $DESCRIBED_TAG ($DESCRIBED_SHA)"
+            exit 1
+          fi
+
+          if ! git rev-parse "$CURRENT_TAG^{commit}" >/dev/null 2>&1; then
+            echo "::error::Missing bundled action tag $CURRENT_TAG."
+            exit 1
+          fi
+
+          if ! git cat-file -e "$CURRENT_TAG:github-reporter/dist/action/index.js" 2>/dev/null; then
+            echo "::error::Bundled action tag $CURRENT_TAG is missing github-reporter/dist/action/index.js."
+            exit 1
+          fi
+
+          echo "Craft previous-release baseline: $SOURCE_TAG ($SOURCE_SHA)"
+          exit 0
+        fi
+
+        if git tag --list "v*-src" | grep -q .; then
+          echo "::error::Missing source tag $SOURCE_TAG, but prior action source tags exist. The previous action release did not finalize its source tag."
+          exit 1
+        fi
+
+        if git tag --list "v*" | grep -q .; then
+          echo "::error::Missing source tag $SOURCE_TAG, but v-prefixed release tags already exist. Create the missing source tag before preparing another action release."
+          exit 1
+        fi
+
+        echo "No action source tags found; allowing first action-bundle release from existing baseline $DESCRIBED_TAG ($DESCRIBED_SHA)."
 
     - name: Prepare release
       uses: getsentry/action-prepare-release@v1

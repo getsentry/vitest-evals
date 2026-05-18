@@ -78,7 +78,11 @@ surfaces.
 - Legacy changes should stay under `src/legacy/...`.
 - New examples should show the actual runtime seam, not placeholders.
 - Normalized session data must remain JSON-serializable.
+- `UsageSummary` should stay limited to stable usage units such as tokens, tools, retries, provider, and model. Provider-specific cost estimates belong in `usage.metadata`, not first-class fields.
 - Reporter changes require reporter tests.
+- GitHub reporting is action-first; docs should show `uses: getsentry/vitest-evals@v0`, not CLI commands.
+- Sharded eval reporting uses distinct JSON artifacts per matrix job and one reducer job that publishes the combined action report.
+- Root GitHub Action releases keep source and bundled tags separate: Craft publishes the source release, `vX.Y.Z-src` preserves the source baseline, and `vX`/`vX.Y.Z` point at the bundled action commit. Keep the Craft `github` target filtered away from package artifacts.
 - Harness changes require harness package tests.
 - Legacy scorer changes require legacy tests.
 
