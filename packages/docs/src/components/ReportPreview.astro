@@ -27,11 +27,11 @@
 
 <style>
   .report-preview {
-    border: 1px solid rgba(225, 236, 226, 0.16);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     background:
-      linear-gradient(180deg, rgba(21, 26, 22, 0.94), rgba(7, 10, 8, 0.98)),
-      #070a08;
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(0, 0, 0, 0.98)),
+      #000;
     padding: 1rem;
     font-family: var(--font-mono);
     box-shadow:
@@ -73,7 +73,7 @@
   }
 
   .report-status.passed {
-    background: rgba(110, 231, 135, 0.15);
+    background: rgba(66, 245, 123, 0.14);
     color: var(--green);
   }
 
@@ -117,11 +117,11 @@
   }
 
   .tool.lookup {
-    border-color: rgba(215, 181, 104, 0.45);
+    border-color: var(--border-strong);
   }
 
   .tool.refund {
-    border-color: rgba(110, 231, 135, 0.38);
+    border-color: var(--border-strong);
   }
 
   .report-json {

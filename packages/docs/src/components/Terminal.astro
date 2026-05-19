@@ -29,7 +29,12 @@ const { title, code, copyText = code, lang = "plaintext" } = Astro.props;
   <div class="terminal-body copy-source">
     {
       code ? (
-        <Code code={code} lang={lang} theme="vitesse-black" wrap={false} />
+        <Code
+          code={code}
+          lang={lang}
+          theme="github-dark-high-contrast"
+          wrap={false}
+        />
       ) : (
         <slot />
       )

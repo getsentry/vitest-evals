@@ -436,50 +436,160 @@ function entriesFor(names: string[]) {
     .filter(Boolean) as TypeDocReflection[];
 }
 
-const sidebarLinks = renderedGroups.map((group) => ({
-  href: `#${group.id}`,
-  label: group.label,
+const coreApiItems = [
+  {
+    name: "describeEval",
+    summary:
+      "Define a Vitest suite that owns one harness and exposes the eval-aware it/run fixtures.",
+    example: `describeEval("refund agent", {
+  harness: refundHarness,
+}, (it) => {
+  it("approves a refund", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+    expect(result.output.status).toBe("approved");
+  });
+});`,
+  },
+  {
+    name: "createHarness",
+    summary:
+      "Adapt application code that returns JSON-safe output, tool calls, usage, or artifacts.",
+    example: `export const refundHarness = createHarness({
+  name: "refund-agent",
+  run: async ({ input }) => ({
+    output: await runRefundFlow(input),
+  }),
+});`,
+  },
+  {
+    name: "createJudge",
+    summary:
+      "Create a named judge for domain-specific scoring, rubric checks, or model-backed assessment.",
+    example: `export const RefundStatusJudge = createJudge(
+  "RefundStatusJudge",
+  async ({ output, metadata }) => ({
+    score: output.status === metadata.expected.status ? 1 : 0,
+  }),
+);`,
+  },
+  {
+    name: "ToolCallJudge",
+    summary:
+      "Check that the normalized session contains the expected tool calls, optionally in order.",
+    example: `const result = await run("Refund invoice inv_123", {
+  metadata: {
+    expectedTools: ["lookupInvoice", "createRefund"],
+  },
+});
+
+await expect(result).toSatisfyJudge(ToolCallJudge({ ordered: true }));`,
+  },
+  {
+    name: "StructuredOutputJudge",
+    summary:
+      "Compare structured fields from result.output against expected values in metadata or matcher options.",
+    example: `const result = await run("Refund invoice inv_123", {
+  metadata: {
+    expected: { status: "approved" },
+  },
+});
+
+await expect(result).toSatisfyJudge(StructuredOutputJudge());`,
+  },
+  {
+    name: "toolCalls",
+    summary:
+      "Flatten normalized tool-call messages from a run session for ordinary Vitest assertions.",
+    example: `const result = await run("Refund invoice inv_123");
+
+expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+  "lookupInvoice",
+  "createRefund",
+]);`,
+  },
+].map((item) => ({
+  ...item,
+  href: `#${slug(item.name)}`,
 }));
+
+const sidebarLinks = [
+  { href: "#core-api", label: "Core API" },
+  ...renderedGroups.map((group) => ({
+    href: `#${group.id}`,
+    label: group.label,
+  })),
+];
 ---
 
 <Base title="API" description="Generated TypeDoc reference for the public vitest-evals root API.">
   <DocsPageShell links={sidebarLinks}>
     <p class="eyebrow">Reference</p>
-    <h1>Public API</h1>
+    <h1>API Reference</h1>
     <p class="lead api-lead">
       Generated from source JSDoc and TypeDoc metadata for the public
-      <code>vitest-evals</code> root exports. Use the grouped sections below
-      for signatures, examples, parameters, overloads, and member
-      documentation.
+      <code>vitest-evals</code> root exports. Start with the common exports,
+      then jump into the generated groups when you need signatures, overloads,
+      or member details.
     </p>
-    <div class="reference-guide" aria-label="How to use this reference">
-      <div>
-        <span>First</span>
-        <strong>Scan Core API</strong>
-        <p>
-          These are the exports most eval suites use directly.
-        </p>
+    <section class="reference-guide" aria-label="How to use this reference">
+      <h2>How To Read This Page</h2>
+      <ol>
+        <li>
+          <strong>Start with Core API.</strong> These are the exports most eval
+          suites use directly.
+        </li>
+        <li>
+          <strong>Use group indexes.</strong> Each generated group lists symbols
+          before the detailed entries.
+        </li>
+        <li>
+          <strong>Update JSDoc when editing exports.</strong> Summaries and
+          examples come from public export comments.
+        </li>
+      </ol>
+    </section>
+
+    <section class="api-core" id="core-api">
+      <h2>Core API</h2>
+      <p>
+        Most projects only need these exports to get started. Use the generated
+        reference below when you need full type details, overloads, and member
+        documentation.
+      </p>
+      <div class="api-core-grid">
+        {
+          coreApiItems.map((item) => (
+            <article class="api-core-item">
+              <div class="api-core-heading">
+                <h3>
+                  <code>{item.name}</code>
+                </h3>
+                <a href={item.href}>Reference</a>
+              </div>
+              <p>{item.summary}</p>
+              <Code
+                code={item.example}
+                lang="ts"
+                theme="github-dark-high-contrast"
+                wrap={true}
+              />
+            </article>
+          ))
+        }
       </div>
-      <div>
-        <span>Then</span>
-        <strong>Open the generated groups</strong>
-        <p>
-          Use the sidebar when you need overloads, members, or helper types.
-        </p>
-      </div>
-      <div>
-        <span>When editing</span>
-        <strong>Update JSDoc</strong>
-        <p>
-          Examples and summaries here come from public export comments.
-        </p>
-      </div>
-    </div>
+    </section>
 
     {
       renderedGroups.map((group) => (
         <section class="api-group" id={group.id}>
           <h2>{group.label}</h2>
+          <div class="api-group-index" aria-label={`${group.label} symbols`}>
+            {entriesFor(group.names).map((entry) => (
+              <a href={`#${slug(entry.name)}`}>
+                <code>{entry.name}</code>
+              </a>
+            ))}
+          </div>
           {entriesFor(group.names).map((entry) => {
             const memberRows = members(entry);
             const entryComment = primaryComment(entry);
@@ -501,7 +611,7 @@ const sidebarLinks = renderedGroups.map((group) => ({
                   <Code
                     code={declarationCode(entry)}
                     lang="ts"
-                    theme="vitesse-black"
+                    theme="github-dark-high-contrast"
                     wrap={true}
                   />
                 </div>
@@ -560,7 +670,7 @@ const sidebarLinks = renderedGroups.map((group) => ({
                     <Code
                       code={example}
                       lang="ts"
-                      theme="vitesse-black"
+                      theme="github-dark-high-contrast"
                       wrap={true}
                     />
                   </div>

@@ -382,6 +382,8 @@ const shardedWorkflow = `- uses: actions/upload-artifact@v4
 
 <DocsPageShell
   links={[
+    { href: "#prerequisites", label: "Prerequisites" },
+    { href: "#model", label: "Model" },
     { href: "#install", label: "Install" },
     { href: "#configure-vitest", label: "Configure Vitest" },
     { href: "#harness-setup", label: "Harness Setup" },
@@ -396,35 +398,32 @@ const shardedWorkflow = `- uses: actions/upload-artifact@v4
     { href: "#github", label: "GitHub" },
   ]}
 >
-  <p class="eyebrow">Getting Started</p>
-  <h1>Getting Started</h1>
+  <p class="eyebrow">Guide</p>
+  <h1>Guide</h1>
   <p class="lead">
     Add <code>vitest-evals</code> to an existing Vitest project, adapt your agent
     with a harness, write normal test bodies around <code>run(input)</code>, and
     publish the same results locally and in GitHub Actions.
   </p>
-  <nav class="setup-flow" aria-label="Setup flow">
-    <a href="#install">
-      <span>01</span>
-      <strong>Install</strong>
-      <em>Core package plus one runtime harness.</em>
-    </a>
-    <a href="#configure-vitest">
-      <span>02</span>
-      <strong>Configure</strong>
-      <em>A separate eval command and Vitest config.</em>
-    </a>
-    <a href="#harness-setup">
-      <span>03</span>
-      <strong>Adapt</strong>
-      <em>One harness around your app or agent.</em>
-    </a>
-    <a href="#write-evals">
-      <span>04</span>
-      <strong>Assert</strong>
-      <em>Normal Vitest expectations around <code>run(input)</code>.</em>
-    </a>
-  </nav>
+  <div class="guide-intro">
+    <section>
+      <h2 id="prerequisites">Prerequisites</h2>
+      <ul>
+        <li>A Vitest project with Node.js 18 or newer.</li>
+        <li>An agent, workflow, or app entrypoint that evals can call.</li>
+        <li>Provider credentials available locally when your evals call live models.</li>
+      </ul>
+    </section>
+    <section>
+      <h2 id="model">Model</h2>
+      <ol class="guide-steps">
+        <li>Install the core package and one runtime harness.</li>
+        <li>Configure an eval-only Vitest command.</li>
+        <li>Adapt your app once in a harness file.</li>
+        <li>Call <code>run(input)</code>, assert output, then report the same run.</li>
+      </ol>
+    </section>
+  </div>
 
   <h2 id="install">Install</h2>
   <p>
