@@ -6,11 +6,27 @@ import type {
   ToolCallRecord,
 } from "../harness";
 
-/** Score payload returned by a judge. */
+/**
+ * Score payload returned by a judge.
+ *
+ * @example
+ * ```ts
+ * const result: JudgeResult = {
+ *   score: 1,
+ *   metadata: {
+ *     rationale: "Output matched the expected refund status.",
+ *   },
+ * };
+ * ```
+ */
 export type JudgeResult = {
+  /** Numeric score. `null` records an intentionally unscored result. */
   score: number | null;
+  /** JSON-like judge metadata shown by assertions and reporters. */
   metadata?: {
+    /** Human-readable explanation for the score. */
     rationale?: string;
+    /** Optional judge-side output or diagnostic payload. */
     output?: unknown;
   } & Record<string, unknown>;
 };
@@ -21,6 +37,22 @@ export type JudgeResult = {
  * Scenario-owned judge criteria should live on `input`. Use `metadata` for
  * per-run expectations or harness configuration that are not part of the
  * scenario payload.
+ *
+ * @example
+ * ```ts
+ * type RefundContext = JudgeContext<
+ *   string,
+ *   { status: "approved" | "denied" },
+ *   { expected: { status: "approved" | "denied" } }
+ * >;
+ *
+ * const RefundStatusJudge = createJudge(
+ *   "RefundStatusJudge",
+ *   ({ output, metadata }: RefundContext) => ({
+ *     score: output.status === metadata.expected.status ? 1 : 0,
+ *   }),
+ * );
+ * ```
  */
 export interface JudgeContext<
   TInput = unknown,
@@ -34,9 +66,13 @@ export interface JudgeContext<
   input: TInput;
   /** App-facing output returned by the harness. */
   output: TOutput;
+  /** Flattened tool calls observed in the normalized session. */
   toolCalls: ToolCallRecord[];
+  /** Per-run expectations or configuration passed to `run(input, { metadata })`. */
   metadata: Readonly<TMetadata>;
+  /** Complete normalized harness run being judged. */
   run: HarnessRun<TOutput>;
+  /** Normalized transcript associated with the harness run. */
   session: HarnessRun<TOutput>["session"];
   /** Harness associated with this judge context. */
   harness: THarness;
@@ -60,11 +96,22 @@ export type JudgeAssessFn<
 
 /** Runtime options supplied by core when calling a judge-side assessor. */
 export type JudgeAssessorOptions = {
+  /** Abort signal from the current eval run when available. */
   signal?: AbortSignal;
 };
 
-/** Provider/model helper that a judge can use without running the app harness. */
+/**
+ * Provider/model helper that a judge can use without running the app harness.
+ *
+ * @example
+ * ```ts
+ * const assessor: JudgeAssessor<string, { passed: boolean; rationale: string }> = {
+ *   assess: async (prompt, { signal }) => runRubricModel(prompt, { signal }),
+ * };
+ * ```
+ */
 export type JudgeAssessor<TInput = string, TOutput = string> = {
+  /** Runs the judge-side model/provider call. */
   assess: (
     input: TInput,
     options: JudgeAssessorOptions,
@@ -73,6 +120,7 @@ export type JudgeAssessor<TInput = string, TOutput = string> = {
 
 /** Judge-side assessor after core binds run-scoped options such as abort signal. */
 export type BoundJudgeAssessor<TInput = string, TOutput = string> = {
+  /** Runs the judge-side model/provider call with run-scoped options already bound. */
   assess: (input: TInput) => Promise<TOutput>;
 };
 
@@ -86,10 +134,27 @@ export type JudgeAssessWithAssessorFn<
   assessor: BoundJudgeAssessor<TInput, TOutput>,
 ) => Promise<JudgeResult> | JudgeResult;
 
-/** Named judge object consumed by suite-level judges and explicit assertions. */
+/**
+ * Named judge object consumed by suite-level judges and explicit assertions.
+ *
+ * @example
+ * ```ts
+ * type RefundOutput = { status: "approved" | "denied" };
+ * type RefundMetadata = { expected: { status: RefundOutput["status"] } };
+ *
+ * const judge: Judge<JudgeContext<string, RefundOutput, RefundMetadata>> = {
+ *   name: "RefundStatusJudge",
+ *   assess: ({ output, metadata }) => ({
+ *     score: output.status === metadata.expected.status ? 1 : 0,
+ *   }),
+ * };
+ * ```
+ */
 export interface Judge<
   TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > {
+  /** Stable judge name used in assertion messages and reports. */
   name: string;
+  /** Scores one normalized judge context. */
   assess: JudgeAssessFn<TOptions>;
 }

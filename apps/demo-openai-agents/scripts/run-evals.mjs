@@ -11,7 +11,7 @@ const WORKSPACE_ROOT = resolve(
 const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
   process.argv.slice(2),
 );
-const env = createEvalEnv(process.env, toolDetailLevel);
+const env = createEvalEnv(process.env, toolDetailLevel, { failMode });
 
 const explicitTargetIndex = forwardedArgs.findIndex(
   (arg) => !arg.startsWith("-"),

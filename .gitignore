@@ -106,6 +106,9 @@ dist
 # Sveltekit cache directory
 .svelte-kit/
 
+# Astro generated types and cache
+**/.astro/
+
 # vitepress build output
 **/.vitepress/dist
 

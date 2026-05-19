@@ -1,0 +1,30 @@
+{
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "framework": "astro",
+  "redirects": [
+    {
+      "source": "/guide",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/harnesses",
+      "destination": "/docs#harness-setup",
+      "permanent": true
+    },
+    {
+      "source": "/github-actions",
+      "destination": "/docs#github",
+      "permanent": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/llms.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+      ]
+    }
+  ]
+}

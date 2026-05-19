@@ -3,7 +3,7 @@
 Monorepo for the explicit-run `vitest-evals` shape:
 
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
-  types, reporter, and legacy compatibility exports
+  types, and reporter
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
@@ -58,6 +58,16 @@ tables.
 
 Pull request CI runs the same core safety checks: release config validation,
 lint, typecheck, the CI test suite, and the workspace build.
+
+## Docs Site
+
+The public docs site lives in `packages/docs` and is built with Astro for
+Vercel. It is configured for `https://vitest-evals.sentry.dev`.
+
+```sh
+pnpm run docs
+pnpm run docs:build
+```
 
 ## GitHub Reporting
 

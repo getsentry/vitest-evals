@@ -6,24 +6,74 @@ import {
 } from "../internal/structuredOutputScorer";
 import type { HarnessMetadata } from "../harness";
 
-type StructuredOutputJudgeExpected = Record<string, unknown>;
+/**
+ * Expected structured fields accepted by `StructuredOutputJudge()`.
+ *
+ * @example
+ * ```ts
+ * const expected: StructuredOutputJudgeExpected = {
+ *   status: "approved",
+ *   risk: "low",
+ * };
+ * ```
+ */
+export type StructuredOutputJudgeExpected = Record<string, unknown>;
 
 type StructuredOutputJudgeMetadata = HarnessMetadata & {
   expected?: StructuredOutputJudgeExpected;
 };
 
-/** Matcher context accepted by `StructuredOutputJudge()`. */
+/**
+ * Matcher context accepted by `StructuredOutputJudge()`.
+ *
+ * @example
+ * ```ts
+ * await expect(result).toSatisfyJudge(StructuredOutputJudge(), {
+ *   expected: { status: "approved" },
+ * });
+ * ```
+ */
 export interface StructuredOutputJudgeOptions
   extends JudgeContext<any, any, HarnessMetadata, any>,
     Omit<StructuredOutputScorerOptions, "input" | "output" | "toolCalls"> {
   expected?: StructuredOutputJudgeExpected;
 }
 
-/** Configuration for the deterministic structured-output judge. */
+/**
+ * Configuration for the deterministic structured-output judge.
+ *
+ * @example
+ * ```ts
+ * const judge = StructuredOutputJudge({
+ *   match: "fuzzy",
+ *   fuzzyOptions: { caseInsensitive: true },
+ * });
+ * ```
+ */
 export interface StructuredOutputJudgeConfig
   extends StructuredOutputScorerConfig {}
 
-/** Creates a deterministic judge that compares structured output fields. */
+/**
+ * Creates a deterministic judge that compares structured output fields.
+ *
+ * @param config - Matching behavior shared by every assessment from this judge.
+ *
+ * @example
+ * ```ts
+ * describeEval("refund agent", {
+ *   harness: refundHarness,
+ *   judges: [StructuredOutputJudge()],
+ * }, (it) => {
+ *   it("returns the expected decision", async ({ run }) => {
+ *     await run("Refund invoice inv_123", {
+ *       metadata: {
+ *         expected: { status: "approved" },
+ *       },
+ *     });
+ *   });
+ * });
+ * ```
+ */
 export function StructuredOutputJudge(
   config: StructuredOutputJudgeConfig = {},
 ): Judge<StructuredOutputJudgeOptions> {

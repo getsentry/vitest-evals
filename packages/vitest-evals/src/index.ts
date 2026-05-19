@@ -77,7 +77,18 @@ type HarnessOutput<THarness extends Harness<any, any, any>> =
 
 declare const evalHarnessRunBrand: unique symbol;
 
-/** Harness run returned by the fixture-backed `run(...)` API. */
+/**
+ * Harness run returned by the fixture-backed `run(...)` API.
+ *
+ * @example
+ * ```ts
+ * it("approves a refund", async ({ run }) => {
+ *   const result = await run("Refund invoice inv_123");
+ *
+ *   expect(result.output.status).toBe("approved");
+ * });
+ * ```
+ */
 export type EvalHarnessRun<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -96,14 +107,36 @@ export type EvalHarnessRun<
   };
 };
 
-/** Per-run metadata forwarded to the harness alongside the test input. */
+/**
+ * Per-run metadata forwarded to the harness alongside the test input.
+ *
+ * @example
+ * ```ts
+ * await run("Refund invoice inv_123", {
+ *   metadata: {
+ *     expected: { status: "approved" },
+ *     expectedTools: ["lookupInvoice", "createRefund"],
+ *   },
+ * });
+ * ```
+ */
 export interface EvalRunOptions<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > {
+  /** Per-run expectations or configuration forwarded to harnesses and judges. */
   metadata?: TMetadata;
 }
 
-/** Explicit harness execution primitive exposed to each eval test. */
+/**
+ * Explicit harness execution primitive exposed to each eval test.
+ *
+ * @example
+ * ```ts
+ * const result = await run("Refund invoice inv_123", {
+ *   metadata: { expected: { status: "approved" } },
+ * });
+ * ```
+ */
 export type EvalRun<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -118,7 +151,20 @@ export type EvalRun<
   options?: EvalRunOptions<TMetadata>,
 ) => Promise<EvalHarnessRun<TInput, TOutput, TMetadata, THarness>>;
 
-/** Fixture-backed Vitest context exposed inside `describeEval(...)` tests. */
+/**
+ * Fixture-backed Vitest context exposed inside `describeEval(...)` tests.
+ *
+ * @example
+ * ```ts
+ * type RefundOutput = { status: "approved" | "denied" };
+ *
+ * it("approves a refund", async ({ run }: EvalTestContext<string, RefundOutput>) => {
+ *   const result = await run("Refund invoice inv_123");
+ *
+ *   expect(result.output.status).toBe("approved");
+ * });
+ * ```
+ */
 export interface EvalTestContext<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -144,7 +190,22 @@ export type EvalTestAPI<
   >,
 > = TestAPI<EvalTestContext<TInput, TOutput, TMetadata, THarness>>;
 
-/** Suite-level configuration for a harness-backed eval block. */
+/**
+ * Suite-level configuration for a harness-backed eval block.
+ *
+ * @example
+ * ```ts
+ * const options: DescribeEvalOptions<
+ *   string,
+ *   { status: "approved" | "denied" },
+ *   { expected: { status: "approved" | "denied" } }
+ * > = {
+ *   harness: refundHarness,
+ *   judges: [ToolCallJudge(), StructuredOutputJudge()],
+ *   judgeThreshold: 1,
+ * };
+ * ```
+ */
 export interface DescribeEvalOptions<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -161,6 +222,7 @@ export interface DescribeEvalOptions<
   judges?: Array<Judge<JudgeContext<TInput, TOutput, TMetadata, THarness>>>;
   /** Passing threshold for automatic suite-level judges. `null` disables fail-on-score. */
   judgeThreshold?: number | null;
+  /** Skips the entire eval suite when the predicate returns true. */
   skipIf?: () => boolean;
 }
 
@@ -231,16 +293,32 @@ type JudgeForReceived<
   ? Judge<TJudgeOptions>
   : never;
 
-/** Optional overrides passed to `expect(...).toSatisfyJudge(...)`. */
+/**
+ * Optional overrides passed to `expect(...).toSatisfyJudge(...)`.
+ *
+ * @example
+ * ```ts
+ * await expect(result).toSatisfyJudge(RefundStatusJudge, {
+ *   threshold: null,
+ * });
+ * ```
+ */
 export type JudgeAssertionOptions<
   TJudgeOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = JudgeAssertionParams<TJudgeOptions> & {
+  /** Override or provide the original eval input for the judge. */
   input?: JudgeAssertionInput<TJudgeOptions>;
+  /** Override or provide the app-facing output for the judge. */
   output?: JudgeAssertionOutput<TJudgeOptions>;
+  /** Override or provide per-run judge metadata. */
   metadata?: JudgeAssertionMetadata<TJudgeOptions>;
+  /** Override or provide flattened tool calls for the judge. */
   toolCalls?: ToolCallRecord[];
+  /** Override or provide the complete normalized harness run. */
   run?: HarnessRun<JudgeAssertionOutput<TJudgeOptions>>;
+  /** Override or provide the normalized session transcript. */
   session?: HarnessRun["session"];
+  /** Override or provide the harness associated with the judge context. */
   harness?: JudgeAssertionHarness<TJudgeOptions>;
   /** Passing threshold for the explicit matcher. `null` records the score without failing. */
   threshold?: number | null;
@@ -254,7 +332,14 @@ export type ToSatisfyJudge<TReceived = unknown> = <
   ...args: JudgeAssertionArgs<TJudgeOptions>
 ) => Promise<TReceived>;
 
-/** Vitest matcher extension surface added by `vitest-evals`. */
+/**
+ * Vitest matcher extension surface added by `vitest-evals`.
+ *
+ * @example
+ * ```ts
+ * await expect(result).toSatisfyJudge(RefundStatusJudge);
+ * ```
+ */
 export interface EvalMatchers<R = unknown> {
   toSatisfyJudge: ToSatisfyJudge<R>;
 }
@@ -419,6 +504,10 @@ function formatJudgeOutputForMessage(output: JsonValue | undefined) {
 
 /**
  * Creates a harness-backed eval suite on top of a fixture-backed Vitest test API.
+ *
+ * @param name - Suite name shown by Vitest and reporters.
+ * @param options - Harness, automatic judges, threshold, and suite skip settings.
+ * @param define - Callback that receives the eval-aware `it` API.
  *
  * @example
  * ```ts
@@ -901,7 +990,22 @@ function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {
   return normalizeContent(value);
 }
 
-/** Formats judge results for reporter and assertion output. */
+/**
+ * Formats judge results for reporter and assertion output.
+ *
+ * @param scores - Named judge results to sort and format.
+ *
+ * @example
+ * ```ts
+ * const message = formatScores([
+ *   {
+ *     name: "RefundStatusJudge",
+ *     score: 0,
+ *     metadata: { rationale: "Expected approved, got denied" },
+ *   },
+ * ]);
+ * ```
+ */
 export function formatScores(scores: (JudgeResult & { name: string })[]) {
   return [...scores]
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
@@ -932,7 +1036,46 @@ export function formatScores(scores: (JudgeResult & { name: string })[]) {
     .join("\n\n");
 }
 
-/** Creates a named judge object from an assessment function. */
+/**
+ * Creates a named judge object from an assessment function.
+ *
+ * @param name - Stable judge name shown in assertion messages and reports.
+ * @param assess - Function that scores one normalized judge context.
+ *
+ * @example
+ * ```ts
+ * import { createJudge, type JudgeContext } from "vitest-evals";
+ *
+ * type RefundOutput = { status: "approved" | "denied" };
+ * type RefundMetadata = { expected: { status: RefundOutput["status"] } };
+ *
+ * export const RefundStatusJudge = createJudge(
+ *   "RefundStatusJudge",
+ *   async ({ output, metadata }: JudgeContext<string, RefundOutput, RefundMetadata>) => ({
+ *     score: output.status === metadata.expected.status ? 1 : 0,
+ *     metadata: {
+ *       rationale: `Expected ${metadata.expected.status}, got ${output.status}`,
+ *     },
+ *   }),
+ * );
+ * ```
+ *
+ * @example
+ * ```ts
+ * const ModelRubricJudge = createJudge(
+ *   "ModelRubricJudge",
+ *   openAiRubricAssessor,
+ *   async ({ output }, assessor) => {
+ *     const verdict = await assessor.assess(JSON.stringify(output));
+ *
+ *     return {
+ *       score: verdict.passed ? 1 : 0,
+ *       metadata: { rationale: verdict.rationale },
+ *     };
+ *   },
+ * );
+ * ```
+ */
 export function createJudge<TOptions extends JudgeContext<any, any, any, any>>(
   name: string,
   assess: JudgeAssessFn<TOptions>,
@@ -1013,9 +1156,11 @@ export {
 export {
   StructuredOutputJudge,
   type StructuredOutputJudgeConfig,
+  type StructuredOutputJudgeExpected,
   type StructuredOutputJudgeOptions,
   ToolCallJudge,
   type ToolCallJudgeConfig,
+  type ToolCallJudgeExpectedTool,
   type ToolCallJudgeOptions,
 } from "./judges";
 export type {
@@ -1029,3 +1174,8 @@ export type {
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
+export type {
+  BaseMatcherConfig,
+  FuzzyMatchOptions,
+  MatchStrategy,
+} from "./internal/matchers";

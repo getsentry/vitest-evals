@@ -8,6 +8,9 @@ type ScoredRefundCase = RefundCase & {
   expected: Record<string, unknown>;
 };
 
+const skipUnlessRunningFailureExamples = () =>
+  !process.env.ANTHROPIC_API_KEY || process.env.VITEST_EVALS_FAIL_MODE !== "1";
+
 const harness = piAiHarness({
   agent: () => createRefundAgent(),
   toolReplay: {
@@ -18,7 +21,7 @@ const harness = piAiHarness({
 describeEval(
   "demo pi refund scorer failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness,
     judges: [StructuredOutputJudge()],
   },
@@ -44,7 +47,7 @@ describeEval(
 describeEval(
   "demo pi refund assertion failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness,
   },
   (it) => {

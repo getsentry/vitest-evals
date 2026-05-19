@@ -1,0 +1,24 @@
+{
+  "name": "vitest-evals-docs",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "api:generate": "typedoc --options typedoc.json",
+    "dev": "pnpm run api:generate && astro dev",
+    "build": "pnpm run api:generate && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^4.0.0",
+    "@vercel/functions": "^2.0.0",
+    "astro": "^5.0.0",
+    "geist": "^1.5.1",
+    "rehype-autolink-headings": "^7.1.0",
+    "rehype-slug": "^6.0.0",
+    "vitest-evals": "workspace:*"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.19"
+  }
+}

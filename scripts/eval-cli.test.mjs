@@ -24,6 +24,12 @@ describe("eval CLI helpers", () => {
     });
   });
 
+  test("marks intentional failure runs", () => {
+    expect(createEvalEnv({}, 0, { failMode: true })).toMatchObject({
+      VITEST_EVALS_FAIL_MODE: "1",
+    });
+  });
+
   test("keeps verbose flags separate from forwarded Vitest args", () => {
     expect(parseEvalCliArgs(["--", "-vv", "--pool=forks"])).toEqual({
       failMode: false,

@@ -1,22 +1,60 @@
-/** Shared configuration for legacy and built-in value matchers. */
+/**
+ * Shared configuration for built-in value matchers.
+ *
+ * @example
+ * ```ts
+ * const config: BaseMatcherConfig = {
+ *   requireAll: true,
+ *   allowExtras: false,
+ * };
+ * ```
+ */
 export interface BaseMatcherConfig {
+  /** Require every expected field or tool to match. */
   requireAll?: boolean;
+  /** Allow actual output/tool calls to contain extra fields or calls. */
   allowExtras?: boolean;
+  /** Emit matcher debug details to the console. */
   debug?: boolean;
 }
 
-/** Matching strategy used by structured-output and tool-call scorers. */
+/**
+ * Matching strategy used by structured-output and tool-call judges.
+ *
+ * @example
+ * ```ts
+ * const exact: MatchStrategy = "strict";
+ * const custom: MatchStrategy = (expected, actual) =>
+ *   String(actual).includes(String(expected));
+ * ```
+ */
 export type MatchStrategy<T = unknown> =
   | "strict"
   | "fuzzy"
   | ((expected: T, actual: T, context?: string) => boolean);
 
-/** Options controlling fuzzy matcher behavior. */
+/**
+ * Options controlling fuzzy matcher behavior.
+ *
+ * @example
+ * ```ts
+ * const fuzzyOptions: FuzzyMatchOptions = {
+ *   caseInsensitive: true,
+ *   substring: true,
+ *   numericTolerance: 0.01,
+ * };
+ * ```
+ */
 export interface FuzzyMatchOptions {
+  /** Compare strings without case sensitivity. */
   caseInsensitive?: boolean;
+  /** Treat either string containing the other as a match. */
   substring?: boolean;
+  /** Relative and absolute tolerance used for numeric comparisons. */
   numericTolerance?: number;
+  /** Match arrays without requiring the same order. */
   ignoreArrayOrder?: boolean;
+  /** Allow simple string/number/boolean coercions before failing. */
   coerceTypes?: boolean;
 }
 

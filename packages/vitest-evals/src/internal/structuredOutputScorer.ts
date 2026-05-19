@@ -9,12 +9,16 @@ import {
 } from "./matchers";
 
 export interface StructuredOutputScorerOptions extends BaseScorerOptions {
+  /** Expected structured output fields. */
   expected?: Record<string, unknown>;
 }
 
 export interface StructuredOutputScorerConfig extends BaseMatcherConfig {
+  /** Field matching strategy used for expected structured output values. */
   match?: MatchStrategy;
+  /** Output field that indicates an error. Set to `null` to disable. */
   errorField?: string | null;
+  /** Options used when `match` is `"fuzzy"`. */
   fuzzyOptions?: FuzzyMatchOptions;
 }
 
