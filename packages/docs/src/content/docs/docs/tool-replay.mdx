@@ -1,0 +1,92 @@
+---
+title: Tool Replay
+description: Record and replay local tool calls while keeping model behavior live.
+editUrl: false
+---
+
+Tool replay lets evals keep testing real agent behavior without paying for
+every external dependency on every run. Use it for local tool calls that are
+expensive, slow, rate-limited, unstable, or hard to reproduce.
+
+## What to Replay
+
+Replay local tools and service calls, not the entire model interaction. Good
+candidates include web search, retrieval, third-party APIs, browser fetches,
+and internal service lookups.
+
+```ts title="evals/qaHarness.ts"
+export const qaHarness = aiSdkHarness({
+  agent: () => createQuestionAgent(),
+  tools: {
+    lookupCapital,
+  },
+  toolReplay: {
+    lookupCapital: true,
+  },
+  output: ({ result }) => textAnswer(result.text),
+});
+```
+
+Keep live provider model calls live unless your app exposes them as local
+tools. That keeps evals sensitive to prompt and model behavior while removing
+noise from dependencies.
+
+## Replay Modes
+
+Choose a mode with `VITEST_EVALS_REPLAY_MODE`.
+
+| Mode | Behavior |
+| --- | --- |
+| `off` | Call live tools and do not read or write recordings. |
+| `record` | Call live tools and overwrite recordings. |
+| `auto` | Replay when a recording exists; otherwise call live and record. |
+| `strict` | Require an existing recording and fail when one is missing. |
+
+Use `record` to update fixtures intentionally and `strict` in CI when live tool
+calls should not happen.
+
+## Cache Keys and Redaction
+
+Use a replay config object when a cache key needs to ignore unstable values,
+recordings need a version, or outputs need redaction.
+
+```ts title="evals/qaHarness.ts"
+export const qaHarness = aiSdkHarness({
+  agent: () => createQuestionAgent(),
+  tools: {
+    lookupCapital,
+  },
+  toolReplay: {
+    lookupCapital: {
+      version: "v1",
+      key: (args) => ({
+        country: args.country,
+      }),
+      sanitize: (recording) => ({
+        ...recording,
+        output: {
+          capital: recording.output.capital,
+          country: recording.output.country,
+        },
+      }),
+    },
+  },
+  output: ({ result }) => textAnswer(result.text),
+});
+```
+
+Keep recordings small and reviewable. Redact secrets, customer data, unstable
+timestamps, and high-cardinality response fields before committing fixtures.
+
+## Workflow
+
+Start live with `off`, record known-good tool calls with `record`, then use
+`strict` in CI once the suite has useful recordings.
+
+```bash title="record tool replay"
+VITEST_EVALS_REPLAY_MODE=record pnpm evals
+VITEST_EVALS_REPLAY_MODE=strict pnpm evals
+```
+
+When an intentional app change needs new tool responses, rerun in `record` mode
+and review the fixture diff with the code change.

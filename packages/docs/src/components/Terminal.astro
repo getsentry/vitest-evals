@@ -1,5 +1,6 @@
 ---
 import { Code } from "astro:components";
+import { monochromeCodeTheme } from "../theme/vitest-evals-starlight-theme.mjs";
 
 interface Props {
   title?: string;
@@ -11,12 +12,10 @@ interface Props {
 const { title, code, copyText = code, lang = "plaintext" } = Astro.props;
 ---
 
-<div class="terminal-shell" data-copy-root data-copy-text={copyText}>
+<div class="terminal-shell not-content" data-copy-root data-copy-text={copyText}>
   <div class="terminal-header">
     <div class="terminal-dots" aria-hidden="true">
-      <span class="dot red"></span>
-      <span class="dot yellow"></span>
-      <span class="dot green"></span>
+      <span class="dot"></span>
     </div>
     {title && <span class="terminal-title">{title}</span>}
     <button class="copy-button" aria-label="Copy to clipboard">
@@ -32,7 +31,7 @@ const { title, code, copyText = code, lang = "plaintext" } = Astro.props;
         <Code
           code={code}
           lang={lang}
-          theme="github-dark-high-contrast"
+          theme={monochromeCodeTheme}
           wrap={false}
         />
       ) : (

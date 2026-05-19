@@ -1,29 +1,31 @@
 ---
 import Base from "../layouts/Base.astro";
-import PackageManagerTabs from "../components/PackageManagerTabs.astro";
 import ReportPreview from "../components/ReportPreview.astro";
 import Terminal from "../components/Terminal.astro";
 import { PACKAGE_VERSION, VITEST_EVALS_ACTION } from "../utils/version";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const evalExample = `import { expect } from "vitest";
-import { describeEval, toolCalls } from "vitest-evals";
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
-import { createRefundAgent } from "../src/refundAgent";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
 
-describeEval("refund agent", {
-  harness: piAiHarness({
-    agent: () => createRefundAgent(),
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => ({
+    score: output.toLowerCase().includes("paris") ? 1 : 0,
   }),
-}, (it) => {
-  it("approves a refundable invoice", async ({ run }) => {
-    const result = await run("Refund invoice inv_123");
+);
 
-    expect(result.output).toMatchObject({ status: "approved" });
-    expect(toolCalls(result.session).map((call) => call.name)).toEqual([
-      "lookupInvoice",
-      "createRefund",
-    ]);
+describeEval("capital questions", { harness: qaHarness }, (it) => {
+  it("knows the capital of France", async ({ run }) => {
+    const result = await run("What is the capital of France?");
+
+    expect(result.output).toContain("Paris");
+    await expect(result).toSatisfyJudge(CapitalJudge);
   });
 });`;
 
@@ -46,12 +48,12 @@ const actionExample = `- name: Run evals
       <p class="eyebrow">Current package: {PACKAGE_VERSION}</p>
       <h1>AI evals that feel like Vitest.</h1>
       <p>
-        Write explicit eval tests, run your real agent or app once, assert on typed
-        output, and keep normalized session data for judges, replay, terminal
-        output, and GitHub Actions.
+        Pick the harness for your runtime, run your real agent or app once, and
+        score the normalized result with ordinary Vitest assertions and judges.
       </p>
       <div class="hero-actions">
-        <a href={`${base}/docs`} class="btn btn-primary">Guide</a>
+        <a href={`${base}/docs`} class="btn btn-primary">Documentation</a>
+        <a href={`${base}/docs/harnesses`} class="btn">Choose a Harness</a>
         <a href={`${base}/api`} class="btn">API Reference</a>
       </div>
     </div>
@@ -59,66 +61,46 @@ const actionExample = `- name: Run evals
   </section>
 
   <section class="section">
-    <h2>Start Where You Are</h2>
+    <h2>Choose a Harness</h2>
     <p>
-      The docs are split by task: set up a project, adapt a runtime, wire CI,
-      or inspect the generated API surface.
+      Start with the adapter that matches the code you already run in
+      production. Each harness page uses the same Paris example so the runtime
+      differences are easy to compare.
     </p>
-    <div class="path-grid">
-      <a class="path-item" href={`${base}/docs#install`}>
-        <span>01</span>
-        <strong>Set up evals</strong>
-        <em>Install packages and create an eval-only Vitest config.</em>
+    <div class="grid two">
+      <a class="card card-link" href={`${base}/docs/harnesses/ai-sdk/`}>
+        <h3>AI SDK</h3>
+        <p>For apps built around <code>generateText</code>, <code>streamText</code>, or an AI SDK wrapper.</p>
       </a>
-      <a class="path-item" href={`${base}/docs#harness-setup`}>
-        <span>02</span>
-        <strong>Choose a harness</strong>
-        <em>Adapt AI SDK, OpenAI Agents, pi-ai, or a custom app flow.</em>
+      <a class="card card-link" href={`${base}/docs/harnesses/openai-agents/`}>
+        <h3>OpenAI Agents</h3>
+        <p>For apps that own an <code>Agent</code> and run it with a <code>Runner</code>.</p>
       </a>
-      <a class="path-item" href={`${base}/docs#github`}>
-        <span>03</span>
-        <strong>Publish reports</strong>
-        <em>Use the GitHub Action with Vitest JSON artifacts.</em>
+      <a class="card card-link" href={`${base}/docs/harnesses/pi-ai/`}>
+        <h3>Pi</h3>
+        <p>For Pi agents, toolsets, or runtime-compatible entrypoints.</p>
       </a>
-      <a class="path-item" href={`${base}/api#core-api`}>
-        <span>04</span>
-        <strong>Look up APIs</strong>
-        <em>Scan the common exports before the full generated reference.</em>
+      <a class="card card-link" href={`${base}/docs/harnesses/custom/`}>
+        <h3>Custom Harnesses</h3>
+        <p>For workflows, service functions, CLIs, RAG pipelines, and custom agents.</p>
       </a>
     </div>
-  </section>
-
-  <section class="section">
-    <h2>Install</h2>
-    <p>
-      Install the core package, then add the harness package for the runtime you
-      want to test.
-    </p>
-    <PackageManagerTabs
-      npm={`npm install -D vitest-evals
-npm install -D @vitest-evals/harness-ai-sdk`}
-      pnpm={`pnpm add -D vitest-evals
-pnpm add -D @vitest-evals/harness-ai-sdk`}
-      bun={`bun add -d vitest-evals
-bun add -d @vitest-evals/harness-ai-sdk`}
-    />
   </section>
 
   <section class="section">
     <h2>The Core Loop</h2>
     <div class="grid">
       <div class="card">
-        <h3>Bind a harness</h3>
+        <h3>Shape the app</h3>
         <p>
-          The suite owns one harness. It adapts your agent or app into a
-          normalized <code>HarnessRun</code>.
+          Keep the production agent, service, or workflow in app code.
         </p>
       </div>
       <div class="card">
-        <h3>Call <code>run(input)</code></h3>
+        <h3>Configure a harness</h3>
         <p>
-          Each test decides when execution happens, then asserts with normal
-          Vitest expectations.
+          The harness calls that app and normalizes output, session, usage, and
+          artifacts.
         </p>
       </div>
       <div class="card">
@@ -133,7 +115,7 @@ bun add -d @vitest-evals/harness-ai-sdk`}
 
   <section class="section">
     <h2>Example</h2>
-    <Terminal title="refund.eval.ts" code={evalExample} lang="ts" />
+    <Terminal title="capital.eval.ts" code={evalExample} lang="ts" />
   </section>
 
   <section class="section">

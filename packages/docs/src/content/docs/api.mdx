@@ -1,0 +1,66 @@
+---
+title: API Reference
+description: Typed reference for vitest-evals harnesses, eval suites, normalized results, judges, and matchers.
+editUrl: false
+---
+
+The API is generated from the public `vitest-evals` exports. Start with the
+workflow functions, then use the generated export pages for exact signatures,
+type parameters, options, and examples.
+
+## Core Workflow
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/api/functions/describeeval/">
+    <strong>describeEval</strong>
+    <span>Define an eval suite with a bound harness and eval-aware test API.</span>
+  </a>
+  <a class="api-link-card" href="/api/functions/createharness/">
+    <strong>createHarness</strong>
+    <span>Adapt an app, workflow, or agent into normalized eval runs.</span>
+  </a>
+  <a class="api-link-card" href="/api/functions/createjudge/">
+    <strong>createJudge</strong>
+    <span>Package reusable scoring logic for suite-level or explicit assertions.</span>
+  </a>
+</div>
+
+## Normalized Results
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/api/type-aliases/harnessrun/">
+    <strong>HarnessRun</strong>
+    <span>The normalized result shape shared by assertions, judges, replay, and reports.</span>
+  </a>
+  <a class="api-link-card" href="/api/type-aliases/normalizedsession/">
+    <strong>NormalizedSession</strong>
+    <span>Serializable messages and tool calls captured from one app execution.</span>
+  </a>
+  <a class="api-link-card" href="/api/type-aliases/usagesummary/">
+    <strong>UsageSummary</strong>
+    <span>Stable provider, model, token, tool, retry, and metadata usage fields.</span>
+  </a>
+</div>
+
+## Judges and Matchers
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/api/functions/toolcalljudge/">
+    <strong>ToolCallJudge</strong>
+    <span>Score expected tool names, order, and arguments from normalized calls.</span>
+  </a>
+  <a class="api-link-card" href="/api/functions/structuredoutputjudge/">
+    <strong>StructuredOutputJudge</strong>
+    <span>Score JSON-safe output fields against expected metadata or matcher input.</span>
+  </a>
+  <a class="api-link-card" href="/api/type-aliases/tosatisfyjudge/">
+    <strong>toSatisfyJudge</strong>
+    <span>Run a judge explicitly from a Vitest expectation.</span>
+  </a>
+</div>
+
+## Generated Exports
+
+The sidebar lists every generated function, interface, and type alias. Use
+[the generated export index](/api/readme/) when you need a flat list of the full
+public surface.

@@ -1,0 +1,51 @@
+---
+title: Harnesses
+description: Pick the runtime adapter that turns an app run into normalized eval data.
+editUrl: false
+---
+
+A harness is the boundary between production behavior and eval infrastructure.
+It should be thin: call the same app entrypoint you use in production, then
+return the output, messages, tool calls, usage, and artifacts that tests and
+judges need.
+
+Use the first-party adapter that matches the runtime your app already uses. Use
+`createHarness()` when the app is not built on a supported SDK or when you need
+full control over normalized run data.
+
+## Available Harnesses
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/docs/harnesses/ai-sdk/">
+    <strong>AI SDK</strong>
+    <span>Use when your app calls <code>generateText</code>, <code>streamText</code>, or an AI SDK wrapper.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/openai-agents/">
+    <strong>OpenAI Agents</strong>
+    <span>Use when your app owns an <code>Agent</code> and runs it with a <code>Runner</code>.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/pi-ai/">
+    <strong>Pi</strong>
+    <span>Use when your app exposes a Pi agent, toolset, or runtime-compatible entrypoint.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/custom/">
+    <strong>Custom Harnesses</strong>
+    <span>Use for workflows, service functions, CLIs, RAG pipelines, and custom agents.</span>
+  </a>
+</div>
+
+## Normalized Results
+
+Every harness returns a JSON-serializable result. Judges and reports read the
+same shape regardless of runtime:
+
+| Field | Purpose |
+| --- | --- |
+| `output` | The domain value your tests usually assert on. |
+| `messages` | Conversation transcript or normalized app messages. |
+| `toolCalls` | Deterministic tool activity for tool judges and replay. |
+| `usage` | Stable usage units such as provider, model, tokens, tools, and retries. |
+| `artifacts` | Report-only details such as fixture ids, retrieved records, or traces. |
+
+Metadata is per-run test context. Put expected values, scenario labels, fixture
+ids, and judge configuration in `metadata` instead of hiding them in prompts.

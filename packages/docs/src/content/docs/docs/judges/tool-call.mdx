@@ -1,0 +1,59 @@
+---
+title: ToolCallJudge
+description: Check tool names, order, and arguments from normalized tool calls.
+editUrl: false
+---
+
+`ToolCallJudge()` reads normalized tool calls from the harness run. Use it when
+the sequence of tools is part of the behavior you want to preserve.
+
+## Configure
+
+```ts title="evals/capital.eval.ts"
+import { ToolCallJudge } from "vitest-evals";
+
+describeEval("capital questions", {
+  harness: qaHarness,
+  judges: [
+    ToolCallJudge({
+      ordered: true,
+    }),
+  ],
+});
+```
+
+### Arguments
+
+Use matcher options when a tool argument is the important assertion.
+
+```ts title="evals/capital.eval.ts"
+ToolCallJudge({
+  tools: [
+    {
+      name: "lookupCapital",
+      arguments: {
+        country: "France",
+      },
+    },
+  ],
+});
+```
+
+## Metadata
+
+Pass expected tool names through metadata on each run.
+
+```ts title="evals/capital.eval.ts"
+const result = await run("What is the capital of France?", {
+  metadata: {
+    expectedTools: ["lookupCapital"],
+  },
+});
+```
+
+## Failure Behavior
+
+The judge fails when a required tool is missing, an unexpected order appears in
+ordered mode, or configured arguments do not match the captured call. Use
+ordered checks only when the call order matters; leave ordering loose when
+multiple tool sequences are equivalent for the behavior under test.

@@ -12,13 +12,13 @@ judges and reporters.
 Canonical docs:
 
 - Overview: https://vitest-evals.sentry.dev/
-- Getting Started: https://vitest-evals.sentry.dev/docs
+- Documentation: https://vitest-evals.sentry.dev/docs
 - API reference: https://vitest-evals.sentry.dev/api
 - Repository: https://github.com/getsentry/vitest-evals
 
-The canonical Getting Started page walks through install, package scripts,
-`vitest.evals.config.ts`, harness setup, eval authoring, running evals locally,
-judges, tool replay, and GitHub Actions wiring.
+The canonical documentation page routes readers to the right harness, then the
+harness pages follow the same Paris example from app shape through harness
+configuration, eval authoring, and judging.
 
 ## When to use this library
 
@@ -65,7 +65,7 @@ Package purposes:
   tool calls, runtime tools, and custom entrypoints.
 - `@vitest-evals/harness-openai-agents`: adapter for OpenAI Agents SDK agents,
   runners, local tool capture, and replay metadata.
-- `@vitest-evals/harness-pi-ai`: adapter for pi-ai agents and replay-capable
+- `@vitest-evals/harness-pi-ai`: adapter for Pi agents and replay-capable
   tool execution.
 - `@vitest-evals/github-reporter`: implementation package behind the GitHub
   Action. Most users should consume the action as `getsentry/vitest-evals@v0`.
@@ -128,36 +128,30 @@ rules.
 ```ts
 import { expect } from "vitest";
 import {
+  createJudge,
   describeEval,
-  StructuredOutputJudge,
-  ToolCallJudge,
-  toolCalls,
+  type JudgeContext,
 } from "vitest-evals";
-import { refundHarness } from "./refundHarness";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => ({
+    score: output.toLowerCase().includes("paris") ? 1 : 0,
+  }),
+);
 
 describeEval(
-  "refund agent",
+  "capital questions",
   {
-    harness: refundHarness,
-    judges: [
-      ToolCallJudge(),
-      StructuredOutputJudge(),
-    ],
+    harness: qaHarness,
+    judges: [CapitalJudge],
   },
   (it) => {
-    it("approves a refundable invoice", async ({ run }) => {
-      const result = await run("Refund invoice inv_123", {
-        metadata: {
-          expected: { status: "approved" },
-          expectedTools: ["lookupInvoice", "createRefund"],
-        },
-      });
+    it("knows the capital of France", async ({ run }) => {
+      const result = await run("What is the capital of France?");
 
-      expect(result.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
-        "lookupInvoice",
-        "createRefund",
-      ]);
+      expect(result.output).toContain("Paris");
     });
   },
 );
@@ -170,34 +164,27 @@ criteria in `metadata`.
 
 ```ts
 describeEval(
-  "refund agent",
+  "capital questions",
   {
-    harness: refundHarness,
-    judges: [ToolCallJudge()],
+    harness: qaHarness,
+    judges: [CapitalJudge],
   },
   (it) => {
     it.for([
       {
-        name: "approves refundable invoice",
-        input: "Refund invoice inv_123",
-        expected: { status: "approved" },
-        expectedTools: ["lookupInvoice", "createRefund"],
+        name: "France",
+        input: "What is the capital of France?",
+        expectedAnswer: "Paris",
       },
       {
-        name: "denies non-refundable invoice",
-        input: "Refund invoice inv_404",
-        expected: { status: "denied" },
-        expectedTools: ["lookupInvoice"],
+        name: "Japan",
+        input: "What is the capital of Japan?",
+        expectedAnswer: "Tokyo",
       },
     ])("$name", async ({ input, ...metadata }, { run }) => {
       const result = await run(input, { metadata });
 
-      expect(result.output).toMatchObject({
-        status: metadata.expected.status,
-      });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        metadata.expectedTools,
-      );
+      expect(result.output).toContain(metadata.expectedAnswer);
     });
   },
 );
@@ -299,23 +286,18 @@ lightweight result and normalizes it into a full `HarnessRun`.
 ```ts
 import { createHarness } from "vitest-evals";
 
-export const refundHarness = createHarness<
-  string,
-  { status: "approved" | "denied"; invoiceId: string }
->({
-  name: "refund-app",
-  run: async ({ input, metadata, setArtifact }) => {
-    const output = await runRefundFlow(input, metadata);
+export const qaHarness = createHarness<string, string>({
+  name: "qa-app",
+  run: async ({ input, setArtifact }) => {
+    const output = await answerQuestion(input);
 
-    setArtifact("case", { invoiceId: output.invoiceId });
+    setArtifact("question", { input });
 
     return {
       output,
-      toolCalls: output.toolCalls,
       usage: {
         provider: "openai",
-        model: "gpt-4.1",
-        totalTokens: output.totalTokens,
+        model: "gpt-4o-mini",
       },
     };
   },
@@ -409,7 +391,7 @@ limits and provider-specific runner options. Key `toolReplay` by the OpenAI
 function tool name. Use `output` to parse `result.finalOutput` or project native
 structured output into the app-facing value.
 
-### pi-ai
+### Pi
 
 Import:
 
@@ -417,16 +399,16 @@ Import:
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 ```
 
-Use it when the system under test uses pi-ai agents. The adapter captures
+Use it when the system under test uses Pi agents. The adapter captures
 messages, inferred or configured toolsets, native tool calls, usage, and replay
 metadata for opt-in tools.
 
-Compatible apps expose a pi-ai agent, a `toolset`, or a `run(input, runtime)`
+Compatible apps expose a Pi agent, a `toolset`, or a `run(input, runtime)`
 entrypoint. Keep the native toolset on the agent when it is discoverable; pass
 `tools` only when the app hides the tool surface. Use `runtime.tools` for
 replay-aware execution, `runtime.events` to record assistant messages and usage,
 and return `{ output }` when tests should assert on a parsed domain object.
-Key `toolReplay` by the pi-ai tool name.
+Key `toolReplay` by the Pi tool name.
 
 ### Custom harness
 
@@ -469,18 +451,14 @@ Create a deterministic judge:
 ```ts
 import { createJudge, type JudgeContext } from "vitest-evals";
 
-type RefundOutput = { status: "approved" | "denied" };
-type RefundMetadata = { expectedStatus: RefundOutput["status"] };
-
-export const RefundStatusJudge = createJudge(
-  "RefundStatusJudge",
-  async ({
-    output,
-    metadata,
-  }: JudgeContext<string, RefundOutput, RefundMetadata>) => ({
-    score: output.status === metadata.expectedStatus ? 1 : 0,
+export const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => ({
+    score: output.toLowerCase().includes("paris") ? 1 : 0,
     metadata: {
-      rationale: `Expected ${metadata.expectedStatus}, got ${output.status}`,
+      rationale: output.toLowerCase().includes("paris")
+        ? "The answer names Paris."
+        : `Expected Paris, got: ${output}`,
     },
   }),
 );
@@ -490,10 +468,10 @@ Use suite-level judges when every `run(...)` in the suite should be judged:
 
 ```ts
 describeEval(
-  "refund agent",
+  "capital questions",
   {
-    harness: refundHarness,
-    judges: [RefundStatusJudge],
+    harness: qaHarness,
+    judges: [CapitalJudge],
     judgeThreshold: 1,
   },
   (it) => {
@@ -505,7 +483,7 @@ describeEval(
 Use explicit judge assertions when a single test needs a specific judge:
 
 ```ts
-await expect(result).toSatisfyJudge(RefundStatusJudge);
+await expect(result).toSatisfyJudge(CapitalJudge);
 ```
 
 Set `judgeThreshold: null` or assertion threshold options when you want to

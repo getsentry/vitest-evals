@@ -7,6 +7,12 @@ interface Props {
 
 const { npm, pnpm, bun } = Astro.props;
 
+const managers = [
+  { id: "npm", command: npm },
+  { id: "pnpm", command: pnpm },
+  { id: "bun", command: bun },
+];
+
 function formatCommand(command: string) {
   return command
     .split("\n")
@@ -15,17 +21,22 @@ function formatCommand(command: string) {
 }
 ---
 
-<div class="pm-tabs terminal-shell" data-copy-root>
+<div class="pm-tabs terminal-shell not-content" data-copy-root>
   <div class="terminal-header">
     <div class="terminal-dots" aria-hidden="true">
-      <span class="dot red"></span>
-      <span class="dot yellow"></span>
-      <span class="dot green"></span>
+      <span class="dot"></span>
     </div>
     <div class="tab-buttons">
-      <button class="tab-btn active" data-pm="npm">npm</button>
-      <button class="tab-btn" data-pm="pnpm">pnpm</button>
-      <button class="tab-btn" data-pm="bun">bun</button>
+      {
+        managers.map((manager, index) => (
+          <button
+            class:list={["tab-btn", { active: index === 0 }]}
+            data-pm={manager.id}
+          >
+            {manager.id}
+          </button>
+        ))
+      }
     </div>
     <button class="copy-button" aria-label="Copy command">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -35,8 +46,14 @@ function formatCommand(command: string) {
     </button>
   </div>
   <div class="terminal-body copy-source">
-    <pre class="tab-content cli-output" data-pm="npm" set:html={formatCommand(npm)} />
-    <pre class="tab-content cli-output hidden" data-pm="pnpm" set:html={formatCommand(pnpm)} />
-    <pre class="tab-content cli-output hidden" data-pm="bun" set:html={formatCommand(bun)} />
+    {
+      managers.map((manager, index) => (
+        <pre
+          class:list={["tab-content", "cli-output", { hidden: index !== 0 }]}
+          data-pm={manager.id}
+          set:html={formatCommand(manager.command)}
+        ></pre>
+      ))
+    }
   </div>
 </div>

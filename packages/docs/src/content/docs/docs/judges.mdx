@@ -1,0 +1,70 @@
+---
+title: Judges
+description: Pick deterministic and custom judges for normalized harness runs.
+editUrl: false
+---
+
+Judges score the run that the harness already captured. Harnesses own
+execution; judges own rubrics, parser logic, model calls, score thresholds, and
+failure messages.
+
+Use deterministic judges before reaching for model-scored rubrics. Put judges
+at the suite level when every case should satisfy the same contract, and use
+explicit judge assertions when one case needs an extra check.
+
+## Judge Types
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/docs/judges/tool-call/">
+    <strong>ToolCallJudge</strong>
+    <span>Check tool names, order, and arguments from normalized tool calls.</span>
+  </a>
+  <a class="api-link-card" href="/docs/judges/structured-output/">
+    <strong>StructuredOutputJudge</strong>
+    <span>Check JSON-safe output fields against expected metadata or matcher options.</span>
+  </a>
+  <a class="api-link-card" href="/docs/judges/custom/">
+    <strong>Custom Judges</strong>
+    <span>Create reusable rubrics and attach thresholds where failures should occur.</span>
+  </a>
+</div>
+
+## Suite Defaults
+
+Suite-level judges run after each `run(...)`. This example keeps the same Paris
+story as the harness pages and uses a tiny custom judge for the answer.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => ({
+    score: output.toLowerCase().includes("paris") ? 1 : 0,
+  }),
+);
+
+describeEval(
+  "capital questions",
+  {
+    harness: qaHarness,
+    judges: [CapitalJudge],
+  },
+  (it) => {
+    it("knows the capital of France", async ({ run }) => {
+      const result = await run("What is the capital of France?");
+
+      expect(result.output).toContain("Paris");
+    });
+  },
+);
+```
+
+Keep deterministic judges close to the harness contract. Use custom judges for
+rubrics that need domain-specific scoring or reusable explanations.
