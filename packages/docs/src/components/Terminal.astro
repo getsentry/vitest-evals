@@ -1,0 +1,38 @@
+---
+import { Code } from "astro:components";
+
+interface Props {
+  title?: string;
+  copyText?: string;
+  code?: string;
+  lang?: "bash" | "json" | "plaintext" | "ts" | "yaml";
+}
+
+const { title, code, copyText = code, lang = "plaintext" } = Astro.props;
+---
+
+<div class="terminal-shell" data-copy-root data-copy-text={copyText}>
+  <div class="terminal-header">
+    <div class="terminal-dots" aria-hidden="true">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+    </div>
+    {title && <span class="terminal-title">{title}</span>}
+    <button class="copy-button" aria-label="Copy to clipboard">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="terminal-body copy-source">
+    {
+      code ? (
+        <Code code={code} lang={lang} theme="vitesse-black" wrap={false} />
+      ) : (
+        <slot />
+      )
+    }
+  </div>
+</div>

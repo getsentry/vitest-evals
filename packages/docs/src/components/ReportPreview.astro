@@ -1,0 +1,144 @@
+<div class="report-preview" aria-label="vitest-evals reporter output preview">
+  <div class="report-header">
+    <span class="report-status passed">PASS</span>
+    <span>apps/refund/evals/refund.eval.ts</span>
+  </div>
+  <div class="report-row">
+    <span class="report-check">✓</span>
+    <span class="report-name">approves refundable invoice</span>
+    <span class="report-meta">1,062 tok · 2 tools · 5.0s</span>
+  </div>
+  <div class="report-score">
+    <span>ToolCallJudge</span>
+    <strong>1.00</strong>
+  </div>
+  <div class="report-score">
+    <span>StructuredOutputJudge</span>
+    <strong>1.00</strong>
+  </div>
+  <div class="report-tools">
+    <span class="tool lookup">lookupInvoice</span>
+    <span class="tool refund">createRefund</span>
+  </div>
+  <div class="report-json">
+    <span>{`{ "status": "approved", "refundId": "rf_inv_123" }`}</span>
+  </div>
+</div>
+
+<style>
+  .report-preview {
+    border: 1px solid rgba(225, 236, 226, 0.16);
+    border-radius: var(--radius);
+    background:
+      linear-gradient(180deg, rgba(21, 26, 22, 0.94), rgba(7, 10, 8, 0.98)),
+      #070a08;
+    padding: 1rem;
+    font-family: var(--font-mono);
+    box-shadow:
+      0 26px 80px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .report-header,
+  .report-row,
+  .report-score,
+  .report-tools,
+  .report-json {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    border-bottom: 1px solid var(--border);
+    padding: 0.72rem 0;
+    min-width: 0;
+  }
+
+  .report-header {
+    padding-top: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .report-header span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .report-status {
+    border-radius: 5px;
+    padding: 0.12rem 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .report-status.passed {
+    background: rgba(110, 231, 135, 0.15);
+    color: var(--green);
+  }
+
+  .report-check {
+    color: var(--green);
+  }
+
+  .report-name {
+    min-width: 0;
+    flex: 1;
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+
+  .report-meta {
+    color: var(--text-tertiary);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .report-score {
+    justify-content: space-between;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+  }
+
+  .report-score strong {
+    color: var(--green);
+  }
+
+  .report-tools {
+    flex-wrap: wrap;
+  }
+
+  .tool {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.28rem 0.55rem;
+    color: var(--text);
+    font-size: 0.78rem;
+  }
+
+  .tool.lookup {
+    border-color: rgba(215, 181, 104, 0.45);
+  }
+
+  .tool.refund {
+    border-color: rgba(110, 231, 135, 0.38);
+  }
+
+  .report-json {
+    border-bottom: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    overflow-x: auto;
+  }
+
+  @media (max-width: 560px) {
+    .report-row {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .report-meta {
+      white-space: normal;
+    }
+  }
+</style>

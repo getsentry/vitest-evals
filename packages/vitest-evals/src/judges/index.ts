@@ -1,12 +1,14 @@
 export {
   StructuredOutputJudge,
   type StructuredOutputJudgeConfig,
+  type StructuredOutputJudgeExpected,
   type StructuredOutputJudgeOptions,
 } from "./structuredOutputJudge";
 
 export {
   ToolCallJudge,
   type ToolCallJudgeConfig,
+  type ToolCallJudgeExpectedTool,
   type ToolCallJudgeOptions,
 } from "./toolCallJudge";
 

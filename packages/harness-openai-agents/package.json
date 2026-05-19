@@ -1,13 +1,23 @@
 {
   "name": "@vitest-evals/harness-openai-agents",
   "version": "0.9.0-beta.6",
+  "description": "OpenAI Agents SDK harness adapter for vitest-evals.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getsentry/vitest-evals.git",
+    "directory": "packages/harness-openai-agents"
+  },
+  "author": "David Cramer",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/getsentry/vitest-evals/issues"
+  },
+  "homepage": "https://github.com/getsentry/vitest-evals/tree/main/packages/harness-openai-agents#readme",
   "sideEffects": false,
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "publishConfig": {
     "access": "public"
   },

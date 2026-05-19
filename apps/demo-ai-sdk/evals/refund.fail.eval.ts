@@ -2,10 +2,13 @@ import { expect } from "vitest";
 import { describeEval, StructuredOutputJudge } from "vitest-evals";
 import { refundHarness } from "./shared";
 
+const skipUnlessRunningFailureExamples = () =>
+  !process.env.ANTHROPIC_API_KEY || process.env.VITEST_EVALS_FAIL_MODE !== "1";
+
 describeEval(
   "demo ai-sdk refund scorer failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness: refundHarness,
     judges: [StructuredOutputJudge()],
   },
@@ -25,7 +28,7 @@ describeEval(
 describeEval(
   "demo ai-sdk refund assertion failing example",
   {
-    skipIf: () => !process.env.ANTHROPIC_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness: refundHarness,
   },
   (it) => {

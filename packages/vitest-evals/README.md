@@ -153,7 +153,7 @@ Use Vitest JSON as the eval report artifact. It preserves the `meta` field that
 contains eval scores and normalized harness runs.
 
 ```sh
-vitest run evals \
+vitest run --config vitest.evals.config.ts \
   --reporter=vitest-evals/reporter \
   --reporter=json \
   --outputFile.json=vitest-results.json
@@ -389,16 +389,3 @@ When you only need deterministic contract checks, built-ins such as
 `StructuredOutputJudge()` and `ToolCallJudge()` are still available. The primary
 documentation examples intentionally use factuality/rubric judges because those
 match the product's LLM-as-a-judge direction.
-
-## Legacy Compatibility
-
-The root package is harness-first and judge-first. Legacy scorer-first suites
-and `evaluate(...)` live under `vitest-evals/legacy`.
-
-```ts
-import {
-  describeEval,
-  StructuredOutputScorer,
-  ToolCallScorer,
-} from "vitest-evals/legacy";
-```

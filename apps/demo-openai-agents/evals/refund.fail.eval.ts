@@ -8,10 +8,13 @@ type ScoredRefundCase = RefundCase & {
   expected: Record<string, unknown>;
 };
 
+const skipUnlessRunningFailureExamples = () =>
+  !process.env.OPENAI_API_KEY || process.env.VITEST_EVALS_FAIL_MODE !== "1";
+
 describeEval(
   "demo openai agents refund scorer failing example",
   {
-    skipIf: () => !process.env.OPENAI_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness: refundHarness,
     judges: [StructuredOutputJudge()],
   },
@@ -37,7 +40,7 @@ describeEval(
 describeEval(
   "demo openai agents refund assertion failing example",
   {
-    skipIf: () => !process.env.OPENAI_API_KEY,
+    skipIf: skipUnlessRunningFailureExamples,
     harness: refundHarness,
   },
   (it) => {

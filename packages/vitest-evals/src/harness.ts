@@ -7,97 +7,234 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-/** Normalized record for one tool call observed during a harness run. */
+/**
+ * Normalized record for one tool call observed during a harness run.
+ *
+ * @example
+ * ```ts
+ * const call: ToolCallRecord = {
+ *   name: "lookupInvoice",
+ *   arguments: { invoiceId: "inv_123" },
+ *   result: { refundable: true },
+ * };
+ * ```
+ */
 export type ToolCallRecord = {
+  /** Provider or runtime tool-call id when one is available. */
   id?: string;
+  /** Tool name as exposed to the agent or application runtime. */
   name: string;
+  /** JSON-safe tool arguments after provider/runtime normalization. */
   arguments?: Record<string, JsonValue>;
+  /** JSON-safe tool result returned by the application tool. */
   result?: JsonValue;
+  /** Normalized tool error when execution failed. */
   error?: {
     message: string;
     type?: string;
     [key: string]: JsonValue | undefined;
   };
+  /** ISO timestamp for the start of tool execution. */
   startedAt?: string;
+  /** ISO timestamp for the end of tool execution. */
   finishedAt?: string;
+  /** Tool execution duration in milliseconds. */
   durationMs?: number;
+  /** Extra JSON-safe tool metadata for reporters and custom judges. */
   metadata?: Record<string, JsonValue>;
 };
 
-/** Normalized message recorded in a harness session transcript. */
+/**
+ * Normalized message recorded in a harness session transcript.
+ *
+ * @example
+ * ```ts
+ * const message: NormalizedMessage = {
+ *   role: "assistant",
+ *   content: { status: "approved" },
+ *   toolCalls: [{ name: "lookupInvoice" }],
+ * };
+ * ```
+ */
 export type NormalizedMessage = {
+  /** Transcript role for the normalized message. */
   role: "system" | "user" | "assistant" | "tool";
+  /** JSON-safe message content. */
   content?: JsonValue;
+  /** Tool calls associated with this message. */
   toolCalls?: ToolCallRecord[];
+  /** Extra JSON-safe message metadata. */
   metadata?: Record<string, JsonValue>;
 };
 
-/** Provider usage summary attached to a normalized harness run. */
+/**
+ * Provider usage summary attached to a normalized harness run.
+ *
+ * @example
+ * ```ts
+ * const usage: UsageSummary = {
+ *   provider: "openai",
+ *   model: "gpt-4o-mini",
+ *   inputTokens: 212,
+ *   outputTokens: 48,
+ *   totalTokens: 260,
+ * };
+ * ```
+ */
 export type UsageSummary = {
+  /** Provider that served the application run. */
   provider?: string;
+  /** Model used for the application run. */
   model?: string;
+  /** Input, prompt, or request tokens consumed by the run. */
   inputTokens?: number;
+  /** Output or completion tokens produced by the run. */
   outputTokens?: number;
+  /** Reasoning tokens reported by providers that expose them. */
   reasoningTokens?: number;
+  /** Total token count reported by the provider or adapter. */
   totalTokens?: number;
+  /** Count of tool calls observed during the run. */
   toolCalls?: number;
+  /** Retry count observed during the run. */
   retries?: number;
+  /** Provider-specific JSON-safe usage details. Cost estimates belong here. */
   metadata?: Record<string, JsonValue>;
 };
 
 /** Timing summary attached to a normalized harness run. */
 export type TimingSummary = {
+  /** End-to-end run duration in milliseconds. */
   totalMs?: number;
+  /** Extra JSON-safe timing metadata. */
   metadata?: Record<string, JsonValue>;
 };
 
-/** JSON-serializable transcript produced by the system under test. */
+/**
+ * JSON-serializable transcript produced by the system under test.
+ *
+ * @example
+ * ```ts
+ * const session: NormalizedSession = {
+ *   provider: "openai",
+ *   model: "gpt-4o-mini",
+ *   messages: [
+ *     { role: "user", content: "Refund invoice inv_123" },
+ *     { role: "assistant", content: { status: "approved" } },
+ *   ],
+ * };
+ * ```
+ */
 export type NormalizedSession = {
+  /** Ordered normalized transcript messages. */
   messages: NormalizedMessage[];
+  /** Provider that produced the session when known. */
   provider?: string;
+  /** Model that produced the session when known. */
   model?: string;
+  /** Extra JSON-safe session metadata. */
   metadata?: Record<string, JsonValue>;
 };
 
 type OutputField<TOutput extends JsonValue | undefined> =
   undefined extends TOutput ? { output?: TOutput } : { output: TOutput };
 
-/** Normalized result returned by every harness execution. */
+/**
+ * Normalized result returned by every harness execution.
+ *
+ * @example
+ * ```ts
+ * const run: HarnessRun<{ status: "approved" }> = {
+ *   output: { status: "approved" },
+ *   session: {
+ *     messages: [
+ *       { role: "user", content: "Refund invoice inv_123" },
+ *       { role: "assistant", content: { status: "approved" } },
+ *     ],
+ *   },
+ *   usage: { totalTokens: 260 },
+ *   errors: [],
+ * };
+ * ```
+ */
 export type HarnessRun<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OutputField<TOutput> & {
+  /** Normalized transcript and provider/session metadata. */
   session: NormalizedSession;
+  /** Stable provider usage units such as tokens, tools, and retries. */
   usage: UsageSummary;
+  /** Optional timing summary for the run. */
   timings?: TimingSummary;
+  /** JSON-safe run artifacts captured by the harness or test context. */
   artifacts?: Record<string, JsonValue>;
+  /** Normalized errors captured during execution. */
   errors: Array<Record<string, JsonValue>>;
 };
 
 /** Error value with an attached partial or complete normalized harness run. */
 export type HarnessRunError = Error & {
+  /** Attached normalized harness run recovered by `getHarnessRunFromError(...)`. */
   vitestEvalsRun: HarnessRun;
 };
 
 /** Per-run metadata shape accepted by harnesses and eval tests. */
 export type HarnessMetadata = Record<string, unknown>;
 
-/** Runtime context passed from the eval fixture into a harness run. */
+/**
+ * Runtime context passed from the eval fixture into a harness run.
+ *
+ * @example
+ * ```ts
+ * const harness: Harness<string> = {
+ *   name: "refund-agent",
+ *   async run(input, context) {
+ *     context.setArtifact("inputLength", input.length);
+ *
+ *     return {
+ *       output: undefined,
+ *       session: { messages: [{ role: "user", content: input }] },
+ *       usage: {},
+ *       errors: [],
+ *     };
+ *   },
+ * };
+ * ```
+ */
 export type HarnessContext<
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
+  /** Per-run metadata passed through `run(input, { metadata })`. */
   metadata: Readonly<TMetadata>;
+  /** Abort signal from Vitest when available. */
   signal?: AbortSignal;
+  /** Mutable JSON-safe artifact bag shared with the harness. */
   artifacts: Record<string, JsonValue>;
+  /** Stores one JSON-safe artifact on the current run. */
   setArtifact: (name: string, value: JsonValue) => void;
 };
 
-/** Adapter that executes the system under test and returns a normalized run. */
+/**
+ * Adapter that executes the system under test and returns a normalized run.
+ *
+ * @example
+ * ```ts
+ * const harness: Harness<string, { status: "approved" | "denied" }> = {
+ *   name: "refund-agent",
+ *   async run(input, context) {
+ *     return normalizeHarnessRun(input, await runRefundFlow(input), context);
+ *   },
+ * };
+ * ```
+ */
 export type Harness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
+  /** Stable harness name used in reports. */
   name: string;
+  /** Executes the system under test and returns a normalized run. */
   run: (
     input: TInput,
     context: HarnessContext<TMetadata>,
@@ -112,22 +249,44 @@ export type SimpleToolCallRecord = Omit<
   ToolCallRecord,
   "arguments" | "result" | "error" | "metadata"
 > & {
+  /** Raw tool arguments accepted by `createHarness(...)` before normalization. */
   arguments?: unknown;
+  /** Raw tool result accepted by `createHarness(...)` before normalization. */
   result?: unknown;
+  /** Raw tool error accepted by `createHarness(...)` before normalization. */
   error?: unknown;
+  /** Raw tool metadata accepted by `createHarness(...)` before normalization. */
   metadata?: Record<string, unknown>;
 };
 
-/** Lightweight result shape normalized by `createHarness(...)`. */
+/**
+ * Lightweight result shape normalized by `createHarness(...)`.
+ *
+ * @example
+ * ```ts
+ * const result: SimpleHarnessResult<{ status: "approved" }> = {
+ *   output: { status: "approved" },
+ *   toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
+ *   usage: { totalTokens: 260 },
+ * };
+ * ```
+ */
 export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OutputField<TOutput> & {
+  /** Pre-normalized transcript messages. When omitted, a default user/assistant transcript is created. */
   messages?: NormalizedMessage[];
+  /** Lightweight tool-call records to normalize into the session. */
   toolCalls?: SimpleToolCallRecord[];
+  /** Usage summary to attach to the run. */
   usage?: UsageSummary;
+  /** Timing summary to attach to the run. */
   timings?: TimingSummary;
+  /** Raw artifact values to normalize and merge into the run. */
   artifacts?: Record<string, unknown>;
+  /** Raw session metadata to normalize into the session. */
   metadata?: Record<string, unknown>;
+  /** Raw errors to normalize into the run. */
   errors?: unknown[];
 };
 
@@ -138,20 +297,39 @@ export type HarnessResultLike<
 
 /** Arguments passed to the `createHarness(...)` convenience callback. */
 export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
+  /** Original input passed to `run(input)`. */
   input: TInput;
+  /** Read-only metadata passed to `run(input, { metadata })`. */
   metadata: Readonly<TMetadata>;
+  /** Abort signal from Vitest when available. */
   signal?: AbortSignal;
+  /** Mutable run artifact bag. */
   artifacts: HarnessContext<TMetadata>["artifacts"];
+  /** Stores one JSON-safe artifact on the current run. */
   setArtifact: HarnessContext<TMetadata>["setArtifact"];
 };
 
-/** Options for creating a lightweight custom application harness. */
+/**
+ * Options for creating a lightweight custom application harness.
+ *
+ * @example
+ * ```ts
+ * const options: CreateHarnessOptions<string, { status: "approved" }> = {
+ *   name: "refund-agent",
+ *   run: async ({ input }) => ({
+ *     output: await classifyRefund(input),
+ *   }),
+ * };
+ * ```
+ */
 export type CreateHarnessOptions<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
+  /** Stable harness name used in reports. */
   name: string;
+  /** Executes application code and returns either a lightweight result or full `HarnessRun`. */
   run: (
     args: CreateHarnessRunArgs<TInput, TMetadata>,
   ) => MaybePromise<HarnessResultLike<TOutput>>;
@@ -240,7 +418,36 @@ export function normalizeContent(value: unknown): JsonValue {
   return normalized !== undefined ? normalized : String(value);
 }
 
-/** Creates a harness from the common "run app code and return output" shape. */
+/**
+ * Creates a harness from the common "run app code and return output" shape.
+ *
+ * @param options - Harness name plus the callback that executes app code.
+ *
+ * @example
+ * ```ts
+ * import { createHarness } from "vitest-evals";
+ *
+ * export const refundHarness = createHarness<
+ *   string,
+ *   { status: "approved" | "denied" },
+ *   { expected: { status: "approved" | "denied" } }
+ * >({
+ *   name: "refund-agent",
+ *   run: async ({ input, metadata, setArtifact }) => {
+ *     const result = await runRefundFlow(input, metadata);
+ *     const output = { status: result.status };
+ *
+ *     setArtifact("case", { expected: metadata.expected.status });
+ *
+ *     return {
+ *       output,
+ *       toolCalls: result.toolCalls,
+ *       usage: { provider: "openai", model: "gpt-4o-mini" },
+ *     };
+ *   },
+ * });
+ * ```
+ */
 export function createHarness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
@@ -273,7 +480,24 @@ export function createHarness<
   return harness;
 }
 
-/** Normalizes a lightweight harness result into the reporter-facing run shape. */
+/**
+ * Normalizes a lightweight harness result into the reporter-facing run shape.
+ *
+ * @param input - Original input passed to the harness.
+ * @param result - Lightweight result or pre-normalized harness run.
+ * @param context - Optional per-run context used to merge artifacts.
+ *
+ * @example
+ * ```ts
+ * const run = normalizeHarnessRun("Refund invoice inv_123", {
+ *   output: { status: "approved" },
+ *   toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
+ *   usage: { provider: "openai", model: "gpt-4o-mini" },
+ * });
+ *
+ * expect(toolCalls(run.session)).toHaveLength(1);
+ * ```
+ */
 export function normalizeHarnessRun<
   TInput = unknown,
   TMetadata extends HarnessMetadata = HarnessMetadata,
@@ -449,12 +673,35 @@ function normalizeSimpleErrors(
   });
 }
 
-/** Flattens every recorded tool call from a normalized session. */
+/**
+ * Flattens every recorded tool call from a normalized session.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const names = toolCalls(result.session).map((call) => call.name);
+ *
+ * expect(names).toEqual(["lookupInvoice", "createRefund"]);
+ * ```
+ */
 export function toolCalls(session: NormalizedSession): ToolCallRecord[] {
   return session.messages.flatMap((message) => message.toolCalls ?? []);
 }
 
-/** Filters normalized session messages by role. */
+/**
+ * Filters normalized session messages by role.
+ *
+ * @param session - Normalized session produced by a harness run.
+ * @param role - Message role to keep.
+ *
+ * @example
+ * ```ts
+ * const assistantText = messagesByRole(result.session, "assistant")
+ *   .map((message) => message.content)
+ *   .join("\n");
+ * ```
+ */
 export function messagesByRole(
   session: NormalizedSession,
   role: NormalizedMessage["role"],
@@ -462,27 +709,77 @@ export function messagesByRole(
   return session.messages.filter((message) => message.role === role);
 }
 
-/** Returns every normalized system message from a session. */
+/**
+ * Returns every normalized system message from a session.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const systemPrompts = systemMessages(result.session);
+ * ```
+ */
 export function systemMessages(session: NormalizedSession) {
   return messagesByRole(session, "system");
 }
 
-/** Returns every normalized user message from a session. */
+/**
+ * Returns every normalized user message from a session.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const firstPrompt = userMessages(result.session)[0]?.content;
+ * ```
+ */
 export function userMessages(session: NormalizedSession) {
   return messagesByRole(session, "user");
 }
 
-/** Returns every normalized assistant message from a session. */
+/**
+ * Returns every normalized assistant message from a session.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const finalAnswer = assistantMessages(result.session).at(-1)?.content;
+ * ```
+ */
 export function assistantMessages(session: NormalizedSession) {
   return messagesByRole(session, "assistant");
 }
 
-/** Returns every normalized tool message from a session. */
+/**
+ * Returns every normalized tool message from a session.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const toolOutputs = toolMessages(result.session).map((message) => message.content);
+ * ```
+ */
 export function toolMessages(session: NormalizedSession) {
   return messagesByRole(session, "tool");
 }
 
-/** Attaches a partial or complete harness run to an arbitrary thrown error. */
+/**
+ * Attaches a partial or complete harness run to an arbitrary thrown error.
+ *
+ * @param error - Thrown value to wrap.
+ * @param run - Partial or complete normalized harness run to preserve.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   return await runAgent(input);
+ * } catch (error) {
+ *   throw attachHarnessRunToError(error, partialRun);
+ * }
+ * ```
+ */
 export function attachHarnessRunToError(
   error: unknown,
   run: HarnessRun,
@@ -496,7 +793,20 @@ export function attachHarnessRunToError(
   });
 }
 
-/** Reads an attached harness run back off a previously wrapped error value. */
+/**
+ * Reads an attached harness run back off a previously wrapped error value.
+ *
+ * @param error - Unknown thrown value that may contain a harness run.
+ *
+ * @example
+ * ```ts
+ * const partialRun = getHarnessRunFromError(error);
+ *
+ * if (partialRun) {
+ *   console.log(toolCalls(partialRun.session));
+ * }
+ * ```
+ */
 export function getHarnessRunFromError(error: unknown): HarnessRun | undefined {
   if (
     error &&

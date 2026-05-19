@@ -6,31 +6,81 @@ import {
 } from "../internal/toolCallScorer";
 import type { HarnessMetadata } from "../harness";
 
-type ExpectedTool =
+/**
+ * Expected tool-call shape accepted by `ToolCallJudge()`.
+ *
+ * @example
+ * ```ts
+ * const expectedTools: ToolCallJudgeExpectedTool[] = [
+ *   "lookupInvoice",
+ *   { name: "createRefund", arguments: { invoiceId: "inv_123" } },
+ * ];
+ * ```
+ */
+export type ToolCallJudgeExpectedTool =
   | string
   | {
       name: string;
       arguments?: unknown;
     };
 
-/** Configuration for the deterministic tool-call judge. */
+/**
+ * Configuration for the deterministic tool-call judge.
+ *
+ * @example
+ * ```ts
+ * const judge = ToolCallJudge({
+ *   ordered: true,
+ *   allowExtra: false,
+ * });
+ * ```
+ */
 export interface ToolCallJudgeConfig extends ToolCallScorerConfig {}
 
 type ToolCallJudgeMetadata = HarnessMetadata & {
-  expectedTools?: ExpectedTool[];
+  expectedTools?: ToolCallJudgeExpectedTool[];
 };
 
-/** Matcher context accepted by `ToolCallJudge()`. */
+/**
+ * Matcher context accepted by `ToolCallJudge()`.
+ *
+ * @example
+ * ```ts
+ * await expect(result).toSatisfyJudge(ToolCallJudge(), {
+ *   expectedTools: ["lookupInvoice", "createRefund"],
+ * });
+ * ```
+ */
 export interface ToolCallJudgeOptions
   extends JudgeContext<any, any, HarnessMetadata, any>,
     Omit<
       ToolCallScorerOptions,
       "input" | "output" | "toolCalls" | "expectedTools"
     > {
-  expectedTools?: ExpectedTool[];
+  expectedTools?: ToolCallJudgeExpectedTool[];
 }
 
-/** Creates a deterministic judge that checks expected tool calls. */
+/**
+ * Creates a deterministic judge that checks expected tool calls.
+ *
+ * @param config - Matching behavior shared by every assessment from this judge.
+ *
+ * @example
+ * ```ts
+ * describeEval("refund agent", {
+ *   harness: refundHarness,
+ *   judges: [ToolCallJudge({ ordered: true })],
+ * }, (it) => {
+ *   it("creates a refund after lookup", async ({ run }) => {
+ *     await run("Refund invoice inv_123", {
+ *       metadata: {
+ *         expectedTools: ["lookupInvoice", "createRefund"],
+ *       },
+ *     });
+ *   });
+ * });
+ * ```
+ */
 export function ToolCallJudge(
   config: ToolCallJudgeConfig = {},
 ): Judge<ToolCallJudgeOptions> {
@@ -52,7 +102,9 @@ export function ToolCallJudge(
   };
 }
 
-function normalizeExpectedTools(expectedTools: ExpectedTool[] | undefined) {
+function normalizeExpectedTools(
+  expectedTools: ToolCallJudgeExpectedTool[] | undefined,
+) {
   return expectedTools?.map((tool) =>
     typeof tool === "string" ? { name: tool } : tool,
   );

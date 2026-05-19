@@ -7,17 +7,23 @@ import {
 } from "./matchers";
 
 export type ExpectedTool = {
+  /** Expected tool name. */
   name: string;
+  /** Expected tool arguments matched according to the configured strategy. */
   arguments?: unknown;
 };
 
 export interface ToolCallScorerOptions extends BaseScorerOptions {
+  /** Expected tool calls for the run. */
   expectedTools?: ExpectedTool[];
 }
 
 export interface ToolCallScorerConfig extends BaseMatcherConfig {
+  /** Require expected tools to appear in the configured order. */
   ordered?: boolean;
+  /** Matching strategy for expected tool arguments. */
   params?: MatchStrategy;
+  /** Options used when argument matching is fuzzy. */
   fuzzyOptions?: FuzzyMatchOptions;
 }
 

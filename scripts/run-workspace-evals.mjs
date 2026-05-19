@@ -10,7 +10,7 @@ const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
 );
 
 const scriptName = failMode ? "evals:fail" : "evals";
-const env = createEvalEnv(process.env, toolDetailLevel);
+const env = createEvalEnv(process.env, toolDetailLevel, { failMode });
 
 const packageDirs = findWorkspacePackageDirs()
   .filter((dir) => hasScript(dir, scriptName))
