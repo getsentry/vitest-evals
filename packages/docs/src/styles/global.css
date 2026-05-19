@@ -397,6 +397,58 @@ blockquote p:last-child {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1.45rem;
+}
+
+.path-item,
+.setup-flow a {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(21, 26, 22, 0.4);
+  padding: 1rem;
+  color: var(--text-secondary);
+}
+
+.path-item:hover,
+.setup-flow a:hover {
+  border-color: rgba(142, 232, 143, 0.42);
+  background: rgba(142, 232, 143, 0.055);
+  color: var(--text-secondary);
+}
+
+.path-item span,
+.setup-flow span,
+.reference-guide span {
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.path-item strong,
+.setup-flow strong,
+.reference-guide strong {
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.path-item em,
+.setup-flow em {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-style: normal;
+  line-height: 1.5;
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -443,6 +495,21 @@ blockquote p:last-child {
   color: var(--text);
 }
 
+.docs-sidebar a.active {
+  color: var(--text);
+}
+
+.docs-sidebar a.active::before {
+  content: "";
+  display: inline-block;
+  width: 0.38rem;
+  height: 0.38rem;
+  margin-right: 0.45rem;
+  border-radius: 999px;
+  background: var(--green);
+  vertical-align: 0.08rem;
+}
+
 .docs-sidebar a.subsection {
   margin-left: 0.8rem;
   color: var(--text-tertiary);
@@ -468,6 +535,34 @@ blockquote p:last-child {
 
 .docs-content > h3 + p {
   margin-top: 0.35rem;
+}
+
+.setup-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.65rem 0 2.2rem;
+}
+
+.setup-flow code {
+  font-style: normal;
+}
+
+.docs-callout {
+  margin: 1.15rem 0;
+  border: 1px solid rgba(215, 181, 104, 0.36);
+  border-radius: var(--radius);
+  background: rgba(215, 181, 104, 0.075);
+  padding: 1rem 1.1rem;
+}
+
+.docs-callout strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.docs-callout p {
+  margin: 0;
 }
 
 .runtime-list {
@@ -611,6 +706,87 @@ blockquote p:last-child {
 
 .api-lead {
   max-width: 48rem;
+}
+
+.api-core {
+  margin-top: 2.8rem;
+}
+
+.reference-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.55rem 0 0;
+}
+
+.reference-guide div {
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+}
+
+.reference-guide p {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+
+.api-core > h2 {
+  margin-top: 0;
+}
+
+.api-core-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.api-core-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(21, 26, 22, 0.34);
+  padding: 1rem;
+}
+
+.api-core-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.api-core-heading h3 {
+  margin: 0;
+}
+
+.api-core-heading a {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.api-core-heading a:hover {
+  color: var(--text);
+}
+
+.api-core-item > p {
+  margin-top: 0.55rem;
+  font-size: 0.92rem;
+}
+
+.api-core-item pre {
+  margin: 0.9rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.58;
+}
+
+.api-core-item pre,
+.api-core-item code {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .api-group {
@@ -964,6 +1140,9 @@ blockquote p:last-child {
 @media (max-width: 880px) {
   .hero,
   .docs-shell,
+  .path-grid,
+  .setup-flow,
+  .reference-guide,
   .judge-list div,
   .runtime-list div,
   .grid,

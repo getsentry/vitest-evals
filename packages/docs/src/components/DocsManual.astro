@@ -403,6 +403,28 @@ const shardedWorkflow = `- uses: actions/upload-artifact@v4
     with a harness, write normal test bodies around <code>run(input)</code>, and
     publish the same results locally and in GitHub Actions.
   </p>
+  <nav class="setup-flow" aria-label="Setup flow">
+    <a href="#install">
+      <span>01</span>
+      <strong>Install</strong>
+      <em>Core package plus one runtime harness.</em>
+    </a>
+    <a href="#configure-vitest">
+      <span>02</span>
+      <strong>Configure</strong>
+      <em>A separate eval command and Vitest config.</em>
+    </a>
+    <a href="#harness-setup">
+      <span>03</span>
+      <strong>Adapt</strong>
+      <em>One harness around your app or agent.</em>
+    </a>
+    <a href="#write-evals">
+      <span>04</span>
+      <strong>Assert</strong>
+      <em>Normal Vitest expectations around <code>run(input)</code>.</em>
+    </a>
+  </nav>
 
   <h2 id="install">Install</h2>
   <p>
@@ -454,6 +476,13 @@ const shardedWorkflow = `- uses: actions/upload-artifact@v4
     the app once, returns typed <code>output</code> for assertions, and normalizes
     transcript, tool calls, usage, artifacts, and errors for judges and reports.
   </p>
+  <aside class="docs-callout">
+    <strong>Choose the adapter that matches production code.</strong>
+    <p>
+      The eval suite should look nearly identical after this point. Runtime
+      differences belong in the harness file, not in every test case.
+    </p>
+  </aside>
   <p>
     The examples below show the production-facing agent shape first, then the
     eval-only harness file that adapts it. In your project, keep the agent close
@@ -643,6 +672,13 @@ const shardedWorkflow = `- uses: actions/upload-artifact@v4
     run after each <code>run(...)</code>; explicit judge assertions are useful for
     one-off checks or rubric scores you want to record without failing.
   </p>
+  <aside class="docs-callout">
+    <strong>Put assessment behavior on the judge.</strong>
+    <p>
+      Harnesses run the system under test. Judges own rubrics, model calls,
+      parser logic, and score thresholds.
+    </p>
+  </aside>
   <dl class="judge-list">
     <div>
       <dt><code>ToolCallJudge()</code></dt>

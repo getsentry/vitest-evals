@@ -165,9 +165,68 @@ function normalize(path: string) {
         });
       }
 
+      function initSectionNav() {
+        const sidebar = document.querySelector(".docs-sidebar");
+        if (!(sidebar instanceof HTMLElement)) {
+          return;
+        }
+
+        const links = Array.from(
+          sidebar.querySelectorAll('a[href^="#"]'),
+        ).filter((link) => link instanceof HTMLAnchorElement);
+        const sections = links
+          .map((link) => ({
+            link,
+            section: document.getElementById(link.hash.slice(1)),
+          }))
+          .filter(({ section }) => section instanceof HTMLElement);
+
+        if (sections.length === 0) {
+          return;
+        }
+
+        function setActive(id) {
+          links.forEach((link) => {
+            const isActive = link.hash === `#${id}`;
+            link.classList.toggle("active", isActive);
+            if (isActive) {
+              link.setAttribute("aria-current", "location");
+            } else {
+              link.removeAttribute("aria-current");
+            }
+          });
+        }
+
+        if (!("IntersectionObserver" in window)) {
+          setActive(sections[0].section.id);
+          return;
+        }
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            const visible = entries
+              .filter((entry) => entry.isIntersecting)
+              .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+            if (visible?.target instanceof HTMLElement) {
+              setActive(visible.target.id);
+            }
+          },
+          {
+            rootMargin: "-16% 0px -68%",
+            threshold: [0.1, 0.35, 0.6],
+          },
+        );
+
+        sections.forEach(({ section }) => observer.observe(section));
+        const initialId = window.location.hash.slice(1) || sections[0].section.id;
+        setActive(initialId);
+      }
+
       initNavToggle();
       initPackageManagerTabs();
       initCopyButtons();
+      initSectionNav();
     </script>
   </body>
 </html>
