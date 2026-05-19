@@ -609,10 +609,6 @@ blockquote p:last-child {
   color: var(--text-secondary);
 }
 
-.api-title {
-  font-size: clamp(2rem, 3.6vw, 3rem);
-}
-
 .api-lead {
   max-width: 48rem;
 }
