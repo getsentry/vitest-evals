@@ -1043,10 +1043,6 @@ blockquote p:last-child {
     padding-top: 1rem;
   }
 
-  .docs-content h1 {
-    font-size: clamp(2.35rem, 10vw, 3.2rem);
-  }
-
   th,
   td {
     padding: 0.75rem 0.7rem;
