@@ -11,7 +11,6 @@
     "docs": "pnpm --filter vitest-evals-docs run dev",
     "docs:check": "node ./scripts/check-public-docs.mjs",
     "docs:build": "pnpm --filter vitest-evals-docs run build",
-    "docs:dev": "pnpm --filter vitest-evals-docs run dev",
     "docs:preview": "pnpm --filter vitest-evals-docs run preview",
     "format": "biome format --write .",
     "lint": "biome lint .",
