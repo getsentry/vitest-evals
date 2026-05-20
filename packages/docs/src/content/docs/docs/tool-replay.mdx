@@ -37,13 +37,10 @@ Choose a mode with `VITEST_EVALS_REPLAY_MODE`.
 
 | Mode | Behavior |
 | --- | --- |
+| `auto` | Replay when a recording exists; otherwise call live and record. **This is the default.** |
+| `record` | Always call live and overwrite recordings. Use this to refresh fixtures intentionally. |
 | `off` | Call live tools and do not read or write recordings. |
-| `record` | Call live tools and overwrite recordings. |
-| `auto` | Replay when a recording exists; otherwise call live and record. |
 | `strict` | Require an existing recording and fail when one is missing. |
-
-Use `record` to update fixtures intentionally and `strict` in CI when live tool
-calls should not happen.
 
 ## Cache Keys and Redaction
 
@@ -80,13 +77,11 @@ timestamps, and high-cardinality response fields before committing fixtures.
 
 ## Workflow
 
-Start live with `off`, record known-good tool calls with `record`, then use
-`strict` in CI once the suite has useful recordings.
+Most of the time, `auto` is all you need — recordings accumulate on the first
+run and replay automatically after that. When an intentional app change needs
+new tool responses, rerun in `record` mode and review the fixture diff with
+the code change.
 
-```bash title="record tool replay"
+```bash title="refresh tool recordings"
 VITEST_EVALS_REPLAY_MODE=record pnpm evals
-VITEST_EVALS_REPLAY_MODE=strict pnpm evals
 ```
-
-When an intentional app change needs new tool responses, rerun in `record` mode
-and review the fixture diff with the code change.

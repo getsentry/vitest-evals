@@ -40,8 +40,7 @@ defaults out of unit tests.
 {
   "scripts": {
     "evals": "vitest run --config vitest.evals.config.ts",
-    "evals:record": "VITEST_EVALS_REPLAY_MODE=record vitest run --config vitest.evals.config.ts",
-    "evals:strict": "VITEST_EVALS_REPLAY_MODE=strict vitest run --config vitest.evals.config.ts"
+    "evals:record": "VITEST_EVALS_REPLAY_MODE=record vitest run --config vitest.evals.config.ts"
   }
 }
 ```
@@ -57,7 +56,7 @@ export default defineConfig({
     reporters: ["vitest-evals/reporter"],
     env: {
       VITEST_EVALS_REPLAY_MODE:
-        process.env.VITEST_EVALS_REPLAY_MODE ?? "off",
+        process.env.VITEST_EVALS_REPLAY_MODE ?? "auto",
       VITEST_EVALS_REPLAY_DIR: ".vitest-evals/recordings",
     },
   },

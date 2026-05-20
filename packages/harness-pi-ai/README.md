@@ -170,7 +170,7 @@ overwrite the native recording.
 
 Supported modes:
 
-- `off`: never read or write recordings
-- `auto`: replay when present, otherwise call live and write a recording
-- `strict`: require an existing recording and fail if it is missing
+- `auto` (default): replay when present, otherwise call live and write a recording
 - `record`: always call live and overwrite the recording
+- `off`: never read or write recordings
+- `strict`: require an existing recording and fail if it is missing

@@ -259,8 +259,9 @@ export default defineConfig({
 });
 ```
 
-`auto` replays when a recording exists and writes a new one otherwise. `strict`
-errors on missing recordings. Recordings are stored under
+`auto` (the default) replays when a recording exists and writes a new one
+otherwise. `record` always calls live and overwrites recordings — use it to
+refresh fixtures intentionally. Recordings are stored under
 `.vitest-evals/recordings/<tool-name>/`.
 
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`

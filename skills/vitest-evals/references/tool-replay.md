@@ -21,10 +21,10 @@ export default defineConfig({
 
 | Mode | Behavior |
 |------|----------|
-| `off` | Never read or write recordings. This is the default. |
-| `auto` | Replay when a recording exists, otherwise call live and write one. |
-| `strict` | Require an existing recording and fail when missing. |
+| `auto` | Replay when a recording exists, otherwise call live and write one. **This is the default.** |
 | `record` | Always call live and overwrite the recording. |
+| `off` | Never read or write recordings. |
+| `strict` | Require an existing recording and fail when missing. |
 
 ## Tool Opt-In
 
