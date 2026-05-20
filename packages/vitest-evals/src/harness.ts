@@ -709,6 +709,13 @@ export function messagesByRole(
   return session.messages.filter((message) => message.role === role);
 }
 
+function hasNonEmptyMessageContent(message: NormalizedMessage) {
+  return (
+    message.content !== undefined &&
+    (typeof message.content !== "string" || message.content.trim().length > 0)
+  );
+}
+
 /**
  * Returns every normalized system message from a session.
  *
@@ -749,6 +756,22 @@ export function userMessages(session: NormalizedSession) {
  */
 export function assistantMessages(session: NormalizedSession) {
   return messagesByRole(session, "assistant");
+}
+
+/**
+ * Returns the latest assistant message content, ignoring empty text messages.
+ *
+ * @param session - Normalized session produced by a harness run.
+ *
+ * @example
+ * ```ts
+ * const finalAnswer = latestAssistantMessageContent(result.session);
+ * ```
+ */
+export function latestAssistantMessageContent(session: NormalizedSession) {
+  return [...assistantMessages(session)]
+    .reverse()
+    .find(hasNonEmptyMessageContent)?.content;
 }
 
 /**

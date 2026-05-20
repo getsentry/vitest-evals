@@ -89,24 +89,24 @@ const harness = aiSdkHarness({
 ```
 
 `run` executes the system under test. Judges are created separately; keep judge
-prompts and model calls in the judge instead of putting a judge model call on
-the app harness.
+prompts and model calls on a judge harness instead of putting them on the app
+harness.
 
 ```ts
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async (ctx: JudgeContext<string, RefundDecision>) => {
-    const verdict = await generateText({
-      model: openai("gpt-4o-mini"),
-      prompt: formatJudgePrompt({
-        input: ctx.input,
-        output: ctx.output,
-      }),
-    }).then((result) => result.text);
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { describeEval, FactualityJudge } from "vitest-evals";
 
-    return parseJudgeVerdict(verdict);
-  },
-);
+const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+describeEval("refund agent", {
+  harness,
+  judges: [factualityJudge],
+});
 ```
 
 The adapter infers:

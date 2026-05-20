@@ -43,23 +43,24 @@ describeEval("refund agent", { harness }, (it) => {
 ```
 
 `run` executes the Pi agent under test. Judges are created separately; keep
-judge prompts and model calls in the judge instead of putting a judge model
-call on the app harness.
+judge prompts on the judge and model calls on a judge harness instead of
+putting a judge model call on the app harness.
 
 ```ts
-const RefundRubricJudge = createJudge(
-  "RefundRubricJudge",
-  async (ctx: JudgeContext<string, RefundDecision>) => {
-    const verdict = await queryRefundJudgeModel({
-      prompt: formatJudgePrompt({
-        input: ctx.input,
-        output: ctx.output,
-      }),
-    });
+import { getModel } from "@mariozechner/pi-ai";
+import { piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
+import { describeEval, FactualityJudge } from "vitest-evals";
 
-    return parseJudgeVerdict(verdict);
-  },
-);
+const judgeHarness = piAiJudgeHarness({
+  model: getModel("anthropic", "claude-sonnet-4-5"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+describeEval("refund agent", {
+  harness,
+  judges: [factualityJudge],
+});
 ```
 
 If the agent already exposes its own tools, the adapter will infer them from

@@ -30,6 +30,17 @@ import type {
   ToolRecording,
   ToolReplayConfig,
 } from "vitest-evals/replay";
+import {
+  createJudgeHarness,
+  type JudgeHarnessInput,
+} from "vitest-evals/judges";
+import { completeSimple } from "@mariozechner/pi-ai";
+import type {
+  Api,
+  AssistantMessage,
+  Model,
+  SimpleStreamOptions,
+} from "@mariozechner/pi-ai";
 
 type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
@@ -54,6 +65,122 @@ type AnyPiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, PiAiToolDefinition<any, any, TInput, TMetadata>>;
+
+/**
+ * Configuration for adapting a Pi AI model into a judge harness.
+ *
+ * @example
+ * ```ts
+ * import { getModel } from "@mariozechner/pi-ai";
+ * import { piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
+ *
+ * const judgeHarness = piAiJudgeHarness({
+ *   model: getModel("anthropic", "claude-sonnet-4-5"),
+ *   temperature: 0,
+ * });
+ * ```
+ */
+export interface PiAiJudgeHarnessConfig<TApi extends Api = Api> {
+  /** Pi AI model used for judge prompts. */
+  model: Model<TApi>;
+  /** Optional display name for diagnostics. */
+  name?: string;
+  /** Optional judge-model temperature. */
+  temperature?: number;
+  /** Optional judge-model token cap. */
+  maxOutputTokens?: number;
+  /** Additional Pi AI stream options forwarded to `completeSimple(...)`. */
+  options?: Omit<SimpleStreamOptions, "signal" | "temperature" | "maxTokens">;
+}
+
+/**
+ * Adapts a Pi AI model into the provider-neutral judge harness API.
+ *
+ * @example
+ * ```ts
+ * import { getModel } from "@mariozechner/pi-ai";
+ * import { piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
+ * import { describeEval, FactualityJudge } from "vitest-evals";
+ *
+ * const judgeHarness = piAiJudgeHarness({
+ *   model: getModel("anthropic", "claude-sonnet-4-5"),
+ *   temperature: 0,
+ * });
+ *
+ * describeEval("qa agent", {
+ *   harness: qaHarness,
+ *   judgeHarness,
+ *   judges: [FactualityJudge()],
+ * }, (it) => {});
+ * ```
+ */
+export function piAiJudgeHarness<TApi extends Api>(
+  config: PiAiJudgeHarnessConfig<TApi>,
+) {
+  return createJudgeHarness({
+    name: config.name ?? "pi-ai",
+    run: async ({ responseFormat, system, prompt }, { signal }) => {
+      const message = await completeSimple(
+        config.model,
+        {
+          systemPrompt: formatPiAiJudgeSystemPrompt(system, responseFormat),
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        {
+          ...(config.options ?? {}),
+          ...(config.temperature !== undefined
+            ? { temperature: config.temperature }
+            : {}),
+          ...(config.maxOutputTokens !== undefined
+            ? { maxTokens: config.maxOutputTokens }
+            : {}),
+          ...(signal ? { signal } : {}),
+        },
+      );
+
+      return resolvePiAiJudgeText(message);
+    },
+  });
+}
+
+function formatPiAiJudgeSystemPrompt(
+  system: string | undefined,
+  responseFormat: JudgeHarnessInput["responseFormat"],
+) {
+  if (responseFormat?.type !== "json") {
+    return system;
+  }
+
+  const jsonInstruction = [
+    "Return only valid JSON. Do not include markdown fences or explanatory prose.",
+    responseFormat.schema
+      ? `JSON Schema:\n${JSON.stringify(responseFormat.schema, null, 2)}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return system ? `${system}\n\n${jsonInstruction}` : jsonInstruction;
+}
+
+function resolvePiAiJudgeText(message: AssistantMessage) {
+  if (message.stopReason === "error" || message.stopReason === "aborted") {
+    throw new Error(message.errorMessage ?? "Pi AI judge harness failed.");
+  }
+
+  return message.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("")
+    .trim();
+}
+
 type InferredPiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,

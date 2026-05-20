@@ -8,7 +8,7 @@ editUrl: false
 metadata or matcher options. Use it for deterministic checks when the harness
 returns a parsed domain object instead of raw provider text.
 
-## Configure
+## Usage
 
 ```ts title="evals/capital.eval.ts"
 import { StructuredOutputJudge } from "vitest-evals";
@@ -21,7 +21,7 @@ describeEval("capital questions", {
 });
 ```
 
-### Explicit Assertions
+## Explicit Assertion
 
 Use explicit assertions when a case needs an extra check or when you want to
 record a score separately from the suite defaults.
@@ -42,7 +42,7 @@ it("records a structured output score", async ({ run }) => {
 
 `threshold: null` records the score without turning it into a failure.
 
-## Metadata
+## Expected Output
 
 Put the expected value in run metadata.
 

@@ -246,6 +246,21 @@ describe("ToolCallScorer", () => {
       expect(result.metadata?.rationale).toContain("incorrect arguments");
     });
 
+    test("ordered argument mismatch preserves missing actual arguments", async () => {
+      const scorer = ToolCallScorer({ ordered: true, params: "strict" });
+      const toolCalls: ToolCall[] = [{ name: "search" }];
+      const result = await scorer({
+        input: "test",
+        output: "result",
+        expectedTools: [{ name: "search", arguments: { query: "weather" } }],
+        toolCalls,
+      });
+
+      expect(result.score).toBe(0.0);
+      expect(result.metadata?.expected).toEqual({ query: "weather" });
+      expect(result.metadata?.actual).toBeUndefined();
+    });
+
     test("strict params pass with exact match", async () => {
       const scorer = ToolCallScorer({ params: "strict" });
       const toolCalls: ToolCall[] = [

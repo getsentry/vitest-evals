@@ -89,20 +89,23 @@ const harness = openaiAgentsHarness({
 ```
 
 `run` executes the OpenAI agent under test. Judges are created separately; keep
-judge prompts and model calls in the judge instead of putting a judge model
-call on the app harness.
+judge prompts on the judge and model calls on a judge harness instead of
+putting a judge model call on the app harness.
 
 ```ts
-const ClassificationJudge = createJudge(
-  "ClassificationJudge",
-  async (ctx: JudgeContext<string, Classification>) => {
-    const result = await judgeRunner
-      .run(judgeAgent, formatJudgePrompt(ctx))
-      .then((result) => resolveResultText(result));
+import { openaiAgentsJudgeHarness } from "@vitest-evals/harness-openai-agents";
+import { describeEval, FactualityJudge } from "vitest-evals";
 
-    return parseJudgeVerdict(result);
-  },
-);
+const judgeHarness = openaiAgentsJudgeHarness({
+  model: "gpt-4.1-mini",
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+describeEval("classifier agent", {
+  harness,
+  judges: [factualityJudge],
+});
 ```
 
 The adapter provides:

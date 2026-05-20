@@ -29,6 +29,7 @@ export type RefundDecision =
 
 export type RefundEvalMetadata = {
   name?: string;
+  expected?: unknown;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };

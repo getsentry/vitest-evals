@@ -32,6 +32,14 @@ import type {
   ToolRecording,
   ToolReplayConfig,
 } from "vitest-evals/replay";
+import { createJudgeHarness } from "vitest-evals/judges";
+import type { JudgeHarnessInput } from "vitest-evals/judges";
+import { Agent, Runner } from "@openai/agents";
+import type {
+  JsonSchemaDefinition,
+  Model,
+  ModelSettings,
+} from "@openai/agents";
 
 type MaybePromise<T> = T | Promise<T>;
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
@@ -256,6 +264,155 @@ export type OpenAiAgentsToolReplayPolicies<
 > = Record<string, OpenAiAgentsToolReplayPolicy<TInput, TMetadata>>;
 
 type OpenAiAgentsInvoke = (...args: unknown[]) => unknown;
+
+/**
+ * Configuration for adapting OpenAI Agents into a judge harness.
+ *
+ * @example
+ * ```ts
+ * import { openaiAgentsJudgeHarness } from "@vitest-evals/harness-openai-agents";
+ *
+ * const judgeHarness = openaiAgentsJudgeHarness({
+ *   model: "gpt-4.1-mini",
+ *   temperature: 0,
+ * });
+ * ```
+ */
+export interface OpenAiAgentsJudgeHarnessConfig {
+  /** OpenAI Agents model used for judge prompts. */
+  model: string | Model;
+  /** Optional display name for diagnostics. */
+  name?: string;
+  /** Optional judge-model temperature. */
+  temperature?: number;
+  /** Optional judge-model token cap. */
+  maxOutputTokens?: number;
+  /** Additional model settings for the judge agent. */
+  modelSettings?: ModelSettings;
+  /** Optional runner override for tests or custom runner configuration. */
+  runner?: Runner;
+}
+
+/**
+ * Adapts OpenAI Agents into the provider-neutral judge harness API.
+ *
+ * @example
+ * ```ts
+ * import { openaiAgentsJudgeHarness } from "@vitest-evals/harness-openai-agents";
+ * import { describeEval, FactualityJudge } from "vitest-evals";
+ *
+ * const judgeHarness = openaiAgentsJudgeHarness({
+ *   model: "gpt-4.1-mini",
+ *   temperature: 0,
+ * });
+ *
+ * describeEval("qa agent", {
+ *   harness: qaHarness,
+ *   judgeHarness,
+ *   judges: [FactualityJudge()],
+ * }, (it) => {});
+ * ```
+ */
+export function openaiAgentsJudgeHarness(
+  config: OpenAiAgentsJudgeHarnessConfig,
+) {
+  return createJudgeHarness({
+    name: config.name ?? "openai-agents",
+    run: async ({ responseFormat, system, prompt }, { signal }) => {
+      const outputType = createOpenAiAgentsOutputType(responseFormat);
+      const runner =
+        config.runner ??
+        new Runner({
+          tracingDisabled: true,
+        });
+      const agent = new Agent({
+        name: "vitest_evals_judge",
+        instructions: formatOpenAiAgentsJudgeInstructions(
+          system,
+          responseFormat,
+        ),
+        model: config.model,
+        modelSettings: {
+          ...(config.modelSettings ?? {}),
+          ...(config.temperature !== undefined
+            ? { temperature: config.temperature }
+            : {}),
+          ...(config.maxOutputTokens !== undefined
+            ? { maxTokens: config.maxOutputTokens }
+            : {}),
+        },
+        ...(outputType ? { outputType } : {}),
+      });
+      const result = await runner.run(agent, prompt, { signal });
+
+      return resolveOpenAiAgentsJudgeOutput(result);
+    },
+  });
+}
+
+function formatOpenAiAgentsJudgeInstructions(
+  system: string | undefined,
+  responseFormat: JudgeHarnessInput["responseFormat"],
+) {
+  if (responseFormat?.type !== "json") {
+    return system ?? "";
+  }
+
+  const jsonInstruction = [
+    "Return only valid JSON. Do not include markdown fences or explanatory prose.",
+    responseFormat.schema
+      ? `JSON Schema:\n${JSON.stringify(responseFormat.schema, null, 2)}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return system ? `${system}\n\n${jsonInstruction}` : jsonInstruction;
+}
+
+function createOpenAiAgentsOutputType(
+  responseFormat: JudgeHarnessInput["responseFormat"],
+): JsonSchemaDefinition | undefined {
+  const schema = responseFormat?.schema;
+  if (!isOpenAiAgentsJsonSchema(schema)) {
+    return undefined;
+  }
+
+  return {
+    type: "json_schema",
+    name: "judge_response",
+    strict: schema.additionalProperties === false,
+    schema,
+  };
+}
+
+function isOpenAiAgentsJsonSchema(
+  schema: unknown,
+): schema is JsonSchemaDefinition["schema"] {
+  return (
+    isJsonRecord(schema) &&
+    schema.type === "object" &&
+    isJsonRecord(schema.properties) &&
+    Array.isArray(schema.required) &&
+    typeof schema.additionalProperties === "boolean"
+  );
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolveOpenAiAgentsJudgeOutput(result: unknown) {
+  if (!result || typeof result !== "object") {
+    return result;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(result, "finalOutput")) {
+    return (result as { finalOutput: unknown }).finalOutput;
+  }
+
+  return result;
+}
 
 /** Minimal OpenAI Agents tool shape instrumented by the harness. */
 export type OpenAiAgentsTool<

@@ -1,0 +1,123 @@
+---
+title: FactualityJudge
+description: Model-grade harness output against an expert answer.
+editUrl: false
+---
+
+`FactualityJudge()` compares the normalized run `input`, `output`, and
+`expected` answer. The judge owns the rubric and parser. A separate
+`judgeHarness` owns the provider-specific model call, so the same judge works
+with AI SDK, Pi, OpenAI Agents, or custom app harnesses.
+
+The built-in rubric gives partial credit for consistent subsets and supersets,
+full credit for exact factual matches or irrelevant differences, and zero credit
+for contradictions.
+
+## Usage
+
+Pick the judge harness from the provider package you already use for the
+judge-side model. The app harness still runs the app under test; the judge
+harness only grades the captured result. You only need `judgeHarness` when a
+judge calls `ctx.runJudge(...)`; deterministic judges can omit it.
+
+```ts title="evals/capital.eval.ts"
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { describeEval, FactualityJudge } from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+describeEval("capital questions", {
+  harness: qaHarness,
+  judges: [factualityJudge],
+  judgeThreshold: 0.6,
+});
+```
+
+You can also put `judgeHarness` on `describeEval(...)` when several
+LLM-backed judges should share the same judge-side model. Matcher options are
+the most specific override, followed by a judge-level default, then the suite
+default. Explicit matcher calls can also reuse a single unambiguous
+judge-level harness from the suite's automatic judges. Automatic judges only
+inherit an explicit suite default or their own judge-level harness; they do not
+inherit inferred harnesses from sibling judges.
+
+For Pi or OpenAI Agents suites, use the matching adapter instead of pulling in
+the AI SDK adapter:
+
+```ts title="evals/piJudges.ts"
+import { getModel } from "@mariozechner/pi-ai";
+import { piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
+import { FactualityJudge } from "vitest-evals";
+
+export const judgeHarness = piAiJudgeHarness({
+  model: getModel("anthropic", "claude-sonnet-4-5"),
+  temperature: 0,
+});
+export const factualityJudge = FactualityJudge({ judgeHarness });
+```
+
+## Expected Answer
+
+Put the expert answer in run metadata when every suite-level factuality judge
+should read it.
+
+```ts title="evals/capital.eval.ts"
+await run("What is the capital of France?", {
+  metadata: {
+    expected: "Paris is the capital of France.",
+  },
+});
+```
+
+The judge formats structured harness output as JSON before sending it to the
+grading model, so it can assess text or domain-object outputs.
+
+## Explicit Assertion
+
+Inside a `describeEval(...)` suite, explicit assertions reuse the suite's
+`judgeHarness`. Pass `expected` and any threshold override like normal Vitest
+matcher options.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import { FactualityJudge } from "vitest-evals";
+
+const result = await run("What is the capital of France?");
+
+await expect(result).toSatisfyJudge(FactualityJudge(), {
+  expected: "Paris is the capital of France.",
+  threshold: 0.6,
+});
+```
+
+Outside a suite, or when one assertion should use a different judge-side model,
+pass `judgeHarness` directly in matcher options. That matcher-level value wins
+over a judge-level or suite-level default.
+
+## Custom Provider
+
+Use `createJudgeHarness()` when no first-party adapter matches your judge-side
+provider. Return JSON-safe output or a string containing JSON.
+
+```ts title="evals/judgeHarness.ts"
+import { createJudgeHarness, type JudgeHarness } from "vitest-evals";
+import { callJudgeModel } from "./judgeModel";
+
+export const judgeHarness: JudgeHarness = createJudgeHarness({
+  name: "factuality-judge-model",
+  run: async ({ system, prompt }, { signal }) =>
+    callJudgeModel({ system, prompt, signal }),
+});
+```
+
+## Failure Behavior
+
+The default threshold is `1`, so partial-credit factuality scores fail unless
+you lower the suite or matcher threshold. When `expected` is missing, `null`, or
+a blank string, the judge records a zero score without making a model call.

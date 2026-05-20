@@ -1,4 +1,5 @@
 import type { BaseScorerOptions, ScoredResult, ToolCallLike } from "./scoring";
+import { normalizeContent } from "../harness";
 import {
   createMatcher,
   type BaseMatcherConfig,
@@ -114,8 +115,11 @@ function evaluateOrderedTools(
           score: expectedIndex / expected.length,
           metadata: {
             rationale: `Tool '${expectedTool.name}' called with incorrect arguments at position ${expectedIndex + 1} (${expectedIndex}/${expected.length} tools matched correctly)`,
-            expected: expectedTool.arguments,
-            actual: actualTool.arguments,
+            expected: normalizeContent(expectedTool.arguments),
+            actual:
+              actualTool.arguments === undefined
+                ? undefined
+                : normalizeContent(actualTool.arguments),
             matched: expectedIndex,
             total: expected.length,
           },

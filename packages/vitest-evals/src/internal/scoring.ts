@@ -1,11 +1,11 @@
-import type { ToolCallRecord } from "../harness";
+import type { JsonValue, ToolCallRecord } from "../harness";
 
 export type ToolCallLike = ToolCallRecord;
 
 export type ScoreMetadata = {
   rationale?: string;
-  output?: unknown;
-} & Record<string, unknown>;
+  output?: JsonValue;
+} & Record<string, JsonValue | undefined>;
 
 export type ScoredResult = {
   score: number | null;

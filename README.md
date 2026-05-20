@@ -138,46 +138,21 @@ artifacts so it does not upload npm package contents as release assets.
 The `apps/demo-pi` app shows the intended explicit-run flow:
 
 ```ts
+import { getModel } from "@mariozechner/pi-ai";
 import { expect } from "vitest";
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { piAiHarness, piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
 import {
-  createJudge,
   describeEval,
+  FactualityJudge,
   toolCalls,
-  type JudgeContext,
 } from "vitest-evals";
 import { createRefundAgent } from "../src/refundAgent";
 
-type RefundEvalMetadata = {
-  expectedStatus: "approved" | "denied";
-  expectedTools: string[];
-};
-
-type RefundOutput = {
-  status: "approved" | "denied";
-};
-
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({
-    input,
-    output,
-    metadata,
-  }: JudgeContext<string, RefundOutput, RefundEvalMetadata>) => {
-    const verdict = await judgeFactuality({
-      question: input,
-      answer: output,
-      expectedStatus: metadata.expectedStatus,
-    });
-
-    return {
-      score: verdict.score,
-      metadata: {
-        rationale: verdict.rationale,
-      },
-    };
-  },
-);
+const judgeHarness = piAiJudgeHarness({
+  model: getModel("anthropic", "claude-sonnet-4-5"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
 
 describeEval(
   "demo pi refund agent",
@@ -185,13 +160,15 @@ describeEval(
     harness: piAiHarness({
       agent: () => createRefundAgent(),
     }),
-    judges: [FactualityJudge],
+    judges: [factualityJudge],
+    judgeThreshold: 0.6,
   },
   (it) => {
     it.for([
       {
         name: "approves refundable invoice",
         input: "Refund invoice inv_123",
+        expected: "The refund request is approved.",
         expectedStatus: "approved",
         expectedTools: ["lookupInvoice", "createRefund"],
       },
@@ -221,18 +198,22 @@ Harness-backed suites stay close to plain Vitest:
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, tool calls, and metadata; `output` is only optional
   when the harness output type includes `undefined`
-- judges own their prompt, rubric, model call, and parsing; use
-  `createJudge(...)` for custom judges and its provider-helper overload only
-  when multiple judges share setup
+- judges own their prompt, rubric, and parsing; LLM-backed judges use
+  `ctx.runJudge(...)` from a configured `judgeHarness`
 - scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
 - reporter output, replay, usage, and tool traces come from the normalized run
 
-Built-in judges like `StructuredOutputJudge()` are still available for
-deterministic contract checks, but the more realistic explicit-judge path is a
-custom factuality or rubric judge over `output`, with `JudgeContext` available
-when the judge needs richer run/session data.
+Built-in judges include `FactualityJudge()` for model-backed factuality
+grading plus deterministic helpers such as `StructuredOutputJudge()` and
+`ToolCallJudge()`. Configure the judge-side model separately with
+`FactualityJudge({ judgeHarness })`, `describeEval({ judgeHarness })`, or
+matcher options only when a judge calls `ctx.runJudge(...)`. A `judgeHarness` is
+a dedicated judge-model adapter, so the same factuality judge can be reused
+across AI SDK, Pi, OpenAI Agents, or custom app harnesses. Automatic inference
+for explicit matcher calls only applies when suite judges share the same judge
+harness instance.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure the replay mode and directory globally in Vitest, then opt individual

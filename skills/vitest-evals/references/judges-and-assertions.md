@@ -24,8 +24,8 @@ import {
   type JudgeContext,
 } from "vitest-evals";
 
-const FactualityJudge = createJudge(
-  "FactualityJudge",
+const RefundRubricJudge = createJudge(
+  "RefundRubricJudge",
   async (ctx: JudgeContext<string, RefundOutput, CaseMeta>) => {
     const verdict = await callJudgeModel({
       prompt: formatRubric({
@@ -56,6 +56,7 @@ const FactualityJudge = createJudge(
 
 | Judge | Use |
 |-------|-----|
+| `FactualityJudge({ model })` | Model-grade normalized output against `metadata.expected` or explicit `expected`. |
 | `ToolCallJudge()` | Check expected tool names or arguments from `metadata.expectedTools` or explicit options. |
 | `StructuredOutputJudge()` | Check expected fields from `metadata.expected` or explicit options against `run.output`. |
 

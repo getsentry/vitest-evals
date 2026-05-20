@@ -7,8 +7,9 @@ through the workspace packages:
 - `@vitest-evals/harness-ai-sdk`
 
 The passing live eval lives in `evals/refund.eval.ts`.
-It demonstrates app-local refund tools and explicit Vitest assertions on
-`run.output` and the normalized session trace.
+It demonstrates app-local refund tools, the built-in factuality judge over
+normalized harness output, and explicit Vitest assertions on `run.output` and
+the normalized session trace.
 
 The intentionally failing examples live in `evals/refund.fail.eval.ts`.
 One fails an automatic harness-backed judge, and one fails explicit assertions

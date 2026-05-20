@@ -44,55 +44,28 @@ workflow.
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, tool calls, and metadata; `output` is only optional
   when the harness output type includes `undefined`
-- judges own their prompt, rubric, model call, and parsing; use
-  `createJudge(...)` for custom judges and its provider-helper overload only
-  when multiple judges share setup
+- judges own their prompt, rubric, and parsing; LLM-backed judges use
+  `ctx.runJudge(...)` from a configured `judgeHarness`
 - explicit judge assertions use
   `await expect(result).toSatisfyJudge(judge, context)`
 
 ## Explicit Run Example
 
 ```ts
+import { getModel } from "@mariozechner/pi-ai";
 import { expect } from "vitest";
-import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { piAiHarness, piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
 import {
-  createJudge,
   describeEval,
+  FactualityJudge,
   toolCalls,
-  type JudgeContext,
 } from "vitest-evals";
 import { createRefundAgent } from "../src/refundAgent";
 
-type RefundEvalMetadata = {
-  expectedStatus: "approved" | "denied";
-  expectedTools: string[];
-};
-
-type RefundOutput = {
-  status: "approved" | "denied";
-};
-
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({
-    input,
-    output,
-    metadata,
-  }: JudgeContext<string, RefundOutput, RefundEvalMetadata>) => {
-    const verdict = await judgeFactuality({
-      question: input,
-      answer: output,
-      expectedStatus: metadata.expectedStatus,
-    });
-
-    return {
-      score: verdict.score,
-      metadata: {
-        rationale: verdict.rationale,
-      },
-    };
-  },
-);
+const judgeHarness = piAiJudgeHarness({
+  model: getModel("anthropic", "claude-sonnet-4-5"),
+  temperature: 0,
+});
 
 describeEval(
   "refund agent",
@@ -100,12 +73,15 @@ describeEval(
     harness: piAiHarness({
       agent: () => createRefundAgent(),
     }),
-    judges: [FactualityJudge],
+    judgeHarness,
+    judges: [FactualityJudge()],
+    judgeThreshold: 0.6,
   },
   (it) => {
     it("approves a refundable invoice", async ({ run }) => {
       const result = await run("Refund invoice inv_123", {
         metadata: {
+          expected: "The refund request is approved.",
           expectedStatus: "approved",
           expectedTools: ["lookupInvoice", "createRefund"],
         },
@@ -214,6 +190,7 @@ When generics are needed, use `createHarness<Input, Output, Metadata>(...)`.
 import {
   createHarness,
   createJudge,
+  createJudgeHarness,
   describeEval,
   type JudgeContext,
 } from "vitest-evals";
@@ -259,14 +236,25 @@ const appHarness = createHarness<AppEvalInput, AppOutput, AppEvalMetadata>({
   },
 });
 
+const judgeHarness = createJudgeHarness({
+  name: "app-rubric-judge-model",
+  run: async ({ prompt }, { signal }) =>
+    promptJudgeModel({ prompt, signal }),
+});
+
 const AppRubricJudge = createJudge(
   "AppRubricJudge",
   async (ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>) => {
-    const verdict = await promptJudgeModel({
+    if (!ctx.runJudge) {
+      throw new Error("AppRubricJudge requires a configured judgeHarness.");
+    }
+
+    const verdict = await ctx.runJudge({
       prompt: formatRubricPrompt({
         output: ctx.output,
         criteria: ctx.input.criteria,
       }),
+      responseFormat: { type: "json" },
     });
 
     return parseRubricVerdict(verdict);
@@ -277,6 +265,7 @@ describeEval(
   "app behavior",
   {
     harness: appHarness,
+    judgeHarness,
     judges: [AppRubricJudge],
     judgeThreshold: 0.75,
   },
@@ -332,11 +321,26 @@ In practice, this is usually most useful for factuality, rubric, or grounded
 answer checks:
 
 ```ts
-await expect(result).toSatisfyJudge(FactualityJudge);
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { expect } from "vitest";
+import { FactualityJudge } from "vitest-evals";
+
+const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+await expect(result).toSatisfyJudge(factualityJudge, {
+  expected: "Paris is the capital of France.",
+  threshold: 0.6,
+});
 ```
 
 For lower-level cases, the matcher also accepts raw values and synthetic judge
-context:
+context. Pass every context field the judge needs when the value did not come
+from eval fixture `run(...)`:
 
 ```ts
 await expect({ status: "approved" }).toSatisfyJudge(MyJudge, {
@@ -344,35 +348,75 @@ await expect({ status: "approved" }).toSatisfyJudge(MyJudge, {
 });
 ```
 
-Use `createJudge(...)` for custom judges so reporter output gets a stable
-label:
+Use the built-in factuality judge when you want a model-backed factuality grade
+over the normalized run:
 
 ```ts
-import { createJudge } from "vitest-evals";
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { FactualityJudge } from "vitest-evals";
 
-const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({ output }) => {
-    const answer = output;
-    const verdict = await judgeFactuality(answer);
-
-    return {
-      score: verdict.score,
-      metadata: {
-        rationale: verdict.rationale,
-      },
-    };
-  },
-);
+export const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+export const factualityJudge = FactualityJudge({ judgeHarness });
 ```
 
-LLM-backed judges should provide their own judge prompt and rubric text.
-`vitest-evals` does not prescribe a rubric schema, scoring scale, model
-provider, or parser; those stay in the judge. When multiple judges share a
-reusable judge-side provider helper, use the provider-helper overload of
-`createJudge(...)` so run-scoped options such as abort signals stay curried.
-Calling `harness.run(...)` from a judge executes the application again, so use
-that only when a second run is intentional.
+For custom judge providers, create a dedicated judge harness with the same
+prompt contract:
+
+```ts
+import {
+  createJudgeHarness,
+  FactualityJudge,
+  type JudgeHarness,
+} from "vitest-evals";
+import { callJudgeModel } from "./judgeModel";
+
+export const judgeHarness: JudgeHarness = createJudgeHarness({
+  name: "factuality-judge-model",
+  run: async ({ system, prompt }, { signal }) =>
+    callJudgeModel({ system, prompt, signal }),
+});
+
+export const factualityJudge = FactualityJudge({ judgeHarness });
+```
+
+Configure that judge harness once and reuse the same judge with any app
+harness:
+
+```ts
+import { describeEval } from "vitest-evals";
+import { aiSdkRefundHarness } from "./aiSdkRefundHarness";
+import { piRefundHarness } from "./piRefundHarness";
+import { factualityJudge } from "./sharedJudges";
+
+describeEval("ai sdk refund agent", {
+  harness: aiSdkRefundHarness,
+  judges: [factualityJudge],
+});
+
+describeEval("pi refund agent", {
+  harness: piRefundHarness,
+  judges: [factualityJudge],
+});
+```
+
+Use `createJudge(...)` for custom judges so reporter output gets a stable
+label. Custom LLM-backed judges should provide their own judge prompt, rubric
+text, and parser, then call `ctx.runJudge(...)` for the provider-specific model
+request. Bind a reusable default with `createJudge({ name, judgeHarness,
+assess })` or pass `judgeHarness` on the matcher or suite. Core curries the
+matcher, judge, or explicit suite `judgeHarness` into that function with the
+current run's abort signal. Matcher options win over a judge default, and a
+judge default wins over the suite default. Explicit matcher calls can also
+reuse a single unambiguous judge-level harness from the suite's automatic
+judges, but automatic judges do not inherit inferred harnesses from sibling
+judges. That inference requires those judges to share the same judge harness
+instance. Leave `judgeHarness` unset for suites that only use deterministic
+judges. Calling `harness.run(...)` from a judge executes the application again,
+so use that only when a second run is intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered
@@ -390,6 +434,4 @@ When a judge needs richer normalized context or the configured suite harness,
 type it with `JudgeContext`.
 
 When you only need deterministic contract checks, built-ins such as
-`StructuredOutputJudge()` and `ToolCallJudge()` are still available. The primary
-documentation examples intentionally use factuality/rubric judges because those
-match the product's LLM-as-a-judge direction.
+`StructuredOutputJudge()` and `ToolCallJudge()` are still available.

@@ -7,7 +7,7 @@ editUrl: false
 Open with the behavior this judge protects and when it should be preferred over
 a plain Vitest assertion or a custom judge.
 
-## Configure
+## Usage
 
 Show the default suite-level configuration first. Add options only after the
 reader sees the recommended path.

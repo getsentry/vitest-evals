@@ -75,20 +75,32 @@ run.
 
 Contains root judge helpers such as:
 
+- `FactualityJudge`
 - `ToolCallJudge`
 - `StructuredOutputJudge`
 
-These are judge-shaped adapters over the legacy comparison logic so new suites
-can stay on the harness-first surface while older matching behavior remains
-available.
+`FactualityJudge` is a factuality judge over normalized
+`input`/`output`/`expected` context. It uses the curried `runJudge` function
+from `JudgeContext` when it needs an LLM call, so provider configuration stays
+on the matcher, judge, or suite `judgeHarness`. The deterministic judges are
+judge-shaped adapters over the legacy comparison logic so new suites can stay
+on the harness-first surface while older matching behavior remains available.
+
+Dedicated judge harnesses are separate from the app harness under test. They
+adapt provider-specific judge-model configuration to the core judge prompt
+contract, which lets one judge implementation run across multiple app
+harnesses.
 
 All judges receive `JudgeContext`, which carries normalized run/session data,
-typed `input`, typed `output`, and the configured `harness`. The output is only
-optional when the harness output type includes `undefined`. LLM-backed judges own
-their prompt, rubric text, model call, and parser. Custom judges should use
-`createJudge("Name", assess)` for stable reporter labels; the provider-helper
-overload is for reusable judge-side setup that needs curried run-scoped options
-such as abort signals.
+typed `input`, typed `output`, the configured app `harness`, and `runJudge`
+when a judge harness is configured. The output is only optional when the
+harness output type includes `undefined`. LLM-backed judges own their prompt,
+rubric text, and parser; provider-specific model calls live in judge harness
+adapters. Custom judges should use `createJudge("Name", assess)` for stable
+reporter labels, or `createJudge({ name, judgeHarness, assess })` when the
+judge should carry a reusable judge-side harness default.
+`createJudgeHarness(...)` is the shared abstraction for judge-side provider
+shims.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -168,7 +180,8 @@ behavior only.
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
 result objects, while still allowing a custom `run` entrypoint and typed
-`output` selector.
+`output` selector. It also exposes `aiSdkJudgeHarness(...)`, a thin adapter
+from AI SDK model configuration to the core judge harness interface.
 
 ### `@vitest-evals/harness-openai-agents`
 
@@ -176,12 +189,14 @@ Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
 normalized run/session shape. It accepts existing agents/runners or per-run
 `agent`/`runner` factories, supports custom app entrypoints, normalizes
 `RunResult` output, messages, usage, tool calls, tool results, errors, trace
-metadata, and records replay metadata for opt-in local function tools.
+metadata, and records replay metadata for opt-in local function tools. It also
+exposes `openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`
 
 Adapts `pi-ai` style agents into the same normalized shape. It also owns the
-standard tool replay/VCR behavior for opt-in tools, including:
+standard tool replay/VCR behavior for opt-in tools and exposes
+`piAiJudgeHarness(...)` for judge-side model calls. Replay modes include:
 
 - `auto` (default)
 - `record`

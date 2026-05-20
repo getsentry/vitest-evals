@@ -290,7 +290,7 @@ function collectStructuredDocsErrors() {
       label: "judge",
       dir: join(root, "packages/docs/src/content/docs/docs/judges"),
       template: "_TEMPLATE.md",
-      requiredHeadings: ["Configure", "Metadata", "Failure Behavior"],
+      requiredHeadings: ["Usage", "Failure Behavior"],
     },
   ];
   const errors = [];

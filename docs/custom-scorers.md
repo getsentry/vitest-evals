@@ -11,11 +11,11 @@ scorer-first suite.
 ```ts
 import { createJudge } from "vitest-evals";
 
-export const FactualityJudge = createJudge(
-  "FactualityJudge",
+export const RefundRubricJudge = createJudge(
+  "RefundRubricJudge",
   async ({ output }) => {
     const answer = output;
-    const verdict = await judgeFactuality(answer);
+    const verdict = await judgeRefundRubric(answer);
 
     return {
       score: verdict.score,
@@ -30,13 +30,18 @@ export const FactualityJudge = createJudge(
 Use it as an automatic suite-level judge:
 
 ```ts
+import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { describeEval } from "vitest-evals";
+import { createRefundAgent } from "../src/refundAgent";
+import { RefundRubricJudge } from "./judges";
+
 describeEval(
   "refund agent",
   {
     harness: piAiHarness({
       agent: () => createRefundAgent(),
     }),
-    judges: [FactualityJudge],
+    judges: [RefundRubricJudge],
   },
   (it) => {
     it("approves the refundable invoice", async ({ run }) => {
@@ -49,17 +54,20 @@ describeEval(
 Or run it explicitly inside a test:
 
 ```ts
-await expect(result).toSatisfyJudge(FactualityJudge);
+import { expect } from "vitest";
+import { RefundRubricJudge } from "./judges";
+
+await expect(result).toSatisfyJudge(RefundRubricJudge);
 ```
 
 For simple response-level checks, a judge can just score `output`. When a judge
 needs normalized run context, type it with `JudgeContext` and read `metadata`,
-`toolCalls`, `session`, or `harness` from there. LLM-backed judges should own
-their prompt, rubric text, model call, and parser. When multiple judges share a
-reusable judge-side provider helper, use the provider-helper overload of
-`createJudge(...)` so run-scoped options such as abort signals stay curried.
-Calling `harness.run(...)` inside a judge executes the app again, so reserve
-that for judges that intentionally need a second run.
+`toolCalls`, `session`, `harness`, or the curried `runJudge` helper from there.
+LLM-backed judges should own their prompt, rubric text, and parser, then call
+`ctx.runJudge(...)` for the provider-specific model request. Core curries the
+matcher, judge, or suite `judgeHarness` into that function with the current
+abort signal. Calling `harness.run(...)` inside a judge executes the app again,
+so reserve that for judges that intentionally need a second run.
 
 When rubric criteria are part of the scenario under test, keep them on
 `input`. Use per-run `metadata` for expectations or harness configuration
@@ -72,14 +80,16 @@ output type cannot assess the received value. Inside an eval test, matcher
 calls on registered output objects or session objects reuse that exact run
 context; other raw values fall back to the current test's most recent `run(...)`
 context. Matcher calls outside that context, or on manually-created runs,
-should pass the context required by the judge in `toSatisfyJudge(...)` options.
+should pass every context field the judge reads in `toSatisfyJudge(...)`
+options.
 
 ## Built-In Root Judges
 
-The root package still ships deterministic judge-shaped helpers such as
-`StructuredOutputJudge()` and `ToolCallJudge()`. They operate on normalized
-harness data instead of raw scorer inputs, but new docs should keep factuality
-or rubric judges as the primary examples.
+The root package ships `FactualityJudge()` for factuality grading and
+deterministic judge-shaped helpers such as `StructuredOutputJudge()` and
+`ToolCallJudge()`. LLM-backed judges use a matcher, judge, or suite
+`judgeHarness`, which keeps provider-specific model configuration outside the
+root judge.
 
 ## Legacy Scorer Example
 
