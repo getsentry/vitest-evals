@@ -11,7 +11,7 @@
   "dependencies": {
     "@astrojs/mdx": "^5.0.6",
     "@astrojs/starlight": "^0.39.2",
-    "@sentry/starlight-theme": "^0.1.0",
+    "@sentry/starlight-theme": "^0.1.1",
     "@vercel/functions": "^2.0.0",
     "astro": "^6.3.5",
     "starlight-typedoc": "^0.22.0",
