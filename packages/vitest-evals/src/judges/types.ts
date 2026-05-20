@@ -185,20 +185,3 @@ export interface Judge<
   /** Scores one normalized judge context. */
   assess: JudgeAssessFn<TOptions>;
 }
-
-/**
- * Object-form configuration accepted by `createJudge(...)`.
- *
- * Use this form when a judge should carry a default judge harness while still
- * letting matcher options override it.
- */
-export type CreateJudgeConfig<
-  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
-> = {
-  /** Stable judge name used in assertion messages and reports. */
-  name: string;
-  /** Default judge-side harness used when matcher options do not provide one. */
-  judgeHarness?: JudgeHarness;
-  /** Scores one normalized judge context. */
-  assess: JudgeAssessFn<TOptions>;
-};

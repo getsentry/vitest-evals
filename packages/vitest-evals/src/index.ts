@@ -19,7 +19,6 @@ import {
   userMessages,
 } from "./harness";
 import type {
-  CreateJudgeConfig,
   JudgeContext,
   Judge,
   JudgeAssessFn,
@@ -80,6 +79,14 @@ type HarnessOutput<THarness extends Harness<any, any, any>> =
   THarness extends Harness<any, infer TOutput, any>
     ? TOutput
     : JsonValue | undefined;
+
+type CreateJudgeConfig<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+> = {
+  name: string;
+  judgeHarness?: JudgeHarness;
+  assess: JudgeAssessFn<TOptions>;
+};
 
 declare const evalHarnessRunBrand: unique symbol;
 
@@ -1288,7 +1295,6 @@ export {
 } from "./judges";
 export type {
   BoundJudgeAssessor,
-  CreateJudgeConfig,
   Judge,
   JudgeAssessFn,
   JudgeAssessWithAssessorFn,

@@ -36,7 +36,6 @@ export {
 
 export type {
   BoundJudgeAssessor,
-  CreateJudgeConfig,
   Judge,
   JudgeAssessFn,
   JudgeAssessWithAssessorFn,
