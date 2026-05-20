@@ -1,0 +1,58 @@
+---
+const installers = [
+  {
+    id: "dotagents",
+    label: "dotagents",
+    command: "npx @sentry/dotagents add getsentry/vitest-evals",
+  },
+  {
+    id: "vercel",
+    label: "Vercel Skills",
+    command: "npx skills add getsentry/vitest-evals",
+  },
+];
+
+function formatCommand(command: string) {
+  return command
+    .split("\n")
+    .map((line) => `<span class="cli-dim">$</span> ${line}`)
+    .join("\n");
+}
+---
+
+<div class="installer-tabs terminal-shell not-content" data-copy-root>
+  <div class="terminal-header">
+    <div class="terminal-dots" aria-hidden="true">
+      <span class="dot"></span>
+    </div>
+    <div class="tab-buttons">
+      {
+        installers.map((installer, index) => (
+          <button
+            class:list={["tab-btn", { active: index === 0 }]}
+            data-installer={installer.id}
+          >
+            {installer.label}
+          </button>
+        ))
+      }
+    </div>
+    <button class="copy-button" aria-label="Copy command">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="terminal-body copy-source">
+    {
+      installers.map((installer, index) => (
+        <pre
+          class:list={["tab-content", "cli-output", { hidden: index !== 0 }]}
+          data-installer={installer.id}
+          set:html={formatCommand(installer.command)}
+        ></pre>
+      ))
+    }
+  </div>
+</div>

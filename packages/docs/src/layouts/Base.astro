@@ -78,6 +78,42 @@ function normalize(path: string) {
 
     <script>
       const PM_STORAGE_KEY = "vitest-evals-docs-pm";
+      const INSTALLER_STORAGE_KEY = "vitest-evals-docs-installer";
+
+      function initSyncedTabs({ rootSelector, attr, storageKey }) {
+        function setSelected(value) {
+          document.querySelectorAll(rootSelector).forEach((container) => {
+            const hasValue = [...container.querySelectorAll(".tab-btn")].some(
+              (button) => button.getAttribute(attr) === value,
+            );
+            if (!hasValue) return;
+
+            container.querySelectorAll(".tab-btn").forEach((button) => {
+              button.classList.toggle("active", button.getAttribute(attr) === value);
+            });
+
+            container.querySelectorAll(".tab-content").forEach((content) => {
+              content.classList.toggle("hidden", content.getAttribute(attr) !== value);
+            });
+          });
+        }
+
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          setSelected(saved);
+        }
+
+        document.querySelectorAll(`${rootSelector} .tab-btn`).forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) return;
+
+          button.addEventListener("click", () => {
+            const value = button.getAttribute(attr);
+            if (!value) return;
+            localStorage.setItem(storageKey, value);
+            setSelected(value);
+          });
+        });
+      }
 
       function initNavToggle() {
         const toggle = document.querySelector(".nav-toggle");
@@ -165,6 +201,11 @@ function normalize(path: string) {
 
       initNavToggle();
       initPackageManagerTabs();
+      initSyncedTabs({
+        rootSelector: ".installer-tabs",
+        attr: "data-installer",
+        storageKey: INSTALLER_STORAGE_KEY,
+      });
       initCopyButtons();
     </script>
   </body>

@@ -21,6 +21,7 @@ export default defineConfig({
           label: "Documentation",
           items: [
             { label: "Overview", link: "/docs" },
+            { label: "Agent Skill", link: "/docs/agent-skill" },
             {
               label: "Harnesses",
               items: [
