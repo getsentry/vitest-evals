@@ -211,7 +211,9 @@ grading plus deterministic helpers such as `StructuredOutputJudge()` and
 `FactualityJudge({ judgeHarness })`, `describeEval({ judgeHarness })`, or
 matcher options only when a judge calls `ctx.runJudge(...)`. A `judgeHarness` is
 a dedicated judge-model adapter, so the same factuality judge can be reused
-across AI SDK, Pi, OpenAI Agents, or custom app harnesses.
+across AI SDK, Pi, OpenAI Agents, or custom app harnesses. Automatic inference
+for explicit matcher calls only applies when suite judges share the same judge
+harness instance.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure the replay mode and directory globally in Vitest, then opt individual

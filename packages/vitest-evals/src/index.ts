@@ -1173,6 +1173,10 @@ export function createJudge<TOptions extends JudgeContext<any, any, any, any>>(
 export function createJudge<TOptions extends JudgeContext<any, any, any, any>>(
   config: CreateJudgeConfig<TOptions>,
 ): Judge<TOptions>;
+/**
+ * @deprecated Prefer `createJudge({ name, judgeHarness, assess })` and call
+ * `ctx.runJudge(...)` from LLM-backed judges.
+ */
 export function createJudge<
   TOptions extends JudgeContext<any, any, any, any>,
   TInput,

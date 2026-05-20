@@ -339,7 +339,8 @@ await expect(result).toSatisfyJudge(factualityJudge, {
 ```
 
 For lower-level cases, the matcher also accepts raw values and synthetic judge
-context:
+context. Pass every context field the judge needs when the value did not come
+from eval fixture `run(...)`:
 
 ```ts
 await expect({ status: "approved" }).toSatisfyJudge(MyJudge, {
@@ -412,7 +413,8 @@ current run's abort signal. Matcher options win over a judge default, and a
 judge default wins over the suite default. Explicit matcher calls can also
 reuse a single unambiguous judge-level harness from the suite's automatic
 judges, but automatic judges do not inherit inferred harnesses from sibling
-judges. Leave `judgeHarness` unset for suites that only use deterministic
+judges. That inference requires those judges to share the same judge harness
+instance. Leave `judgeHarness` unset for suites that only use deterministic
 judges. Calling `harness.run(...)` from a judge executes the application again,
 so use that only when a second run is intentional.
 
