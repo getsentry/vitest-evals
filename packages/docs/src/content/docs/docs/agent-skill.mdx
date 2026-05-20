@@ -4,7 +4,7 @@ description: Install the vitest-evals skill so coding agents can write harness-b
 editUrl: false
 ---
 
-import InstallerTabs from "../../../components/InstallerTabs.astro";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 Install the vitest-evals agent skill when you want Claude Code, Cursor, Codex,
 or another coding agent to author, review, or debug harness-backed eval suites
@@ -16,7 +16,18 @@ selection, judges, tool replay, and verification — so it writes idiomatic
 
 ## Install
 
-<InstallerTabs />
+<Tabs syncKey="installer">
+  <TabItem label="dotagents">
+    ```bash
+    npx @sentry/dotagents add getsentry/vitest-evals
+    ```
+  </TabItem>
+  <TabItem label="Vercel Skills">
+    ```bash
+    npx skills add getsentry/vitest-evals
+    ```
+  </TabItem>
+</Tabs>
 
 [dotagents](https://dotagents.sentry.dev) is the recommended installer. If your
 environment already uses
