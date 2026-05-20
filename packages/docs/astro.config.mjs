@@ -1,11 +1,10 @@
 import mdx from "@astrojs/mdx";
 import starlight from "@astrojs/starlight";
+import sentryStarlightTheme, {
+  monochromeCodeTheme,
+} from "@sentry/starlight-theme";
 import { defineConfig } from "astro/config";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
-import {
-  monochromeCodeTheme,
-  vitestEvalsStarlightTheme,
-} from "./src/theme/vitest-evals-starlight-theme.mjs";
 
 export default defineConfig({
   site: "https://vitest-evals.sentry.dev",
@@ -17,9 +16,6 @@ export default defineConfig({
       title: "vitest-evals",
       description: "Harness-backed AI testing on top of Vitest.",
       pagination: false,
-      components: {
-        ThemeSelect: "./src/components/StarlightThemeSelect.astro",
-      },
       sidebar: [
         {
           label: "Documentation",
@@ -70,7 +66,7 @@ export default defineConfig({
         },
       ],
       plugins: [
-        vitestEvalsStarlightTheme(),
+        sentryStarlightTheme(),
         starlightTypeDoc({
           entryPoints: ["../vitest-evals/src/index.ts"],
           tsconfig: "../vitest-evals/tsconfig.json",
