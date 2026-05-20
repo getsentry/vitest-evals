@@ -183,10 +183,10 @@ metadata, and records replay metadata for opt-in local function tools.
 Adapts `pi-ai` style agents into the same normalized shape. It also owns the
 standard tool replay/VCR behavior for opt-in tools, including:
 
-- `auto`
-- `strict`
+- `auto` (default)
 - `record`
 - `off`
+- `strict`
 
 Replay metadata becomes part of the normalized tool record so the reporter can
 surface it.

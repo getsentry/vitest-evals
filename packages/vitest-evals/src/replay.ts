@@ -222,7 +222,7 @@ function resolveReplayMode(): ReplayMode {
     return value;
   }
 
-  return "off";
+  return "auto";
 }
 
 function resolveReplayDirectory() {
