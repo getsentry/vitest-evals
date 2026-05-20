@@ -116,7 +116,10 @@ function evaluateOrderedTools(
           metadata: {
             rationale: `Tool '${expectedTool.name}' called with incorrect arguments at position ${expectedIndex + 1} (${expectedIndex}/${expected.length} tools matched correctly)`,
             expected: normalizeContent(expectedTool.arguments),
-            actual: normalizeContent(actualTool.arguments),
+            actual:
+              actualTool.arguments === undefined
+                ? undefined
+                : normalizeContent(actualTool.arguments),
             matched: expectedIndex,
             total: expected.length,
           },
