@@ -969,6 +969,14 @@ blockquote p:last-child {
     display: flex;
   }
 
+  .nav-links-minimal {
+    display: flex;
+    position: static;
+    border: none;
+    background: none;
+    padding: 0;
+  }
+
   .nav-links a {
     padding: 0.65rem;
   }

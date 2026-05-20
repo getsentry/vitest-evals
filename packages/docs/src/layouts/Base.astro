@@ -34,10 +34,14 @@ const navItems = [{ href: "/docs", label: "Docs" }];
         <a href={`${base}/`} class="nav-logo" aria-label="vitest-evals home">
           <span>vitest-evals</span>
         </a>
-        <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-          <span class="hamburger"></span>
-        </button>
-        <div class="nav-links">
+        {
+          isHome && (
+            <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+              <span class="hamburger"></span>
+            </button>
+          )
+        }
+        <div class:list={["nav-links", { "nav-links-minimal": !isHome }]}>
           {
             isHome && navItems.map((item) => (
               <a
