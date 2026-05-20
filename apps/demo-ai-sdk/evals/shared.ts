@@ -27,9 +27,12 @@ type RefundDecision =
 
 export type RefundCase = {
   input: string;
+  expected?: unknown;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };
+
+export const REFUND_MODEL = "claude-sonnet-4-5";
 
 const REFUND_SYSTEM_PROMPT = [
   "You are the demo refund operations agent.",
@@ -115,7 +118,7 @@ export const refundHarness = aiSdkHarness({
   },
   run: async ({ input, runtime }) =>
     generateText({
-      model: anthropic("claude-sonnet-4-5"),
+      model: anthropic(REFUND_MODEL),
       system: REFUND_SYSTEM_PROMPT,
       prompt: input,
       tools: runtime.tools,

@@ -2,12 +2,14 @@ import { beforeEach, expect, test, vi } from "vitest";
 import {
   assistantMessages,
   createJudge,
+  createJudgeHarness,
   createHarness,
   describeEval,
   type JudgeContext,
   type JudgeAssertionOptions,
   type JudgeOptions,
   type JudgeAssessorOptions,
+  type JudgeHarness,
   StructuredOutputJudge,
   ToolCallJudge,
   toolCalls,
@@ -96,6 +98,27 @@ const stringOutputJudge = createJudge(
     score: output.length > 0 ? 1 : 0,
   }),
 );
+const typedJudgeHarness = {} as JudgeHarness;
+const requiredParamJudgeWithHarness = {
+  ...requiredParamJudge,
+  judgeHarness: typedJudgeHarness,
+};
+const stringOutputJudgeWithHarness = {
+  ...stringOutputJudge,
+  judgeHarness: typedJudgeHarness,
+};
+const configObjectJudgeWithHarness = createJudge({
+  name: "ConfigObjectJudge",
+  judgeHarness: typedJudgeHarness,
+  async assess({
+    expectedStatus,
+    output,
+  }: JudgeOptions<{ expectedStatus: string }, unknown, RefundOutput>) {
+    return {
+      score: output.status === expectedStatus ? 1 : 0,
+    };
+  },
+});
 
 async function assertMatcherTypes(result: HarnessRun<RefundOutput>) {
   await expect(result).toSatisfyJudge(requiredParamJudge, {
@@ -105,8 +128,17 @@ async function assertMatcherTypes(result: HarnessRun<RefundOutput>) {
   // @ts-expect-error required custom judge params must be provided explicitly.
   await expect(result).toSatisfyJudge(requiredParamJudge);
 
+  // @ts-expect-error default judge harnesses must not erase required custom params.
+  await expect(result).toSatisfyJudge(requiredParamJudgeWithHarness);
+
+  // @ts-expect-error object-form judge harnesses must not erase required custom params.
+  await expect(result).toSatisfyJudge(configObjectJudgeWithHarness);
+
   // @ts-expect-error the matcher output type must satisfy the judge output type.
   await expect(result).toSatisfyJudge(stringOutputJudge);
+
+  // @ts-expect-error default judge harnesses must not erase output constraints.
+  await expect(result).toSatisfyJudge(stringOutputJudgeWithHarness);
 }
 
 void assertMatcherTypes;
@@ -1269,6 +1301,39 @@ test("createJudge assigns a stable custom name", async () => {
   await expect({
     status: "approved",
   }).toSatisfyJudge(judge);
+});
+
+test("createJudge accepts a default judge harness in object form", async () => {
+  const judgeHarnessRun = vi.fn(async () => "approved");
+  const judgeHarness = createJudgeHarness({
+    name: "object-form-judge-harness",
+    run: judgeHarnessRun,
+  });
+  const judge = createJudge({
+    name: "ObjectFormJudge",
+    judgeHarness,
+    async assess(ctx: JudgeContext<unknown, RefundOutput>) {
+      const verdict = await ctx.runJudge?.({
+        prompt: `Judge refund status ${ctx.output.status}`,
+      });
+
+      return {
+        score: verdict === ctx.output.status ? 1 : 0,
+      };
+    },
+  });
+
+  await expect({
+    status: "approved",
+  }).toSatisfyJudge(judge);
+
+  expect(judge.name).toBe("ObjectFormJudge");
+  expect(judgeHarnessRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      prompt: "Judge refund status approved",
+    }),
+    expect.any(Object),
+  );
 });
 
 test("ToolCallJudge accepts string expected tools", async () => {

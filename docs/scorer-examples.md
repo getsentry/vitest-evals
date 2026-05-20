@@ -6,22 +6,34 @@ For new suites, prefer judges over root-level scorers.
 ## Factuality Judge
 
 ```ts
-import { createJudge } from "vitest-evals";
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { FactualityJudge } from "vitest-evals";
 
-export const FactualityJudge = createJudge(
-  "FactualityJudge",
-  async ({ output }) => {
-    const answer = output;
-    const verdict = await judgeFactuality(answer);
+export const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+export const factualityJudge = FactualityJudge();
+```
 
-    return {
-      score: verdict.score,
-      metadata: {
-        rationale: verdict.rationale,
-      },
-    };
-  },
-);
+For custom judge providers:
+
+```ts
+import {
+  createJudgeHarness,
+  FactualityJudge,
+  type JudgeHarness,
+} from "vitest-evals";
+import { callJudgeModel } from "./judgeModel";
+
+export const judgeHarness: JudgeHarness = createJudgeHarness({
+  name: "factuality-judge-model",
+  run: async ({ system, prompt }, { signal }) =>
+    callJudgeModel({ system, prompt, signal }),
+});
+
+export const factualityJudge = FactualityJudge();
 ```
 
 ## Tool Behavior Judge
@@ -51,7 +63,14 @@ export const LookupThenRefundJudge = createJudge(
 ## Explicit Judge Assertion
 
 ```ts
-await expect(result).toSatisfyJudge(FactualityJudge);
+import { expect } from "vitest";
+import { factualityJudge, judgeHarness } from "./judges";
+
+await expect(result).toSatisfyJudge(factualityJudge, {
+  expected: "Paris is the capital of France.",
+  judgeHarness,
+  threshold: 0.6,
+});
 ```
 
 ## Deterministic Helper Note

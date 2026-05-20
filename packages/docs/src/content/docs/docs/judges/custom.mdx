@@ -4,10 +4,15 @@ description: Create reusable rubrics and thresholds for domain-specific scoring.
 editUrl: false
 ---
 
-Use `createJudge()` when a rubric should be reused across suites. Keep the
-returned metadata JSON-safe so reports can render it.
+Use `createJudge()` when a rubric should be reused across suites. A custom
+judge receives the same normalized `JudgeContext` as built-ins: input, output,
+metadata, tool calls, session, run, app harness, and a curried `runJudge`
+function when the suite has a judge harness.
 
-## Configure
+## Usage
+
+Keep deterministic checks close to the normalized output. Return stable score
+units and JSON-safe metadata that explains the result.
 
 ```ts title="evals/judges/capitalJudge.ts"
 import { createJudge, type JudgeContext } from "vitest-evals";
@@ -29,37 +34,68 @@ export const CapitalJudge = createJudge(
 );
 ```
 
-Use stable score units. Prefer `0` to `1` for pass/fail checks and reserve
-intermediate values for true partial credit.
+Prefer `0` and `1` for pass/fail checks. Reserve intermediate values for true
+partial credit.
 
-### Thresholds
+## Suite Use
 
-Thresholds belong with the judge configuration when they should apply
-everywhere. Put thresholds on explicit judge assertions only when a single case
-needs a different bar.
+Attach reusable judges at the suite level when every case should satisfy the
+same contract.
 
 ```ts title="evals/capital.eval.ts"
+import { describeEval } from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+import { CapitalJudge } from "./judges/capitalJudge";
+
 describeEval("capital questions", {
   harness: qaHarness,
-  judges: [
-    CapitalJudge.withOptions({
-      threshold: 1,
-    }),
-  ],
+  judges: [CapitalJudge],
+  judgeThreshold: 1,
 });
 ```
 
-Model-backed judges should include enough metadata for a reviewer to understand
-why a score changed without rerunning the model.
+Use explicit assertions when a single case needs an extra judge or a different
+threshold.
 
-## Metadata
+```ts title="evals/capital.eval.ts"
+await expect(result).toSatisfyJudge(CapitalJudge, {
+  threshold: null,
+});
+```
 
-Return metadata that explains the score in reviewable terms. Keep it
-JSON-serializable and focused on details a report can display without rerunning
-the judge.
+## Model-Backed Judges
+
+If a custom judge needs an LLM call, configure a `judgeHarness` on the matcher,
+the judge object, or the suite, then call `ctx.runJudge(...)` from the judge.
+Core curries the current abort signal into that function. Matcher options win
+over a judge default, and a judge default wins over the suite default. Explicit
+matcher calls can also reuse a single unambiguous judge-level harness from the
+suite's automatic judges, but automatic judges do not inherit inferred
+harnesses from sibling judges. Leave `judgeHarness` unset for suites that only
+use deterministic judges.
+
+```ts title="evals/judges/rubricJudge.ts"
+import { createJudge } from "vitest-evals";
+
+export const RubricJudge = createJudge({
+  name: "RubricJudge",
+  async assess(ctx) {
+    if (!ctx.runJudge) {
+      throw new Error("RubricJudge requires a configured judgeHarness.");
+    }
+
+    const verdict = await ctx.runJudge({
+      prompt: `Grade this answer: ${JSON.stringify(ctx.output)}`,
+      responseFormat: { type: "json" },
+    });
+
+    return parseRubricVerdict(verdict);
+  },
+});
+```
 
 ## Failure Behavior
 
-Custom judges fail when the returned score falls below the configured
-threshold. Use explicit thresholds for domain rubrics so a future reader can
-see whether a score is advisory or blocking.
+Custom judges fail when the returned score falls below the active threshold.
+Use explicit thresholds for domain rubrics so a future reader can see whether a
+score is advisory or blocking.

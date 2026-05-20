@@ -8,8 +8,9 @@ through the workspace packages:
 
 The passing live eval lives in `evals/refund.eval.ts`.
 It demonstrates a real OpenAI Agents `Agent`, `Runner`, local function tools,
-tool replay configured from the harness, and explicit Vitest assertions on
-`run.output` and the normalized session trace.
+tool replay configured from the harness, the built-in factuality judge over
+normalized harness output, and explicit Vitest assertions on `run.output` and
+the normalized session trace.
 
 The intentionally failing examples live in `evals/refund.fail.eval.ts`.
 One fails an automatic harness-backed judge, and one fails explicit assertions

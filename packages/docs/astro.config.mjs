@@ -45,6 +45,7 @@ export default defineConfig({
               label: "Judges",
               items: [
                 { label: "Overview", link: "/docs/judges" },
+                { label: "FactualityJudge", link: "/docs/judges/factuality" },
                 { label: "ToolCallJudge", link: "/docs/judges/tool-call" },
                 {
                   label: "StructuredOutputJudge",

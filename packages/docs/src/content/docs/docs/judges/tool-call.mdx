@@ -7,7 +7,7 @@ editUrl: false
 `ToolCallJudge()` reads normalized tool calls from the harness run. Use it when
 the sequence of tools is part of the behavior you want to preserve.
 
-## Configure
+## Usage
 
 ```ts title="evals/capital.eval.ts"
 import { ToolCallJudge } from "vitest-evals";
@@ -22,7 +22,7 @@ describeEval("capital questions", {
 });
 ```
 
-### Arguments
+## Arguments
 
 Use matcher options when a tool argument is the important assertion.
 
@@ -39,7 +39,7 @@ ToolCallJudge({
 });
 ```
 
-## Metadata
+## Expected Tools
 
 Pass expected tool names through metadata on each run.
 

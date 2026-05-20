@@ -5,6 +5,7 @@ import type {
   JsonValue,
   ToolCallRecord,
 } from "../harness";
+import type { JudgeHarness, RunJudge } from "./judgeHarness";
 
 /**
  * Score payload returned by a judge.
@@ -76,6 +77,8 @@ export interface JudgeContext<
   session: HarnessRun<TOutput>["session"];
   /** Harness associated with this judge context. */
   harness: THarness;
+  /** Runs the optional matcher, judge, or suite judge harness with run-scoped context. */
+  runJudge?: RunJudge;
 }
 
 /** Convenience helper for judges that accept explicit per-call params. */
@@ -155,6 +158,25 @@ export interface Judge<
 > {
   /** Stable judge name used in assertion messages and reports. */
   name: string;
+  /** Default judge-side harness used when matcher options do not provide one. */
+  judgeHarness?: JudgeHarness;
   /** Scores one normalized judge context. */
   assess: JudgeAssessFn<TOptions>;
 }
+
+/**
+ * Object-form configuration accepted by `createJudge(...)`.
+ *
+ * Use this form when a judge should carry a default judge harness while still
+ * letting matcher options override it.
+ */
+export type CreateJudgeConfig<
+  TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
+> = {
+  /** Stable judge name used in assertion messages and reports. */
+  name: string;
+  /** Default judge-side harness used when matcher options do not provide one. */
+  judgeHarness?: JudgeHarness;
+  /** Scores one normalized judge context. */
+  assess: JudgeAssessFn<TOptions>;
+};

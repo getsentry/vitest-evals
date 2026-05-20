@@ -22,6 +22,11 @@ import type {
   ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
+import { generateObject, generateText, jsonSchema } from "ai";
+import {
+  createJudgeHarness,
+  type JudgeHarnessInput,
+} from "vitest-evals/judges";
 import {
   executeWithReplay,
   getReplayMetadataFromError,
@@ -36,6 +41,7 @@ import type {
 import type {
   InferToolInput,
   InferToolOutput,
+  LanguageModel,
   LanguageModelUsage,
   StepResult,
   Tool,
@@ -45,6 +51,9 @@ import type {
 } from "ai";
 
 type MaybePromise<T> = T | Promise<T>;
+type AiSdkProviderOptions = Parameters<
+  typeof generateText
+>[0]["providerOptions"];
 type JsonOutput<TValue> = [TValue] extends [JsonValue | undefined]
   ? TValue
   : undefined;
@@ -67,6 +76,118 @@ type AnyAiSdkToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, AiSdkToolDefinition<any, any, TInput, TMetadata>>;
+
+/**
+ * Configuration for adapting an AI SDK language model into a judge harness.
+ *
+ * @example
+ * ```ts
+ * import { anthropic } from "@ai-sdk/anthropic";
+ * import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+ *
+ * const judgeHarness = aiSdkJudgeHarness({
+ *   model: anthropic("claude-sonnet-4-5"),
+ *   temperature: 0,
+ * });
+ * ```
+ */
+export interface AiSdkJudgeHarnessConfig {
+  /** AI SDK language model used for judge prompts. */
+  model: LanguageModel;
+  /** Optional display name for diagnostics. */
+  name?: string;
+  /** Optional judge-model temperature. */
+  temperature?: number;
+  /** Optional judge-model token cap. */
+  maxOutputTokens?: number;
+  /** Optional provider-specific options forwarded to the AI SDK. */
+  providerOptions?: AiSdkProviderOptions;
+}
+
+/**
+ * Adapts an AI SDK language model into the provider-neutral judge harness API.
+ *
+ * @example
+ * ```ts
+ * import { anthropic } from "@ai-sdk/anthropic";
+ * import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+ * import { describeEval, FactualityJudge } from "vitest-evals";
+ *
+ * const judgeHarness = aiSdkJudgeHarness({
+ *   model: anthropic("claude-sonnet-4-5"),
+ *   temperature: 0,
+ * });
+ *
+ * describeEval("qa agent", {
+ *   harness: qaHarness,
+ *   judgeHarness,
+ *   judges: [FactualityJudge()],
+ * }, (it) => {});
+ * ```
+ */
+export function aiSdkJudgeHarness(config: AiSdkJudgeHarnessConfig) {
+  return createJudgeHarness({
+    name: config.name ?? "ai-sdk",
+    run: (input, options) => runAiSdkJudgeHarness(config, input, options),
+  });
+}
+
+async function runAiSdkJudgeHarness(
+  config: AiSdkJudgeHarnessConfig,
+  input: JudgeHarnessInput,
+  options: { signal?: AbortSignal },
+) {
+  const system = formatAiSdkJudgeSystemPrompt(
+    input.system,
+    input.responseFormat,
+  );
+  const requestOptions = {
+    model: config.model,
+    prompt: input.prompt,
+    ...(system !== undefined ? { system } : {}),
+    ...(config.temperature !== undefined
+      ? { temperature: config.temperature }
+      : {}),
+    ...(config.maxOutputTokens !== undefined
+      ? { maxOutputTokens: config.maxOutputTokens }
+      : {}),
+    ...(config.providerOptions !== undefined
+      ? { providerOptions: config.providerOptions }
+      : {}),
+    ...(options.signal ? { abortSignal: options.signal } : {}),
+  };
+
+  if (
+    input.responseFormat?.type === "json" &&
+    input.responseFormat.schema !== undefined
+  ) {
+    const { object } = await generateObject({
+      ...requestOptions,
+      schema: jsonSchema(
+        input.responseFormat.schema as Parameters<typeof jsonSchema>[0],
+      ),
+    });
+
+    return object;
+  }
+
+  const { text } = await generateText(requestOptions);
+  return text;
+}
+
+function formatAiSdkJudgeSystemPrompt(
+  system: string | undefined,
+  responseFormat: JudgeHarnessInput["responseFormat"],
+) {
+  if (responseFormat?.type !== "json" || responseFormat.schema !== undefined) {
+    return system;
+  }
+
+  const jsonInstruction =
+    "Return only valid JSON. Do not include markdown fences or explanatory prose.";
+
+  return system ? `${system}\n\n${jsonInstruction}` : jsonInstruction;
+}
 
 type StepLike = Pick<
   StepResult<ToolSet>,

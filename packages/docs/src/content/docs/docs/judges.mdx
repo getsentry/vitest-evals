@@ -15,6 +15,10 @@ explicit judge assertions when one case needs an extra check.
 ## Judge Types
 
 <div class="api-link-grid">
+  <a class="api-link-card" href="/docs/judges/factuality/">
+    <strong>FactualityJudge</strong>
+    <span>Use a grading model to compare output against an expert answer from normalized run context.</span>
+  </a>
   <a class="api-link-card" href="/docs/judges/tool-call/">
     <strong>ToolCallJudge</strong>
     <span>Check tool names, order, and arguments from normalized tool calls.</span>
@@ -29,36 +33,41 @@ explicit judge assertions when one case needs an extra check.
   </a>
 </div>
 
-## Suite Defaults
+## Usage
 
 Suite-level judges run after each `run(...)`. This example keeps the same Paris
-story as the harness pages and uses a tiny custom judge for the answer.
+story as the harness pages and uses the built-in factuality judge.
 
 ```ts title="evals/capital.eval.ts"
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
 import { expect } from "vitest";
 import {
-  createJudge,
   describeEval,
-  type JudgeContext,
+  FactualityJudge,
 } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
-  "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => ({
-    score: output.toLowerCase().includes("paris") ? 1 : 0,
-  }),
-);
+const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
 
 describeEval(
   "capital questions",
   {
     harness: qaHarness,
-    judges: [CapitalJudge],
+    judges: [factualityJudge],
+    judgeThreshold: 0.6,
   },
   (it) => {
     it("knows the capital of France", async ({ run }) => {
-      const result = await run("What is the capital of France?");
+      const result = await run("What is the capital of France?", {
+        metadata: {
+          expected: "Paris is the capital of France.",
+        },
+      });
 
       expect(result.output).toContain("Paris");
     });
