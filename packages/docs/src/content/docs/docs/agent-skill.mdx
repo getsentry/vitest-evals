@@ -1,0 +1,76 @@
+---
+title: Agent Skill
+description: Install the vitest-evals skill so coding agents can write harness-backed eval suites correctly.
+editUrl: false
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Install the vitest-evals agent skill when you want Claude Code, Cursor, Codex,
+or another coding agent to author, review, or debug harness-backed eval suites
+in your project.
+
+The skill gives the agent focused context about suite authoring, harness
+selection, judges, tool replay, and verification — so it writes idiomatic
+`vitest-evals` code without guessing at the API.
+
+## Install
+
+<Tabs syncKey="installer">
+  <TabItem label="dotagents">
+    ```bash
+    npx @sentry/dotagents add getsentry/vitest-evals
+    ```
+  </TabItem>
+  <TabItem label="Vercel Skills">
+    ```bash
+    npx skills add getsentry/vitest-evals
+    ```
+  </TabItem>
+</Tabs>
+
+[dotagents](https://dotagents.sentry.dev) is the recommended installer. If your
+environment already uses
+[Vercel Skills](https://vercel.com/docs/agent-resources/skills), use the Vercel
+Skills tab instead.
+
+## What the Skill Teaches Agents
+
+- Choose the right harness for the app runtime.
+- Use `describeEval(...)` with one harness per suite.
+- Call `run(...)` explicitly inside each eval.
+- Assert on `result.output` and use judges for scoring.
+- Configure tool replay without hiding live model behavior.
+- Run focused verification commands after edits.
+
+## What Is Included
+
+The skill installs as a single directory with:
+
+- **`SKILL.md`** — activation rules, runtime defaults, and a reference router
+  that points the agent at the right guide for the current task.
+- **Focused references** — suite authoring, AI SDK harness, Pi harness, custom
+  harnesses, judges and assertions, tool replay, and troubleshooting.
+- **`SPEC.md` and `SOURCES.md`** — maintenance notes and source provenance for
+  future skill updates.
+
+## Next
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/docs/harnesses/">
+    <strong>Harnesses</strong>
+    <span>Compare the supported runtime adapters before choosing one.</span>
+  </a>
+  <a class="api-link-card" href="/docs/judges/">
+    <strong>Judges</strong>
+    <span>Use built-in judges, write custom judges, and set thresholds.</span>
+  </a>
+  <a class="api-link-card" href="/docs/tool-replay/">
+    <strong>Tool Replay</strong>
+    <span>Record deterministic tool calls without hiding model behavior.</span>
+  </a>
+  <a class="api-link-card" href="/docs/github/">
+    <strong>GitHub Reporting</strong>
+    <span>Publish eval summaries and checks from workflow JSON output.</span>
+  </a>
+</div>
