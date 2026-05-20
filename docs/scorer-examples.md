@@ -14,7 +14,7 @@ export const judgeHarness = aiSdkJudgeHarness({
   model: openai("gpt-4.1-mini"),
   temperature: 0,
 });
-export const factualityJudge = FactualityJudge();
+export const factualityJudge = FactualityJudge({ judgeHarness });
 ```
 
 For custom judge providers:
@@ -33,7 +33,7 @@ export const judgeHarness: JudgeHarness = createJudgeHarness({
     callJudgeModel({ system, prompt, signal }),
 });
 
-export const factualityJudge = FactualityJudge();
+export const factualityJudge = FactualityJudge({ judgeHarness });
 ```
 
 ## Tool Behavior Judge
@@ -64,11 +64,10 @@ export const LookupThenRefundJudge = createJudge(
 
 ```ts
 import { expect } from "vitest";
-import { factualityJudge, judgeHarness } from "./judges";
+import { factualityJudge } from "./judges";
 
 await expect(result).toSatisfyJudge(factualityJudge, {
   expected: "Paris is the capital of France.",
-  judgeHarness,
   threshold: 0.6,
 });
 ```

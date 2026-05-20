@@ -165,7 +165,7 @@ export interface FactualityJudgeOptions<
  * harness. Configure the LLM used for grading with `judgeHarness` on the
  * judge, suite, or matcher options.
  *
- * @param config - Optional judge naming configuration.
+ * @param config - Optional judge name and reusable judge harness default.
  *
  * @example
  * ```ts

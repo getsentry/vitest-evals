@@ -77,7 +77,7 @@ export interface JudgeContext<
   session: HarnessRun<TOutput>["session"];
   /** Harness associated with this judge context. */
   harness: THarness;
-  /** Runs the optional matcher, judge, or suite judge harness with run-scoped context. */
+  /** Runs the configured matcher, judge, or suite judge harness with run-scoped context. */
   runJudge?: RunJudge;
 }
 
@@ -97,7 +97,11 @@ export type JudgeAssessFn<
   TOptions extends JudgeContext<any, any, any, any> = JudgeContext,
 > = (opts: TOptions) => Promise<JudgeResult> | JudgeResult;
 
-/** Runtime options supplied by core when calling a judge-side assessor. */
+/**
+ * Runtime options supplied by core when calling a legacy judge-side assessor.
+ *
+ * @deprecated Prefer `RunJudgeOptions` with `ctx.runJudge(...)`.
+ */
 export type JudgeAssessorOptions = {
   /** Abort signal from the current eval run when available. */
   signal?: AbortSignal;
