@@ -37,3 +37,21 @@ test("runJudgeHarness falls back to assistant content when output is missing", a
 
   expect(result).toBe('{"choice":"C"}');
 });
+
+test("runJudgeHarness preserves structured values with an output field", async () => {
+  const judgeHarness = createJudgeHarness({
+    run: async () => ({
+      output: "approved",
+      confidence: 0.95,
+    }),
+  });
+
+  const result = await runJudgeHarness(judgeHarness, {
+    prompt: "Return JSON.",
+  });
+
+  expect(result).toEqual({
+    output: "approved",
+    confidence: 0.95,
+  });
+});
