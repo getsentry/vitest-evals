@@ -67,3 +67,28 @@ test("openaiAgentsJudgeHarness runs judge prompts through OpenAI Agents", async 
     expect.objectContaining({ signal }),
   );
 });
+
+test("openaiAgentsJudgeHarness preserves null judge output", async () => {
+  const runner = {
+    run: vi.fn(async () => ({
+      finalOutput: null,
+    })),
+  };
+  const judgeHarness = openaiAgentsJudgeHarness({
+    model: "gpt-4.1-mini",
+    runner: runner as any,
+  });
+
+  const result = await judgeHarness.run(
+    {
+      prompt: "Return null.",
+    },
+    {
+      metadata: {},
+      artifacts: {},
+      setArtifact: () => {},
+    },
+  );
+
+  expect(result.output).toBeNull();
+});

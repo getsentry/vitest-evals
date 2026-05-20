@@ -407,7 +407,11 @@ function resolveOpenAiAgentsJudgeOutput(result: unknown) {
     return result;
   }
 
-  return (result as { finalOutput?: unknown }).finalOutput ?? result;
+  if (Object.prototype.hasOwnProperty.call(result, "finalOutput")) {
+    return (result as { finalOutput: unknown }).finalOutput;
+  }
+
+  return result;
 }
 
 /** Minimal OpenAI Agents tool shape instrumented by the harness. */
