@@ -56,3 +56,72 @@ function formatCommand(command: string) {
     }
   </div>
 </div>
+
+<script>
+  const INSTALLER_STORAGE_KEY = "vitest-evals-docs-installer";
+
+  function setInstaller(value: string) {
+    document.querySelectorAll(".installer-tabs").forEach((container) => {
+      const hasValue = [...container.querySelectorAll(".tab-btn")].some(
+        (button) => button.getAttribute("data-installer") === value,
+      );
+      if (!hasValue) return;
+
+      container.querySelectorAll(".tab-btn").forEach((button) => {
+        button.classList.toggle(
+          "active",
+          button.getAttribute("data-installer") === value,
+        );
+      });
+
+      container.querySelectorAll(".tab-content").forEach((content) => {
+        content.classList.toggle(
+          "hidden",
+          content.getAttribute("data-installer") !== value,
+        );
+      });
+    });
+  }
+
+  const saved = localStorage.getItem(INSTALLER_STORAGE_KEY);
+  if (saved) {
+    setInstaller(saved);
+  }
+
+  document
+    .querySelectorAll(".installer-tabs .tab-btn")
+    .forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+
+      button.addEventListener("click", () => {
+        const value = button.getAttribute("data-installer");
+        if (!value) return;
+        localStorage.setItem(INSTALLER_STORAGE_KEY, value);
+        setInstaller(value);
+      });
+    });
+
+  document
+    .querySelectorAll(".installer-tabs[data-copy-root]")
+    .forEach((root) => {
+      const copyBtn = root.querySelector(".copy-button");
+      if (!(copyBtn instanceof HTMLButtonElement)) return;
+
+      copyBtn.addEventListener("click", async () => {
+        const source =
+          root.querySelector(".tab-content:not(.hidden)") ?? root;
+        const text = (source.textContent || "")
+          .split("\n")
+          .map((line) => line.replace(/^\s*[$>]\s*/, ""))
+          .join("\n")
+          .trim();
+        try {
+          await navigator.clipboard.writeText(text);
+          copyBtn.classList.add("copied");
+          setTimeout(() => copyBtn.classList.remove("copied"), 1600);
+        } catch {
+          copyBtn.classList.remove("copied");
+        }
+      });
+    });
+</script>
