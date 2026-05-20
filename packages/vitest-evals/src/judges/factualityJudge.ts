@@ -1,7 +1,7 @@
 import {
-  assistantMessages,
   type Harness,
   type HarnessMetadata,
+  latestAssistantMessageContent,
 } from "../harness";
 import type { JsonValue } from "../harness";
 import { createRunJudge } from "./judgeHarness";
@@ -264,20 +264,7 @@ function resolveJudgeOutput(opts: FactualityJudgeOptions) {
     return opts.output;
   }
 
-  const assistantContent = [...assistantMessages(opts.session)]
-    .reverse()
-    .find(hasAssistantOutputContent)?.content;
-
-  return assistantContent ?? "";
-}
-
-function hasAssistantOutputContent(
-  message: FactualityJudgeOptions["session"]["messages"][number],
-) {
-  return (
-    message.content !== undefined &&
-    (typeof message.content !== "string" || message.content.trim().length > 0)
-  );
+  return latestAssistantMessageContent(opts.session) ?? "";
 }
 
 function parseFactualityJudgeVerdict(value: unknown): FactualityJudgeVerdict {

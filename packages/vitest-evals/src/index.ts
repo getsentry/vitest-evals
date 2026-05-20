@@ -10,10 +10,10 @@ import type {
   ToolCallRecord,
 } from "./harness";
 import {
-  assistantMessages,
   getHarnessRunFromError,
   isHarnessRun,
   isNormalizedSession,
+  latestAssistantMessageContent,
   normalizeContent,
   toolCalls,
   userMessages,
@@ -1075,21 +1075,10 @@ function inferJudgeOutputValue(
 }
 
 function resolveAssistantOutput(session: NormalizedSession) {
-  const assistantContent = [...assistantMessages(session)]
-    .reverse()
-    .find(hasAssistantOutputContent);
-  return assistantContent?.content !== undefined
-    ? normalizeContent(assistantContent.content)
+  const assistantContent = latestAssistantMessageContent(session);
+  return assistantContent !== undefined
+    ? normalizeContent(assistantContent)
     : undefined;
-}
-
-function hasAssistantOutputContent(
-  message: NormalizedSession["messages"][number],
-) {
-  return (
-    message.content !== undefined &&
-    (typeof message.content !== "string" || message.content.trim().length > 0)
-  );
 }
 
 function normalizeJudgeJsonValue(value: unknown): JsonValue | undefined {
@@ -1241,6 +1230,7 @@ export {
   attachHarnessRunToError,
   createHarness,
   getHarnessRunFromError,
+  latestAssistantMessageContent,
   messagesByRole,
   normalizeHarnessRun,
   systemMessages,

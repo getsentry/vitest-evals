@@ -1,5 +1,4 @@
 import {
-  assistantMessages,
   createHarness,
   type Harness,
   type HarnessContext,
@@ -7,6 +6,7 @@ import {
   type HarnessResultLike,
   type HarnessRun,
   isHarnessRun,
+  latestAssistantMessageContent,
   type JsonValue,
   type MaybePromise,
   normalizeContent,
@@ -228,18 +228,5 @@ function normalizeJudgeHarnessOutput(value: unknown): JudgeHarnessOutput {
 function resolveJudgeHarnessAssistantOutput(
   run: HarnessRun<JudgeHarnessOutput>,
 ): JudgeHarnessOutput {
-  const assistantContent = [...assistantMessages(run.session)]
-    .reverse()
-    .find(hasAssistantOutputContent)?.content;
-
-  return assistantContent ?? "";
-}
-
-function hasAssistantOutputContent(
-  message: HarnessRun<JudgeHarnessOutput>["session"]["messages"][number],
-) {
-  return (
-    message.content !== undefined &&
-    (typeof message.content !== "string" || message.content.trim().length > 0)
-  );
+  return latestAssistantMessageContent(run.session) ?? "";
 }
