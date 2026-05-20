@@ -96,7 +96,7 @@ const FACTUALITY_RESPONSE_SCHEMA = {
  *   "Paris is the capital of France.";
  * ```
  */
-export type FactualityJudgeExpected = unknown;
+export type FactualityJudgeExpected = JsonValue;
 
 /**
  * Configuration for the factuality judge.
@@ -145,17 +145,17 @@ type FactualityJudgeMetadata = HarnessMetadata & {
  * });
  * ```
  */
-export interface FactualityJudgeOptions<
+export type FactualityJudgeOptions<
   TInput = any,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   TMetadata extends HarnessMetadata = HarnessMetadata,
   THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
     | Harness<TInput, TOutput, TMetadata>
     | undefined,
-> extends JudgeContext<TInput, TOutput, TMetadata, THarness> {
+> = JudgeContext<TInput, TOutput, TMetadata, THarness> & {
   /** Expert answer or reference facts. Defaults to `metadata.expected`. */
   expected?: FactualityJudgeExpected;
-}
+};
 
 /**
  * Creates a factuality judge over normalized harness output.
@@ -253,7 +253,7 @@ async function assessFactuality(
   return formatJudgeResult(parseFactualityJudgeVerdict(verdict));
 }
 
-function isMissingExpectedAnswer(value: FactualityJudgeExpected) {
+function isMissingExpectedAnswer(value: FactualityJudgeExpected | undefined) {
   return (
     value == null || (typeof value === "string" && value.trim().length === 0)
   );

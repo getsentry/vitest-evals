@@ -13,6 +13,7 @@ import {
   test,
 } from "vitest";
 import "vitest";
+import { normalizeMetadata } from "./harness";
 export { configure, evaluate } from "./legacy/evaluate";
 import { formatScores, wrapText } from "./legacy/format";
 import type {
@@ -139,6 +140,12 @@ export function describeEval(name: string, options: LegacyDescribeEvalOptions) {
             ...score,
             name: options.scorers[index].name,
           }));
+          const normalizedScoresWithName = scoresWithName.map(
+            ({ metadata, ...score }) => ({
+              ...score,
+              ...(metadata ? { metadata: normalizeMetadata(metadata) } : {}),
+            }),
+          );
 
           const avgScore =
             scores.reduce((acc, score) => acc + (score.score ?? 0), 0) /
@@ -146,7 +153,7 @@ export function describeEval(name: string, options: LegacyDescribeEvalOptions) {
           const thresholdFailed = threshold !== null && avgScore < threshold;
 
           testTask.meta.eval = {
-            scores: scoresWithName,
+            scores: normalizedScoresWithName,
             avgScore,
             output,
             ...(toolCalls && { toolCalls }),

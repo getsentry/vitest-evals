@@ -28,8 +28,8 @@ export type JudgeResult = {
     /** Human-readable explanation for the score. */
     rationale?: string;
     /** Optional judge-side output or diagnostic payload. */
-    output?: unknown;
-  } & Record<string, unknown>;
+    output?: JsonValue;
+  } & Record<string, JsonValue | undefined>;
 };
 
 /**
