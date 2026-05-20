@@ -9,15 +9,13 @@ const { title, description = "Harness-backed AI testing on top of Vitest." } =
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const pageTitle = title === "Home" ? "vitest-evals" : `${title} | vitest-evals`;
-const navItems = [
-  { href: "/", label: "Overview" },
-  { href: "/docs", label: "Documentation" },
-  { href: "/api", label: "API" },
-];
 
 function normalize(path: string) {
   return path.replace(/\/+$/, "") || "/";
 }
+
+const isHome =
+  normalize(currentPath) === "/" || normalize(currentPath) === normalize(base);
 ---
 
 <!doctype html>
@@ -35,20 +33,15 @@ function normalize(path: string) {
         <a href={`${base}/`} class="nav-logo" aria-label="vitest-evals home">
           <span>vitest-evals</span>
         </a>
-        <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-          <span class="hamburger"></span>
-        </button>
-        <div class="nav-links">
-          {
-            navItems.map((item) => (
-              <a
-                href={`${base}${item.href === "/" ? "/" : item.href}`}
-                class:list={{ active: normalize(currentPath) === item.href }}
-              >
-                {item.label}
-              </a>
-            ))
-          }
+        {
+          isHome && (
+            <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+              <span class="hamburger"></span>
+            </button>
+          )
+        }
+        <div class:list={["nav-links", { "nav-links-minimal": !isHome }]}>
+          {isHome && <a href={`${base}/docs`}>Docs</a>}
           <a
             href="https://github.com/getsentry/vitest-evals"
             class="nav-github"
