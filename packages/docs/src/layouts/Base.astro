@@ -16,7 +16,6 @@ function normalize(path: string) {
 
 const isHome =
   normalize(currentPath) === "/" || normalize(currentPath) === normalize(base);
-const navItems = [{ href: "/docs", label: "Docs" }];
 ---
 
 <!doctype html>
@@ -42,16 +41,7 @@ const navItems = [{ href: "/docs", label: "Docs" }];
           )
         }
         <div class:list={["nav-links", { "nav-links-minimal": !isHome }]}>
-          {
-            isHome && navItems.map((item) => (
-              <a
-                href={`${base}${item.href === "/" ? "/" : item.href}`}
-                class:list={{ active: normalize(currentPath) === item.href }}
-              >
-                {item.label}
-              </a>
-            ))
-          }
+          {isHome && <a href={`${base}/docs`}>Docs</a>}
           <a
             href="https://github.com/getsentry/vitest-evals"
             class="nav-github"
