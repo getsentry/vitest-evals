@@ -24,3 +24,4 @@ Current policies:
 
 - [API design](api-design.md)
 - [Code comments](code-comments.md)
+- [Docs writing](docs-writing.md)

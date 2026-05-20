@@ -1,0 +1,65 @@
+---
+title: Custom Judges
+description: Create reusable rubrics and thresholds for domain-specific scoring.
+editUrl: false
+---
+
+Use `createJudge()` when a rubric should be reused across suites. Keep the
+returned metadata JSON-safe so reports can render it.
+
+## Configure
+
+```ts title="evals/judges/capitalJudge.ts"
+import { createJudge, type JudgeContext } from "vitest-evals";
+
+export const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => {
+    const passed = output.toLowerCase().includes("paris");
+
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: passed
+          ? "The answer names Paris."
+          : `Expected Paris, got: ${output}`,
+      },
+    };
+  },
+);
+```
+
+Use stable score units. Prefer `0` to `1` for pass/fail checks and reserve
+intermediate values for true partial credit.
+
+### Thresholds
+
+Thresholds belong with the judge configuration when they should apply
+everywhere. Put thresholds on explicit judge assertions only when a single case
+needs a different bar.
+
+```ts title="evals/capital.eval.ts"
+describeEval("capital questions", {
+  harness: qaHarness,
+  judges: [
+    CapitalJudge.withOptions({
+      threshold: 1,
+    }),
+  ],
+});
+```
+
+Model-backed judges should include enough metadata for a reviewer to understand
+why a score changed without rerunning the model.
+
+## Metadata
+
+Return metadata that explains the score in reviewable terms. Keep it
+JSON-serializable and focused on details a report can display without rerunning
+the judge.
+
+## Failure Behavior
+
+Custom judges fail when the returned score falls below the configured
+threshold. Use explicit thresholds for domain rubrics so a future reader can
+see whether a score is advisory or blocking.

@@ -14,6 +14,20 @@ Monorepo for the explicit-run `vitest-evals` shape:
 - `apps/demo-openai-agents`: end-to-end OpenAI Agents demo evals with
   app-local refund tools
 
+## Reading Guide
+
+- Start with the public docs site for the guided setup path:
+  `https://vitest-evals.sentry.dev/docs`
+- Use [packages/vitest-evals/README.md](packages/vitest-evals/README.md) for
+  the core package authoring model and examples.
+- Use [docs/github-actions.md](docs/github-actions.md) when changing CI
+  reporting behavior.
+- Use [docs/architecture.md](docs/architecture.md) and
+  [docs/development-guide.md](docs/development-guide.md) before changing package
+  boundaries or product shape.
+- Follow [policies/docs-writing.md](policies/docs-writing.md) for docs copy,
+  hierarchy, and visual consistency.
+
 ## Workspace Layout
 
 ```text

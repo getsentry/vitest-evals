@@ -1,37 +1,33 @@
 <div class="report-preview" aria-label="vitest-evals reporter output preview">
   <div class="report-header">
     <span class="report-status passed">PASS</span>
-    <span>apps/refund/evals/refund.eval.ts</span>
+    <span>apps/qa/evals/capital.eval.ts</span>
   </div>
   <div class="report-row">
     <span class="report-check">✓</span>
-    <span class="report-name">approves refundable invoice</span>
-    <span class="report-meta">1,062 tok · 2 tools · 5.0s</span>
+    <span class="report-name">knows the capital of France</span>
+    <span class="report-meta">142 tok · 1 judge · 1.8s</span>
   </div>
   <div class="report-score">
-    <span>ToolCallJudge</span>
+    <span>CapitalJudge</span>
     <strong>1.00</strong>
   </div>
   <div class="report-score">
-    <span>StructuredOutputJudge</span>
-    <strong>1.00</strong>
-  </div>
-  <div class="report-tools">
-    <span class="tool lookup">lookupInvoice</span>
-    <span class="tool refund">createRefund</span>
+    <span>expected</span>
+    <strong>Paris</strong>
   </div>
   <div class="report-json">
-    <span>{`{ "status": "approved", "refundId": "rf_inv_123" }`}</span>
+    <span>{`{ "output": "Paris is the capital of France." }`}</span>
   </div>
 </div>
 
 <style>
   .report-preview {
-    border: 1px solid rgba(225, 236, 226, 0.16);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     background:
-      linear-gradient(180deg, rgba(21, 26, 22, 0.94), rgba(7, 10, 8, 0.98)),
-      #070a08;
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(0, 0, 0, 0.98)),
+      #000;
     padding: 1rem;
     font-family: var(--font-mono);
     box-shadow:
@@ -42,7 +38,6 @@
   .report-header,
   .report-row,
   .report-score,
-  .report-tools,
   .report-json {
     display: flex;
     align-items: center;
@@ -73,7 +68,7 @@
   }
 
   .report-status.passed {
-    background: rgba(110, 231, 135, 0.15);
+    background: rgba(66, 245, 123, 0.14);
     color: var(--green);
   }
 
@@ -102,26 +97,6 @@
 
   .report-score strong {
     color: var(--green);
-  }
-
-  .report-tools {
-    flex-wrap: wrap;
-  }
-
-  .tool {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.28rem 0.55rem;
-    color: var(--text);
-    font-size: 0.78rem;
-  }
-
-  .tool.lookup {
-    border-color: rgba(215, 181, 104, 0.45);
-  }
-
-  .tool.refund {
-    border-color: rgba(110, 231, 135, 0.38);
   }
 
   .report-json {

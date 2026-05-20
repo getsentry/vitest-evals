@@ -1,52 +1,109 @@
 import mdx from "@astrojs/mdx";
-import { defineConfig, fontProviders } from "astro/config";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import rehypeSlug from "rehype-slug";
+import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
+import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
+import {
+  monochromeCodeTheme,
+  vitestEvalsStarlightTheme,
+} from "./src/theme/vitest-evals-starlight-theme.mjs";
 
 export default defineConfig({
   site: "https://vitest-evals.sentry.dev",
-  integrations: [mdx()],
-  markdown: {
-    shikiConfig: {
-      theme: "vitesse-black",
-    },
-    rehypePlugins: [
-      rehypeSlug,
-      [
-        rehypeAutolinkHeadings,
-        {
-          behavior: "prepend",
-          properties: { className: ["heading-anchor"] },
-          content: { type: "text", value: "#" },
-        },
-      ],
-    ],
+  devToolbar: {
+    enabled: false,
   },
-  experimental: {
-    fonts: [
-      {
-        name: "Geist Mono",
-        provider: fontProviders.local(),
-        cssVariable: "--font-geist-mono",
-        options: {
-          variants: [
+  integrations: [
+    starlight({
+      title: "vitest-evals",
+      description: "Harness-backed AI testing on top of Vitest.",
+      pagination: false,
+      components: {
+        ThemeSelect: "./src/components/StarlightThemeSelect.astro",
+      },
+      sidebar: [
+        {
+          label: "Documentation",
+          items: [
+            { label: "Overview", link: "/docs" },
             {
-              weight: 400,
-              style: "normal",
-              src: [
-                "./node_modules/geist/dist/fonts/geist-mono/GeistMono-Regular.woff2",
+              label: "Harnesses",
+              items: [
+                { label: "Overview", link: "/docs/harnesses" },
+                { label: "AI SDK", link: "/docs/harnesses/ai-sdk" },
+                {
+                  label: "OpenAI Agents",
+                  link: "/docs/harnesses/openai-agents",
+                },
+                { label: "Pi", link: "/docs/harnesses/pi-ai" },
+                {
+                  label: "Custom Harnesses",
+                  link: "/docs/harnesses/custom",
+                },
               ],
             },
             {
-              weight: 600,
-              style: "normal",
-              src: [
-                "./node_modules/geist/dist/fonts/geist-mono/GeistMono-SemiBold.woff2",
+              label: "Judges",
+              items: [
+                { label: "Overview", link: "/docs/judges" },
+                { label: "ToolCallJudge", link: "/docs/judges/tool-call" },
+                {
+                  label: "StructuredOutputJudge",
+                  link: "/docs/judges/structured-output",
+                },
+                { label: "Custom Judges", link: "/docs/judges/custom" },
               ],
             },
+            { label: "Tool Replay", link: "/docs/tool-replay" },
+            { label: "GitHub Reporting", link: "/docs/github" },
           ],
         },
-      },
-    ],
+        {
+          label: "API Reference",
+          items: [{ label: "Overview", link: "/api" }, typeDocSidebarGroup],
+        },
+      ],
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/getsentry/vitest-evals",
+        },
+      ],
+      plugins: [
+        vitestEvalsStarlightTheme(),
+        starlightTypeDoc({
+          entryPoints: ["../vitest-evals/src/index.ts"],
+          tsconfig: "../vitest-evals/tsconfig.json",
+          output: "api",
+          pagination: false,
+          sidebar: {
+            label: "Exports",
+          },
+          typeDoc: {
+            disableSources: true,
+            entryPointStrategy: "resolve",
+            intentionallyNotExported: [
+              "OutputField",
+              "JudgeAssertionArgs",
+              "JudgeAssertionHarness",
+              "JudgeAssertionInput",
+              "JudgeAssertionMetadata",
+              "JudgeAssertionOutput",
+              "JudgeAssertionParams",
+              "JudgeForReceived",
+              "HarnessInput",
+              "HarnessMetadataFor",
+              "HarnessOutput",
+            ],
+          },
+        }),
+      ],
+    }),
+    mdx(),
+  ],
+  markdown: {
+    shikiConfig: {
+      theme: monochromeCodeTheme,
+    },
   },
 });

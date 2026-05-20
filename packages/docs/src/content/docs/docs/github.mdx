@@ -1,0 +1,87 @@
+---
+title: GitHub Reporting
+description: Publish eval summaries and checks from Vitest JSON output.
+editUrl: false
+---
+
+GitHub reporting is action-first. Run Vitest with JSON output, then publish the
+combined result with `getsentry/vitest-evals`.
+
+## Single Job
+
+Emit Vitest JSON and run the action with `if: always()` so failures still
+publish annotations and summaries.
+
+```yaml title=".github/workflows/evals.yml"
+name: evals
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install
+
+      - name: Run evals
+        run: |
+          pnpm exec vitest run --config vitest.evals.config.ts \
+            --reporter=vitest-evals/reporter \
+            --reporter=json \
+            --outputFile.json=vitest-results.json
+
+      - uses: getsentry/vitest-evals@v0
+        if: always()
+        with:
+          results: vitest-results.json
+          publish-check: true
+          fail-on-failures: true
+```
+
+Use `fail-on-failures: true` when eval failures should block the workflow.
+
+## Sharded Evals
+
+For sharded jobs, upload one JSON result per matrix job and publish once from a
+reducer job.
+
+```yaml title=".github/workflows/evals.yml"
+- uses: actions/upload-artifact@v4
+  with:
+    name: vitest-evals-${{ matrix.shard }}
+    path: vitest-results-${{ matrix.shard }}.json
+
+- uses: actions/download-artifact@v4
+  with:
+    pattern: vitest-evals-*
+    path: eval-results
+    merge-multiple: true
+
+- uses: getsentry/vitest-evals@v0
+  with:
+    results: eval-results/*.json
+    publish-check: true
+    fail-on-failures: true
+```
+
+Keep each shard’s JSON artifact distinct. The reducer job should be the only job
+that publishes the combined report.
+
+## Permissions
+
+Use `checks: write` when publishing Check Runs. Keep `contents: read` for
+checkout and avoid broader token permissions unless another workflow step needs
+them.

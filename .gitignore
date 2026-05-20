@@ -108,6 +108,7 @@ dist
 
 # Astro generated types and cache
 **/.astro/
+packages/docs/src/content/docs/api/
 
 # vitepress build output
 **/.vitepress/dist

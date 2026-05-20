@@ -1,6 +1,4 @@
 ---
-import { Font } from "astro:assets";
-
 interface Props {
   title: string;
   description?: string;
@@ -13,7 +11,7 @@ const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const pageTitle = title === "Home" ? "vitest-evals" : `${title} | vitest-evals`;
 const navItems = [
   { href: "/", label: "Overview" },
-  { href: "/docs", label: "Getting Started" },
+  { href: "/docs", label: "Documentation" },
   { href: "/api", label: "API" },
 ];
 
@@ -28,12 +26,12 @@ function normalize(path: string) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
     <title>{pageTitle}</title>
-    <Font cssVariable="--font-geist-mono" preload />
   </head>
   <body>
     <nav class="nav">
-      <div class="nav-inner container wide">
+      <div class="nav-inner container">
         <a href={`${base}/`} class="nav-logo" aria-label="vitest-evals home">
           <span>vitest-evals</span>
         </a>

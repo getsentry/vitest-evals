@@ -1,0 +1,97 @@
+---
+title: Overview
+description: Choose a harness, configure Vitest, and follow the Paris eval story.
+editUrl: false
+---
+
+Start by choosing the harness that matches the runtime your app already uses.
+Every harness page follows the same small story: an app answers "What is the
+capital of France?", the harness normalizes that run, and a judge checks whether
+the output names Paris.
+
+## Choose a Harness
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/docs/harnesses/ai-sdk/">
+    <strong>AI SDK</strong>
+    <span>Use when your app calls <code>generateText</code>, <code>streamText</code>, or an AI SDK wrapper.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/openai-agents/">
+    <strong>OpenAI Agents</strong>
+    <span>Use when your app owns an <code>Agent</code> and runs it with a <code>Runner</code>.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/pi-ai/">
+    <strong>Pi</strong>
+    <span>Use when your app exposes a Pi agent, toolset, or runtime-compatible entrypoint.</span>
+  </a>
+  <a class="api-link-card" href="/docs/harnesses/custom/">
+    <strong>Custom Harnesses</strong>
+    <span>Use for workflows, service functions, CLIs, RAG pipelines, and custom agents.</span>
+  </a>
+</div>
+
+## Configure Vitest
+
+Keep evals on their own command and Vitest config. The separate config keeps
+longer provider timeouts, eval-only includes, reporter setup, and replay
+defaults out of unit tests.
+
+```json title="package.json"
+{
+  "scripts": {
+    "evals": "vitest run --config vitest.evals.config.ts",
+    "evals:record": "VITEST_EVALS_REPLAY_MODE=record vitest run --config vitest.evals.config.ts",
+    "evals:strict": "VITEST_EVALS_REPLAY_MODE=strict vitest run --config vitest.evals.config.ts"
+  }
+}
+```
+
+```ts title="vitest.evals.config.ts"
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    include: ["evals/**/*.eval.ts"],
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+    reporters: ["vitest-evals/reporter"],
+    env: {
+      VITEST_EVALS_REPLAY_MODE:
+        process.env.VITEST_EVALS_REPLAY_MODE ?? "off",
+      VITEST_EVALS_REPLAY_DIR: ".vitest-evals/recordings",
+    },
+  },
+});
+```
+
+## Follow the Story
+
+The harness pages intentionally use the same question, output, and judge. That
+keeps the documentation focused on the adapter boundary:
+
+| Step | What changes by runtime |
+| --- | --- |
+| App Shape | The production agent, workflow, or service function. |
+| Configure Harness | The adapter package and runtime options. |
+| Eval | The `run("What is the capital of France?")` call and `CapitalJudge`. |
+
+## Next
+
+<div class="api-link-grid">
+  <a class="api-link-card" href="/docs/harnesses/">
+    <strong>Harnesses</strong>
+    <span>Compare the supported runtime adapters before choosing one.</span>
+  </a>
+  <a class="api-link-card" href="/docs/judges/">
+    <strong>Judges</strong>
+    <span>Use built-in judges, write custom judges, and set thresholds.</span>
+  </a>
+  <a class="api-link-card" href="/docs/tool-replay/">
+    <strong>Tool Replay</strong>
+    <span>Record deterministic tool calls without hiding model behavior.</span>
+  </a>
+  <a class="api-link-card" href="/docs/github/">
+    <strong>GitHub Reporting</strong>
+    <span>Publish eval summaries and checks from workflow JSON output.</span>
+  </a>
+</div>

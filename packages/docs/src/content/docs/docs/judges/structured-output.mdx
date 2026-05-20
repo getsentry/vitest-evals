@@ -1,0 +1,68 @@
+---
+title: StructuredOutputJudge
+description: Check JSON-safe output fields from a harness run.
+editUrl: false
+---
+
+`StructuredOutputJudge()` compares the harness output with expected values from
+metadata or matcher options. Use it for deterministic checks when the harness
+returns a parsed domain object instead of raw provider text.
+
+## Configure
+
+```ts title="evals/capital.eval.ts"
+import { StructuredOutputJudge } from "vitest-evals";
+
+describeEval("capital questions", {
+  harness: structuredQaHarness,
+  judges: [
+    StructuredOutputJudge(),
+  ],
+});
+```
+
+### Explicit Assertions
+
+Use explicit assertions when a case needs an extra check or when you want to
+record a score separately from the suite defaults.
+
+```ts title="evals/capital.eval.ts"
+it("records a structured output score", async ({ run }) => {
+  const result = await run("What is the capital of France?", {
+    metadata: {
+      expected: { answer: "Paris", country: "France" },
+    },
+  });
+
+  await expect(result).toSatisfyJudge(StructuredOutputJudge, {
+    threshold: null,
+  });
+});
+```
+
+`threshold: null` records the score without turning it into a failure.
+
+## Metadata
+
+Put the expected value in run metadata.
+
+```ts title="evals/capital.eval.ts"
+const result = await run("What is the capital of France?", {
+  metadata: {
+    expected: {
+      answer: "Paris",
+      country: "France",
+    },
+  },
+});
+```
+
+Structured output checks work best when the harness returns a domain object
+instead of raw provider text.
+
+## Failure Behavior
+
+The judge fails when the configured expected fields do not match the harness
+output and the score falls below the active threshold. Keep harness output as a
+domain object so reports can show field-level differences instead of raw text
+comparisons.

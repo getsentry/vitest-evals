@@ -1,0 +1,114 @@
+---
+title: Pi Harness
+description: Adapt Pi agents and runtime-compatible entrypoints for eval runs.
+editUrl: false
+---
+
+Use the Pi harness when your app exposes a Pi agent, toolset, or
+runtime-compatible `run(input, runtime)` entrypoint. The same Paris example
+applies here: the app answers the question, the harness normalizes the run, and
+the judge scores whether the output names Paris.
+
+## Install
+
+```bash title="Pi"
+pnpm add -D vitest-evals @vitest-evals/harness-pi-ai
+```
+
+## App Shape
+
+The agent factory is the app boundary. It can close over prompts, metadata, and
+services, then expose the runtime-compatible `run(input, runtime)` shape the
+harness expects.
+
+```ts title="src/questionAgent.ts"
+type PiRuntime = {
+  events?: {
+    message(message: { role: "assistant"; content: string }): void;
+  };
+};
+
+export function createQuestionAgent({
+  instructions,
+  metadata,
+}: {
+  instructions: string;
+  metadata: Record<string, unknown>;
+}) {
+  return {
+    async run(input: string, runtime: PiRuntime) {
+      const output = await answerQuestion(input, { instructions, metadata });
+
+      runtime.events?.message({
+        role: "assistant",
+        content: output,
+      });
+
+      return {
+        output,
+      };
+    },
+  };
+}
+```
+
+## Configure Harness
+
+The harness creates the agent for each run and forwards per-case metadata from
+the eval into the app boundary.
+
+```ts title="evals/qaHarness.ts"
+import { piAiHarness } from "@vitest-evals/harness-pi-ai";
+import { createQuestionAgent } from "../src/questionAgent";
+
+export const qaHarness = piAiHarness({
+  agent: ({ input, context }) =>
+    createQuestionAgent({
+      instructions: buildInstructions(input),
+      metadata: context.metadata,
+    }),
+});
+```
+
+Return `{ output }` from the Pi entrypoint when tests and judges should assert
+on a parsed domain value.
+
+## Eval
+
+Write the eval against the harness, not the Pi runtime directly. The judge reads
+the normalized output, so the scoring code stays independent of Pi internals.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => {
+    const passed = output.toLowerCase().includes("paris");
+
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: passed
+          ? "The answer names Paris."
+          : `Expected Paris, got: ${output}`,
+      },
+    };
+  },
+);
+
+describeEval("capital questions", { harness: qaHarness }, (it) => {
+  it("knows the capital of France", async ({ run }) => {
+    const result = await run("What is the capital of France?");
+
+    expect(result.output).toContain("Paris");
+    await expect(result).toSatisfyJudge(CapitalJudge);
+  });
+});
+```

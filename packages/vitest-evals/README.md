@@ -2,6 +2,10 @@
 
 Harness-backed AI testing on top of Vitest.
 
+Use this package README for the core authoring model. For a guided setup path,
+runtime-specific harness examples, replay, and GitHub Actions reporting, start
+with the docs site: `https://vitest-evals.sentry.dev/docs`.
+
 ## Install
 
 ```sh

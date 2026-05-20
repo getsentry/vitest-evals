@@ -1,0 +1,99 @@
+---
+title: OpenAI Agents Harness
+description: Adapt OpenAI Agents Agent and Runner flows for eval runs.
+editUrl: false
+---
+
+Use the OpenAI Agents harness when your app already owns an `Agent` and runs it
+with a `Runner`. This page keeps the same Paris example as the other harnesses:
+configure the app once, wrap it with the harness, then score the harness result
+with a tiny judge.
+
+## Install
+
+```bash title="OpenAI Agents"
+pnpm add -D vitest-evals @vitest-evals/harness-openai-agents @openai/agents
+```
+
+## App Shape
+
+The app should expose the same `Agent` production code runs. Keep instructions,
+tools, handoffs, and structured output policy here.
+
+```ts title="src/questionAgent.ts"
+import { Agent } from "@openai/agents";
+
+export function createQuestionAgent() {
+  return new Agent({
+    name: "qa-agent",
+    instructions:
+      "Answer geography questions directly. Keep answers short.",
+  });
+}
+```
+
+## Configure Harness
+
+The harness supplies the agent, runner defaults, turn limits, and output parser
+for every eval in the suite.
+
+```ts title="evals/qaHarness.ts"
+import { Runner } from "@openai/agents";
+import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
+import { createQuestionAgent } from "../src/questionAgent";
+
+export const qaHarness = openaiAgentsHarness({
+  agent: () => createQuestionAgent(),
+  runner: () =>
+    new Runner({
+      tracingDisabled: true,
+    }),
+  runOptions: {
+    maxTurns: 3,
+  },
+  output: ({ result }) => String(result.finalOutput ?? "").trim(),
+});
+```
+
+Use `output` when `finalOutput` needs validation or conversion before Vitest
+assertions and judges read `result.output`.
+
+## Eval
+
+Run the same question a user would ask the agent. `CapitalJudge` scores the
+normalized output from that run; it does not run the agent a second time.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => {
+    const passed = output.toLowerCase().includes("paris");
+
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: passed
+          ? "The answer names Paris."
+          : `Expected Paris, got: ${output}`,
+      },
+    };
+  },
+);
+
+describeEval("capital questions", { harness: qaHarness }, (it) => {
+  it("knows the capital of France", async ({ run }) => {
+    const result = await run("What is the capital of France?");
+
+    expect(result.output).toContain("Paris");
+    await expect(result).toSatisfyJudge(CapitalJudge);
+  });
+});
+```

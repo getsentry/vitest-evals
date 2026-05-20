@@ -1,0 +1,100 @@
+---
+title: Custom Harnesses
+description: Create a harness for workflows, service functions, CLIs, RAG pipelines, and custom agents.
+editUrl: false
+---
+
+Use `createHarness()` when the first-party runtime adapters do not fit. The app
+can be a workflow, service function, CLI wrapper, RAG pipeline, or custom agent.
+This page uses the same Paris example as the runtime harnesses so the only new
+idea is how to normalize your own app result.
+
+## Install
+
+```bash title="Custom Harness"
+pnpm add -D vitest-evals
+```
+
+## App Shape
+
+Start with the production entrypoint. It should do real app work and return the
+small value tests and judges care about.
+
+```ts title="src/questionFlow.ts"
+export async function answerQuestion(input: string): Promise<string> {
+  const response = await appAssistant.respond(input);
+
+  return response.text.trim();
+}
+```
+
+## Configure Harness
+
+`createHarness()` adapts that production entrypoint into normalized eval data.
+Return `output` for assertions and judges; attach usage, tool calls, and
+artifacts when reports need them.
+
+```ts title="evals/qaHarness.ts"
+import { createHarness } from "vitest-evals";
+import { answerQuestion } from "../src/questionFlow";
+
+export const qaHarness = createHarness<string, string>({
+  name: "qa-app",
+  run: async ({ input, setArtifact }) => {
+    const output = await answerQuestion(input);
+
+    setArtifact("question", { input });
+
+    return {
+      output,
+      usage: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+      },
+    };
+  },
+});
+```
+
+Return a full `HarnessRun` only when you need complete control over messages,
+tool calls, usage, timings, artifacts, and errors.
+
+## Eval
+
+Use the custom harness like any first-party harness. The judge scores the
+normalized output from the single harness run.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => {
+    const passed = output.toLowerCase().includes("paris");
+
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: passed
+          ? "The answer names Paris."
+          : `Expected Paris, got: ${output}`,
+      },
+    };
+  },
+);
+
+describeEval("capital questions", { harness: qaHarness }, (it) => {
+  it("knows the capital of France", async ({ run }) => {
+    const result = await run("What is the capital of France?");
+
+    expect(result.output).toContain("Paris");
+    await expect(result).toSatisfyJudge(CapitalJudge);
+  });
+});
+```
