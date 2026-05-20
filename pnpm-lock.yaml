@@ -113,6 +113,9 @@ importers:
       '@astrojs/starlight':
         specifier: ^0.39.2
         version: 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
+      '@sentry/starlight-theme':
+        specifier: ^0.1.0
+        version: 0.1.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
       '@vercel/functions':
         specifier: ^2.0.0
         version: 2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31)
@@ -1260,6 +1263,12 @@ packages:
     resolution: {integrity: sha512-CvUo2ixeIQGtF6WvuB87XWqPQkoFAFqW+HUo/WzHwuHDvIwZCtjdWXoYCcr06iKGydiqTclC4jU/TNObC/xKZg==}
     cpu: [x64]
     os: [win32]
+
+  '@sentry/starlight-theme@0.1.0':
+    resolution: {integrity: sha512-y0MDTCjosfdB8JiUSSWlGTToR7INO0r84j/mhFB21N7kSFQ7tX2mHYYi0HqjAGgSMxWy+NIo3ya2LGyVlEoYgg==}
+    engines: {node: '>=22.12.0'}
+    peerDependencies:
+      '@astrojs/starlight': '>=0.39.0'
 
   '@shikijs/core@4.1.0':
     resolution: {integrity: sha512-jLJtSJeuFffqX6/inRE1zqU5aFv2hrszvYgq3OjbAgFRZiWv7abKMDdQzYxuSDfmUPQozZvI/kuy6VMTvnvqTQ==}
@@ -5229,6 +5238,10 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.46.2':
     optional: true
+
+  '@sentry/starlight-theme@0.1.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
+    dependencies:
+      '@astrojs/starlight': 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
 
   '@shikijs/core@4.1.0':
     dependencies:
