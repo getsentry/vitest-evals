@@ -113,9 +113,15 @@ importers:
       '@astrojs/starlight':
         specifier: ^0.39.2
         version: 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
+      '@fontsource-variable/rubik':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@sentry/starlight-theme':
-        specifier: ^0.3.0
-        version: 0.3.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
+        specifier: ^0.4.0
+        version: 0.4.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
       '@vercel/functions':
         specifier: ^2.0.0
         version: 2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31)
@@ -821,6 +827,12 @@ packages:
   '@expressive-code/plugin-text-markers@0.42.0':
     resolution: {integrity: sha512-l59lUx8fq1v5g6SpmbDjiU0+7IdfbiWnAyRmtTVSpfhyq+nZMN4UcmYyu2b9Mynhzt7Gr+O+cXyEPDNb2AVWVQ==}
 
+  '@fontsource-variable/rubik@5.2.8':
+    resolution: {integrity: sha512-vGDExLzB4a2Fj9mca5LqNoA2ZKcU9o+x5FEBLte/nxYkCB9hOQwZS6ZlItUv+Ssn7YMzKauGuI/Po+YueFuZbg==}
+
+  '@fontsource/ibm-plex-mono@5.2.7':
+    resolution: {integrity: sha512-MKAb8qV+CaiMQn2B0dIi1OV3565NYzp3WN5b4oT6LTkk+F0jR6j0ZN+5BKJiIhffDC3rtBULsYZE65+0018z9w==}
+
   '@gerrit0/mini-shiki@3.23.0':
     resolution: {integrity: sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg==}
 
@@ -1264,8 +1276,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sentry/starlight-theme@0.3.0':
-    resolution: {integrity: sha512-/6HZoCd54dQ9lJHcF5C5f9EDM1iZZZkMjDaItMPhC5ExpYgwT82sci77a+lFVx/85U7n1/0fGpekB4aozLQXAA==}
+  '@sentry/starlight-theme@0.4.0':
+    resolution: {integrity: sha512-11kTD/UeIsrAsaZdPxPYDpTC3GyfsBFtT3hMqdKCHC0MV8ZF+g524yYiUkKPhq/aLkgnwMEExuxlVz0HcbBFwA==}
     engines: {node: '>=22.12.0'}
     peerDependencies:
       '@astrojs/starlight': '>=0.39.0'
@@ -4816,6 +4828,10 @@ snapshots:
     dependencies:
       '@expressive-code/core': 0.42.0
 
+  '@fontsource-variable/rubik@5.2.8': {}
+
+  '@fontsource/ibm-plex-mono@5.2.7': {}
+
   '@gerrit0/mini-shiki@3.23.0':
     dependencies:
       '@shikijs/engine-oniguruma': 3.23.0
@@ -5239,9 +5255,11 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.46.2':
     optional: true
 
-  '@sentry/starlight-theme@0.3.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
+  '@sentry/starlight-theme@0.4.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
     dependencies:
       '@astrojs/starlight': 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
+      '@fontsource-variable/rubik': 5.2.8
+      '@fontsource/ibm-plex-mono': 5.2.7
 
   '@shikijs/core@4.1.0':
     dependencies:
