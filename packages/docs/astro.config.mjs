@@ -2,7 +2,6 @@ import mdx from "@astrojs/mdx";
 import starlight from "@astrojs/starlight";
 import sentryStarlightTheme, {
   monochromeCodeTheme,
-  sentryAgentMarkdown,
 } from "@sentry/starlight-theme";
 import { defineConfig } from "astro/config";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
@@ -104,7 +103,6 @@ export default defineConfig({
   markdown: {
     shikiConfig: {
       theme: monochromeCodeTheme,
-  sentryAgentMarkdown,
     },
   },
 });
