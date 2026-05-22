@@ -2,7 +2,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolExecutionOptions } from "ai";
 import { afterEach, expect, test, vi } from "vitest";
-import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  getHarnessRunFromError,
+  spansByKind,
+  toolCalls,
+} from "vitest-evals";
 import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
@@ -319,6 +324,52 @@ describeEval(
           },
         },
       ]);
+      expect(spansByKind(result, "run")).toMatchObject([
+        {
+          name: "ai-sdk",
+          status: "ok",
+          attributes: {
+            "gen_ai.workflow.name": "ai-sdk",
+            "gen_ai.operation.name": "invoke_workflow",
+          },
+        },
+      ]);
+      expect(spansByKind(result, "model")).toMatchObject([
+        {
+          name: "ai-sdk step 0",
+          attributes: {
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "gpt-4o-mini",
+            "gen_ai.usage.input_tokens": 10,
+          },
+        },
+        {
+          name: "ai-sdk step 1",
+          attributes: {
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "gpt-4o-mini",
+            "gen_ai.usage.output_tokens": 4,
+          },
+        },
+      ]);
+      expect(spansByKind(result, "tool")).toMatchObject([
+        {
+          id: expect.not.stringMatching(/^call_lookup$/),
+          name: "lookupInvoice",
+          attributes: {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.call.id": "call_lookup",
+            "gen_ai.tool.name": "lookupInvoice",
+          },
+        },
+        {
+          id: expect.not.stringMatching(/^call_refund$/),
+          name: "createRefund",
+          attributes: {
+            "gen_ai.tool.call.id": "call_refund",
+          },
+        },
+      ]);
     });
   },
 );
@@ -536,6 +587,15 @@ test("default agent run receives wrapped runtime tools", async () => {
       },
     },
   ]);
+  expect(spansByKind(result, "tool")).toMatchObject([
+    {
+      name: "lookupInvoice",
+      status: "ok",
+      attributes: {
+        "gen_ai.tool.name": "lookupInvoice",
+      },
+    },
+  ]);
 });
 
 test("supports run as the custom entrypoint", async () => {
@@ -726,6 +786,69 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
         name: "lookupInvoice",
         toolCallId: "call_lookup",
         isError: false,
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      error: {
+        message: "agent failed after tool call",
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "tool")).toMatchObject([
+    {
+      id: expect.not.stringMatching(/^call_lookup$/),
+      name: "lookupInvoice",
+      status: "ok",
+      attributes: {
+        "gen_ai.tool.call.id": "call_lookup",
+      },
+    },
+  ]);
+});
+
+test("attaches a failed run when agent setup fails", async () => {
+  const setupHarness = aiSdkHarness({
+    agent: async ({ context }) => {
+      context.setArtifact("setup", "failed");
+      throw new Error("agent setup failed");
+    },
+  });
+  const context = {
+    metadata: {},
+    artifacts: {} as Record<string, JsonValue>,
+    setArtifact: vi.fn((name: string, value: JsonValue) => {
+      context.artifacts[name] = value;
+    }),
+  };
+
+  const error = await setupHarness
+    .run("Refund invoice inv_123", context)
+    .catch((caughtError) => caughtError);
+  const run = getHarnessRunFromError(error);
+
+  expect(run?.artifacts).toEqual({
+    setup: "failed",
+  });
+  expect(run?.errors).toEqual([
+    {
+      type: "Error",
+      message: "agent setup failed",
+    },
+  ]);
+  expect(run?.traces?.[0]?.metadata).toEqual({
+    source: "harness-ai-sdk",
+  });
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      attributes: {
+        "gen_ai.operation.name": "invoke_workflow",
+      },
+      error: {
+        message: "agent setup failed",
       },
     },
   ]);

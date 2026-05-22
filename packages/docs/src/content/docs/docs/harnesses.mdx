@@ -44,8 +44,14 @@ same shape regardless of runtime:
 | `output` | The domain value your tests usually assert on. |
 | `messages` | Conversation transcript or normalized app messages. |
 | `toolCalls` | Deterministic tool activity for tool judges and replay. |
+| `traces` | Operation spans for runs, model calls, tools, guardrails, handoffs, or custom work. |
 | `usage` | Stable usage units such as provider, model, tokens, tools, and retries. |
-| `artifacts` | Report-only details such as fixture ids, retrieved records, or traces. |
+| `artifacts` | Report-only details such as fixture ids or retrieved records. |
 
 Metadata is per-run test context. Put expected values, scenario labels, fixture
 ids, and judge configuration in `metadata` instead of hiding them in prompts.
+First-party harnesses attach trace spans automatically from native runtime data
+they observe, including run, model, and tool operations. `createHarness()`
+attaches fallback run and tool spans when a custom harness does not return
+traces itself. Span attributes are JSON-safe and include typed OpenTelemetry
+GenAI semantic keys where they apply.

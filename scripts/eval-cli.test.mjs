@@ -3,7 +3,7 @@ import { createEvalEnv, parseEvalCliArgs } from "./eval-cli.mjs";
 
 describe("eval CLI helpers", () => {
   test("defaults demo evals to replay auto mode", () => {
-    expect(createEvalEnv({}, 0)).toMatchObject({
+    expect(createEvalEnv({})).toMatchObject({
       VITEST_EVALS_REPLAY_MODE: "auto",
       VITEST_EVALS_REPLAY_DIR: ".vitest-evals/recordings",
     });
@@ -16,7 +16,7 @@ describe("eval CLI helpers", () => {
           VITEST_EVALS_REPLAY_MODE: "strict",
           VITEST_EVALS_REPLAY_DIR: "/tmp/replay",
         },
-        0,
+        "normal",
       ),
     ).toMatchObject({
       VITEST_EVALS_REPLAY_MODE: "strict",
@@ -25,16 +25,22 @@ describe("eval CLI helpers", () => {
   });
 
   test("marks intentional failure runs", () => {
-    expect(createEvalEnv({}, 0, { failMode: true })).toMatchObject({
+    expect(createEvalEnv({}, "normal", { failMode: true })).toMatchObject({
       VITEST_EVALS_FAIL_MODE: "1",
     });
   });
 
-  test("keeps verbose flags separate from forwarded Vitest args", () => {
-    expect(parseEvalCliArgs(["--", "-vv", "--pool=forks"])).toEqual({
+  test("keeps report-level flags separate from forwarded Vitest args", () => {
+    expect(parseEvalCliArgs(["--", "--info", "-vv", "--pool=forks"])).toEqual({
       failMode: false,
       forwardedArgs: ["--pool=forks"],
-      toolDetailLevel: 2,
+      reportLevel: "info",
+    });
+  });
+
+  test("marks info report level in the eval environment", () => {
+    expect(createEvalEnv({}, "info")).toMatchObject({
+      VITEST_EVALS_REPORT_LEVEL: "info",
     });
   });
 });

@@ -56,7 +56,8 @@ export const qaHarness = openaiAgentsHarness({
 ```
 
 Use `output` when `finalOutput` needs validation or conversion before Vitest
-assertions and judges read `result.output`.
+assertions and judges read `result.output`. The harness also attaches native
+run, response, and tool spans to `result.traces`.
 
 ## Eval
 

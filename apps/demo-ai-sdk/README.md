@@ -19,10 +19,8 @@ Run them with:
 
 ```sh
 pnpm --filter @demo/demo-ai-sdk run evals
-pnpm --filter @demo/demo-ai-sdk run evals -- -v
-pnpm --filter @demo/demo-ai-sdk run evals -- -vv
-pnpm --filter @demo/demo-ai-sdk run evals -- -vvv
-pnpm --filter @demo/demo-ai-sdk run evals -- -vvvv
+pnpm --filter @demo/demo-ai-sdk run evals -- --info
+pnpm --filter @demo/demo-ai-sdk run evals:info
 pnpm --filter @demo/demo-ai-sdk run evals:verbose
 pnpm --filter @demo/demo-ai-sdk run evals:fail
 ```

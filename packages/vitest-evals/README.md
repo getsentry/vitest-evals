@@ -33,8 +33,14 @@ workflow.
 - `run(input, { metadata? })` executes the harness explicitly and returns a
   normalized `HarnessRun`
 - the returned `result.output` is the app-facing value you assert on directly
-- the returned `result.session` is the canonical JSON-serializable trace for
+- the returned `result.session` is the canonical JSON-serializable transcript for
   reporting, replay, tool assertions, and judges
+- the returned `result.traces` contains JSON-serializable operation spans; the
+  first-party harnesses attach run, model, and tool spans automatically, while
+  `createHarness(...)` attaches fallback run and tool spans for custom harnesses
+  that do not return traces themselves. Span attributes include typed
+  OpenTelemetry GenAI semantic keys while still allowing provider-specific
+  metadata
 - scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
@@ -126,6 +132,17 @@ describeEval("refund agent", { harness }, (it) => {
   });
 });
 ```
+
+## Terminal Reporting
+
+The terminal reporter has two eval report levels. Normal mode prints compact
+test, score, usage, and tool-count summaries. Info mode adds per-tool summaries,
+arguments, timing/size metadata, replay status, and final output summaries.
+Set `VITEST_EVALS_REPORT_LEVEL=info`, or pass `--info` through the workspace
+eval scripts, to enable it. `--verbose` and `-v` remain aliases for
+compatibility.
+
+Full transcripts and spans are preserved in the Vitest JSON report metadata.
 
 ## GitHub Actions Reporting
 

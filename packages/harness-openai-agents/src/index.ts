@@ -5,22 +5,32 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedMessage,
+  NormalizedSpan,
   NormalizedSession,
+  NormalizedTrace,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import {
   attachHarnessRunToError,
+  createFailedHarnessRun,
+  createGenAiUsageAttributes,
+  createToolCallSpans,
+  ensureRunTrace,
+  getHarnessRunFromError,
   hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
   normalizeContent,
   normalizeMetadata,
   normalizeRecord,
+  normalizeSpanAttributes,
+  normalizeSpanError,
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
+  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import {
   executeWithReplay,
@@ -53,6 +63,8 @@ type ResultFieldOutput<
     ? JsonOutput<TResult[TKey]> | undefined
     : JsonOutput<TResult[TKey]>
   : undefined;
+
+let nextTraceId = 0;
 
 type OpenAiAgentsRunResultOutput<TResult> = TResult extends HarnessRun<
   infer TOutput
@@ -780,18 +792,59 @@ export function openaiAgentsHarness<
 ): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
+  const harnessName = options.name ?? "openai-agents";
   const harness: Harness<TInput, TOutput, TMetadata> = {
-    name: options.name ?? "openai-agents",
+    name: harnessName,
     run: async (input, context) => {
-      const agent = await resolveAgent(options, {
-        input,
-        context,
-      });
-      return executeOpenAiAgentsHarness(options, agent, input, context);
+      const startedAt = new Date();
+
+      try {
+        const agent = await resolveAgent(options, {
+          input,
+          context,
+        });
+        return await executeOpenAiAgentsHarness(options, agent, input, context);
+      } catch (error) {
+        if (getHarnessRunFromError(error)) {
+          throw error;
+        }
+
+        throw attachHarnessRunToError(
+          error,
+          createFailedOpenAiAgentsRun(
+            input,
+            context,
+            error,
+            harnessName,
+            startedAt,
+          ),
+        );
+      }
     },
   };
 
   return harness;
+}
+
+function createFailedOpenAiAgentsRun<TInput, TMetadata extends HarnessMetadata>(
+  input: TInput,
+  context: HarnessContext<TMetadata>,
+  error: unknown,
+  harnessName: string,
+  startedAt: Date,
+) {
+  const run = createFailedHarnessRun(input, error, {
+    artifacts: context.artifacts,
+  });
+  ensureRunTrace(run, {
+    name: harnessName,
+    startedAt,
+    finishedAt: new Date(),
+    operationName: "invoke_agent",
+    source: "harness-openai-agents",
+  });
+
+  return run;
 }
 
 async function executeOpenAiAgentsHarness<
@@ -817,6 +870,7 @@ async function executeOpenAiAgentsHarness<
   context: HarnessContext<TMetadata>,
 ): Promise<HarnessRun<TOutput>> {
   const startedAt = Date.now();
+  const trace = createTraceRecorder(options.name ?? "openai-agents");
   const capture: RuntimeToolCapture = {
     calls: [],
   };
@@ -882,6 +936,12 @@ async function executeOpenAiAgentsHarness<
           ) {
             settledResult.artifacts = context.artifacts;
           }
+          attachOpenAiAgentsTrace(
+            settledResult,
+            trace,
+            settledResult,
+            new Date(),
+          );
           return settledResult as HarnessRun<TOutput>;
         }
 
@@ -912,6 +972,8 @@ async function executeOpenAiAgentsHarness<
         const session = resolveSession(input, normalizeResult, output, usage, {
           runtimeToolCalls: capture.calls,
         });
+        const errors = resolveHarnessRunErrors(normalizeResult);
+        const finishedAt = new Date();
 
         return {
           session,
@@ -922,15 +984,27 @@ async function executeOpenAiAgentsHarness<
             Object.keys(context.artifacts).length > 0
               ? context.artifacts
               : undefined,
-          errors: resolveHarnessRunErrors(normalizeResult),
+          errors,
+          traces: [
+            finishOpenAiAgentsTrace(trace, {
+              result: normalizeResult,
+              session,
+              usage,
+              errors,
+              finishedAt,
+            }),
+          ],
         } as HarnessRun<TOutput>;
       } catch (error) {
+        const finishedAt = new Date();
         const usage =
           capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
+        const session = resolveSession(input, undefined, undefined, usage, {
+          runtimeToolCalls: capture.calls,
+        });
+        const serializedError = serializeError(error);
         const run = {
-          session: resolveSession(input, undefined, undefined, usage, {
-            runtimeToolCalls: capture.calls,
-          }),
+          session,
           output: undefined,
           usage,
           timings: { totalMs: Date.now() - startedAt },
@@ -938,7 +1012,15 @@ async function executeOpenAiAgentsHarness<
             Object.keys(context.artifacts).length > 0
               ? context.artifacts
               : undefined,
-          errors: [serializeError(error)],
+          errors: [serializedError],
+          traces: [
+            finishOpenAiAgentsTrace(trace, {
+              session,
+              usage,
+              errors: [serializedError],
+              finishedAt,
+            }),
+          ],
         } satisfies HarnessRun;
 
         throw attachHarnessRunToError(error, run);
@@ -1249,6 +1331,206 @@ function hasOutputSelector<
   >,
 ) {
   return Boolean(options.output);
+}
+
+type TraceRecorder = {
+  id: string;
+  rootSpanId: string;
+  name: string;
+  startedAt: Date;
+};
+
+function createTraceRecorder(name: string): TraceRecorder {
+  const id = `openai_agents_trace_${++nextTraceId}`;
+
+  return {
+    id,
+    rootSpanId: `${id}:run`,
+    name,
+    startedAt: new Date(),
+  };
+}
+
+function attachOpenAiAgentsTrace(
+  run: HarnessRun,
+  trace: TraceRecorder,
+  result: unknown,
+  finishedAt: Date,
+) {
+  const nativeTrace = finishOpenAiAgentsTrace(trace, {
+    result,
+    session: run.session,
+    usage: run.usage,
+    errors: run.errors ?? [],
+    finishedAt,
+  });
+
+  run.traces = [...(run.traces ?? []), nativeTrace];
+}
+
+function finishOpenAiAgentsTrace(
+  trace: TraceRecorder,
+  options: {
+    result?: unknown;
+    session: NormalizedSession;
+    usage?: UsageSummary;
+    errors?: unknown[];
+    finishedAt: Date;
+  },
+): NormalizedTrace {
+  const finishedAt = options.finishedAt;
+  const durationMs = finishedAt.getTime() - trace.startedAt.getTime();
+  const rootError = options.errors?.[0]
+    ? normalizeSpanError(options.errors[0])
+    : undefined;
+  const rootSpan: NormalizedSpan = {
+    id: trace.rootSpanId,
+    traceId: trace.id,
+    name: trace.name,
+    kind: "run",
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    status: rootError ? "error" : "ok",
+    ...(rootError ? { error: rootError } : {}),
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.workflow.name": trace.name,
+      "gen_ai.agent.name":
+        stringProperty(
+          getObjectProperty(options.result, "lastAgent"),
+          "name",
+        ) ??
+        stringProperty(
+          getObjectProperty(options.result, "activeAgent"),
+          "name",
+        ),
+      ...createGenAiUsageAttributes(options.usage, { provider: "openai" }),
+    }),
+  };
+  const modelSpans = createOpenAiModelSpans(
+    trace,
+    options.result,
+    options.usage,
+  );
+  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
+    traceId: trace.id,
+    parentId: trace.rootSpanId,
+    spanIdPrefix: `${trace.id}:tool`,
+  });
+
+  return {
+    id: trace.id,
+    name: trace.name,
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    metadata: {
+      source: "harness-openai-agents",
+    },
+    spans: [rootSpan, ...modelSpans, ...toolSpans],
+  };
+}
+
+function createOpenAiModelSpans(
+  trace: TraceRecorder,
+  result: unknown,
+  usage: UsageSummary | undefined,
+): NormalizedSpan[] {
+  const rawResponses = arrayProperty(result, "rawResponses") ?? [];
+  if (rawResponses.length === 0) {
+    const fallback = createUsageModelSpan(trace, usage);
+    return fallback ? [fallback] : [];
+  }
+
+  return rawResponses.map((response, index) => {
+    const responseUsage = getObjectProperty(response, "usage");
+    const responseError = getObjectProperty(response, "error");
+    const spanError = responseError
+      ? normalizeSpanError(responseError)
+      : undefined;
+    const responseModel = resolveResponseModel(response) ?? usage?.model;
+
+    return {
+      id: `${trace.id}:model:${index + 1}`,
+      traceId: trace.id,
+      parentId: trace.rootSpanId,
+      name: responseModel
+        ? `openai response ${responseModel}`
+        : "openai response",
+      kind: "model",
+      status:
+        spanError || stringProperty(response, "status") === "failed"
+          ? "error"
+          : "ok",
+      ...(spanError ? { error: spanError } : {}),
+      attributes: normalizeSpanAttributes({
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": responseModel,
+        "gen_ai.response.model": responseModel,
+        "gen_ai.response.id": stringProperty(response, "id"),
+        "gen_ai.response.finish_reasons": stringProperty(response, "status")
+          ? [stringProperty(response, "status") as string]
+          : undefined,
+        "gen_ai.usage.input_tokens": usageNumberProperty(
+          responseUsage,
+          "inputTokens",
+          "input_tokens",
+        ),
+        "gen_ai.usage.output_tokens": usageNumberProperty(
+          responseUsage,
+          "outputTokens",
+          "output_tokens",
+        ),
+        "gen_ai.usage.reasoning.output_tokens": usageNumberProperty(
+          getObjectProperty(responseUsage, "outputTokenDetails") ??
+            getObjectProperty(responseUsage, "output_tokens_details"),
+          "reasoningTokens",
+          "reasoning_tokens",
+        ),
+      }),
+    } satisfies NormalizedSpan;
+  });
+}
+
+function createUsageModelSpan(
+  trace: TraceRecorder,
+  usage: UsageSummary | undefined,
+): NormalizedSpan | undefined {
+  if (!usage?.provider && !usage?.model) {
+    return undefined;
+  }
+
+  return {
+    id: `${trace.id}:model:1`,
+    traceId: trace.id,
+    parentId: trace.rootSpanId,
+    name: usage.model ? `openai ${usage.model}` : "openai model",
+    kind: "model",
+    status: "ok",
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "chat",
+      ...createGenAiUsageAttributes(usage, { provider: "openai" }),
+    }),
+  };
+}
+
+function resolveResponseModel(response: unknown) {
+  const model = getObjectProperty(response, "model");
+  return (
+    (typeof model === "string" ? model : undefined) ??
+    stringProperty(model, "modelId") ??
+    stringProperty(model, "id")
+  );
+}
+
+function usageNumberProperty(
+  value: unknown,
+  camelKey: string,
+  snakeKey: string,
+) {
+  return numberProperty(value, camelKey) ?? numberProperty(value, snakeKey);
 }
 
 async function withInstrumentedAgentTools<

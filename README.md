@@ -52,18 +52,19 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm evals
-pnpm evals -- -v
-pnpm evals -- -vv
-pnpm evals -- -vvv
-pnpm evals -- -vvvv
+pnpm evals -- --info
+pnpm evals:info
 pnpm evals:verbose
 ```
 
-Verbosity tiers for eval output:
+Eval output has two report levels:
 
-- `-v` or `-vv`: tool summary lines
-- `-vvv`: tool headers include summarized arguments
-- `-vvvv`: adds raw tool payload lines (`raw in`, `raw out`, `raw err`)
+- normal: compact one-line eval and harness summaries
+- info: per-tool summaries, arguments, timing/size metadata, replay status, and
+  final output summaries
+
+`--verbose` and `-v` are accepted as aliases for `--info` for compatibility.
+Full transcripts and spans stay in the JSON report metadata.
 
 The root Vitest config is intentionally small. Package name resolution comes
 from the workspace `tsconfig` paths via `vite-tsconfig-paths`, and package
@@ -203,7 +204,12 @@ Harness-backed suites stay close to plain Vitest:
 - scenario-specific judge criteria can live in `input`; use `metadata` for
   per-run expectations or harness configuration that are not part of the
   scenario payload
-- reporter output, replay, usage, and tool traces come from the normalized run
+- reporter output, replay, usage, tool calls, and spans come from the
+  normalized run. First-party harnesses attach native run, model, and tool
+  spans automatically; `createHarness(...)` attaches fallback run and tool spans
+  when a custom harness does not return traces itself. Span attributes include
+  typed OpenTelemetry GenAI semantic keys while keeping provider-specific keys
+  JSON-safe.
 
 Built-in judges include `FactualityJudge()` for model-backed factuality
 grading plus deterministic helpers such as `StructuredOutputJudge()` and

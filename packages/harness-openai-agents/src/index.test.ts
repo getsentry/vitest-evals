@@ -2,7 +2,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Agent, tool } from "@openai/agents";
 import { afterEach, expect, test, vi } from "vitest";
-import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  getHarnessRunFromError,
+  spansByKind,
+  toolCalls,
+} from "vitest-evals";
 import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
@@ -331,6 +336,39 @@ describeEval(
           },
         },
       ]);
+      expect(spansByKind(result, "run")).toMatchObject([
+        {
+          name: "openai-agents",
+          status: "ok",
+          attributes: {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.workflow.name": "openai-agents",
+            "gen_ai.agent.name": "classifier",
+          },
+        },
+      ]);
+      expect(spansByKind(result, "model")).toMatchObject([
+        {
+          name: "openai response gpt-4.1-mini",
+          attributes: {
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "gen_ai.response.id": "resp_123",
+          },
+        },
+      ]);
+      expect(spansByKind(result, "tool")).toMatchObject([
+        {
+          id: expect.not.stringMatching(/^call_lookup$/),
+          name: "lookupBottle",
+          status: "ok",
+          attributes: {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.call.id": "call_lookup",
+            "gen_ai.tool.name": "lookupBottle",
+          },
+        },
+      ]);
     });
   },
 );
@@ -636,6 +674,61 @@ test("passes run input and context to agent factory before tool instrumentation"
         replay: {
           status: "recorded",
         },
+      },
+    },
+  ]);
+  expect(spansByKind(result, "tool")).toMatchObject([
+    {
+      id: expect.not.stringMatching(/^call_lookup$/),
+      name: "lookupBottle",
+      status: "ok",
+      attributes: {
+        "gen_ai.tool.call.id": "call_lookup",
+        "gen_ai.tool.name": "lookupBottle",
+      },
+    },
+  ]);
+});
+
+test("attaches a failed run when agent setup fails", async () => {
+  const setupHarness = openaiAgentsHarness({
+    agent: async ({ context }) => {
+      context.setArtifact("setup", "failed");
+      throw new Error("agent setup failed");
+    },
+    run: async () => ({
+      output: {
+        label: "bourbon",
+      },
+    }),
+  });
+  const context = createHarnessContext({});
+
+  const error = await setupHarness
+    .run("Classify bottle bt_123", context)
+    .catch((caughtError) => caughtError);
+  const run = getHarnessRunFromError(error);
+
+  expect(run?.artifacts).toEqual({
+    setup: "failed",
+  });
+  expect(run?.errors).toEqual([
+    {
+      type: "Error",
+      message: "agent setup failed",
+    },
+  ]);
+  expect(run?.traces?.[0]?.metadata).toEqual({
+    source: "harness-openai-agents",
+  });
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      attributes: {
+        "gen_ai.operation.name": "invoke_agent",
+      },
+      error: {
+        message: "agent setup failed",
       },
     },
   ]);
@@ -1322,6 +1415,24 @@ test("attaches partial tool calls when Runner.run errors", async () => {
       result: {
         bottleId: "bt_missing",
         family: "unknown",
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      error: {
+        message: "classifier failed after lookup",
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "tool")).toMatchObject([
+    {
+      id: expect.not.stringMatching(/^call_lookup$/),
+      name: "lookupBottle",
+      status: "ok",
+      attributes: {
+        "gen_ai.tool.call.id": "call_lookup",
       },
     },
   ]);
