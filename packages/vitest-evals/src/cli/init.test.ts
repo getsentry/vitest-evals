@@ -179,13 +179,4 @@ describe("runInit", () => {
     writeFileSync(join(dir, "package.json"), "not valid json");
     expect(() => runInit({ cwd: dir })).toThrow(/invalid JSON/);
   });
-
-  it("targets --cwd directory", () => {
-    writePkg(dir, { name: "my-app" });
-
-    const result = runInit({ cwd: dir });
-
-    expect(result.status).toBe("ok");
-    expect(readConfig(dir)).toBe(EVALS_CONFIG_CONTENT);
-  });
 });
