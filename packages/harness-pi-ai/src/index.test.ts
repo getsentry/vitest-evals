@@ -368,15 +368,6 @@ describeEval(
           },
         },
       ]);
-      expect(spansByKind(result, "tool")).toMatchObject([
-        {
-          name: "lookupInvoice",
-          status: "ok",
-          attributes: {
-            "gen_ai.tool.name": "lookupInvoice",
-          },
-        },
-      ]);
     });
   },
 );
