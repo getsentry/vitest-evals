@@ -36,6 +36,15 @@ Keep evals on their own command and Vitest config. The separate config keeps
 longer provider timeouts, eval-only includes, reporter setup, and replay
 defaults out of unit tests.
 
+Run the `init` command to generate the baseline config and add the eval scripts
+to `package.json` automatically:
+
+```bash
+pnpm exec vitest-evals init
+```
+
+Or add the files by hand:
+
 ```json title="package.json"
 {
   "scripts": {

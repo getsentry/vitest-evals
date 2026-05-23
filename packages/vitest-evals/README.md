@@ -26,6 +26,19 @@ For GitHub Actions summaries and annotations, emit Vitest JSON and use the
 native `getsentry/vitest-evals` action. No extra npm package is needed in the
 workflow.
 
+## Init
+
+Run `init` to generate the baseline Vitest config and add eval scripts to
+`package.json`:
+
+```sh
+pnpm exec vitest-evals init
+```
+
+This creates `vitest.evals.config.ts` and adds `evals` and `evals:record`
+scripts. Rerunning is safe — existing identical content is left unchanged.
+Pass `--force` to overwrite conflicting config or scripts.
+
 ## Core Model
 
 - `describeEval(...)` binds exactly one harness to a suite
