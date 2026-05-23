@@ -1,7 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { describeEval, getHarnessRunFromError, toolCalls } from "vitest-evals";
+import {
+  describeEval,
+  getHarnessRunFromError,
+  spansByKind,
+  toolCalls,
+} from "vitest-evals";
 import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
@@ -219,6 +224,15 @@ test("accepts agent as a factory", async () => {
     preparedInput: "Refund invoice inv_123",
     agentId: "refund-agent",
   });
+  expect(spansByKind(result, "tool")).toMatchObject([
+    {
+      name: "lookupInvoice",
+      status: "ok",
+      attributes: {
+        "gen_ai.tool.name": "lookupInvoice",
+      },
+    },
+  ]);
 });
 
 test("does not infer app output from arbitrary custom result shapes", async () => {
@@ -325,6 +339,35 @@ describeEval(
         ]),
       );
       expect(result.usage.totalTokens).toBe(12);
+      expect(spansByKind(result, "run")).toMatchObject([
+        {
+          name: "pi-ai",
+          status: "ok",
+          attributes: {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.workflow.name": "pi-ai",
+          },
+        },
+      ]);
+      expect(spansByKind(result, "model")).toMatchObject([
+        {
+          name: "pi-ai pi-refund",
+          attributes: {
+            "gen_ai.provider.name": "pi-ai",
+            "gen_ai.request.model": "pi-refund",
+          },
+        },
+      ]);
+      expect(spansByKind(result, "tool")).toMatchObject([
+        {
+          name: "lookupInvoice",
+          status: "ok",
+          attributes: {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookupInvoice",
+          },
+        },
+      ]);
     });
   },
 );
@@ -421,6 +464,7 @@ describeEval(
       });
       expect(toolCalls(result.session)).toMatchObject([
         {
+          id: "lookupInvoice",
           name: "lookupInvoice",
           arguments: {
             invoiceId: "inv_123",
@@ -428,6 +472,14 @@ describeEval(
           result: {
             invoiceId: "inv_123",
             refundable: true,
+          },
+        },
+      ]);
+      expect(spansByKind(result, "tool")).toMatchObject([
+        {
+          name: "lookupInvoice",
+          attributes: {
+            "gen_ai.tool.call.id": "lookupInvoice",
           },
         },
       ]);
@@ -1115,6 +1167,73 @@ test("attaches a partial run when the harness errors", async () => {
       error: {
         type: "Error",
         message: "Invoice inv_missing not found",
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      error: {
+        message: "Invoice inv_missing not found",
+      },
+    },
+  ]);
+  expect(spansByKind(run!, "tool")).toMatchObject([
+    {
+      name: "lookupInvoice",
+      status: "error",
+      error: {
+        message: "Invoice inv_missing not found",
+      },
+    },
+  ]);
+});
+
+test("attaches a failed run when agent setup fails", async () => {
+  const setupHarness = piAiHarness({
+    agent: async ({ context }) => {
+      context.setArtifact("setup", "failed");
+      throw new Error("agent setup failed");
+    },
+    run: async () => ({
+      output: {
+        status: "approved" as const,
+      },
+    }),
+  });
+  const context = {
+    metadata: {},
+    artifacts: {} as Record<string, JsonValue>,
+    setArtifact: vi.fn((name: string, value: JsonValue) => {
+      context.artifacts[name] = value;
+    }),
+  };
+
+  const error = await setupHarness
+    .run("Refund invoice inv_123", context)
+    .catch((caughtError) => caughtError);
+  const run = getHarnessRunFromError(error);
+
+  expect(run?.artifacts).toEqual({
+    setup: "failed",
+  });
+  expect(run?.errors).toEqual([
+    {
+      type: "Error",
+      message: "agent setup failed",
+    },
+  ]);
+  expect(run?.traces?.[0]?.metadata).toEqual({
+    source: "harness-pi-ai",
+  });
+  expect(spansByKind(run!, "run")).toMatchObject([
+    {
+      status: "error",
+      attributes: {
+        "gen_ai.operation.name": "invoke_agent",
+      },
+      error: {
+        message: "agent setup failed",
       },
     },
   ]);

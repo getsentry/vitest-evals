@@ -4,13 +4,19 @@ import type { ToolCallRecord, UsageSummary } from "./harness";
 import { toolCalls } from "./harness";
 
 const TEST_NAME_SEPARATOR = c.dim(" > ");
+const REPORT_LEVEL_ENV = "VITEST_EVALS_REPORT_LEVEL";
 const TOOL_DETAIL_ENV = "VITEST_EVALS_TOOL_DETAILS";
 const TOOL_DETAIL_LEVEL_ENV = "VITEST_EVALS_TOOL_DETAILS_LEVEL";
 const DEFAULT_TOOL_DETAIL_LEVEL = 0;
+const INFO_TOOL_DETAIL_LEVEL = 3;
+
+type EvalReportLevel = "normal" | "info";
 
 type EvalReporterOptions = {
   isTTY?: boolean;
+  reportLevel?: EvalReportLevel;
   silent?: boolean | "passed-only";
+  /** @deprecated Use `reportLevel: "info"` or `VITEST_EVALS_REPORT_LEVEL=info`. */
   toolDetails?: boolean | number;
 };
 
@@ -20,7 +26,7 @@ export default class DefaultEvalReporter extends VerboseReporter {
 
   constructor(options: EvalReporterOptions = {}) {
     super(options);
-    this.toolDetailLevel = this.resolveToolDetailLevel(options.toolDetails);
+    this.toolDetailLevel = this.resolveToolDetailLevel(options);
   }
 
   override onTestCaseResult(test: any): void {
@@ -532,7 +538,39 @@ export default class DefaultEvalReporter extends VerboseReporter {
     return this.truncateSummary(String(value));
   }
 
-  private resolveToolDetailLevel(
+  private resolveToolDetailLevel(options: EvalReporterOptions) {
+    if (options.toolDetails !== undefined) {
+      return this.resolveLegacyToolDetailLevel(options.toolDetails);
+    }
+
+    const configuredReportLevel = this.resolveConfiguredReportLevel(
+      options.reportLevel,
+    );
+    if (configuredReportLevel) {
+      return configuredReportLevel === "info"
+        ? INFO_TOOL_DETAIL_LEVEL
+        : DEFAULT_TOOL_DETAIL_LEVEL;
+    }
+
+    return this.resolveLegacyToolDetailLevel(undefined);
+  }
+
+  private resolveConfiguredReportLevel(
+    reportLevel: EvalReporterOptions["reportLevel"],
+  ) {
+    if (reportLevel === "normal" || reportLevel === "info") {
+      return reportLevel;
+    }
+
+    const envReportLevel = process.env[REPORT_LEVEL_ENV];
+    if (envReportLevel === "normal" || envReportLevel === "info") {
+      return envReportLevel;
+    }
+
+    return null;
+  }
+
+  private resolveLegacyToolDetailLevel(
     toolDetails: EvalReporterOptions["toolDetails"],
   ) {
     if (typeof toolDetails === "number") {

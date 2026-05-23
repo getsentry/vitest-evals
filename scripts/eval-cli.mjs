@@ -1,7 +1,7 @@
 export function parseEvalCliArgs(args) {
   const forwardedArgs = [];
   let failMode = false;
-  let toolDetailLevel = 0;
+  let reportLevel = "normal";
 
   for (const arg of args) {
     if (arg === "--") {
@@ -13,8 +13,8 @@ export function parseEvalCliArgs(args) {
       continue;
     }
 
-    if (arg === "--verbose" || /^-v+$/.test(arg)) {
-      toolDetailLevel += arg === "--verbose" ? 1 : arg.length - 1;
+    if (arg === "--info" || arg === "--verbose" || /^-v+$/.test(arg)) {
+      reportLevel = "info";
       continue;
     }
 
@@ -24,11 +24,11 @@ export function parseEvalCliArgs(args) {
   return {
     failMode,
     forwardedArgs,
-    toolDetailLevel: normalizeToolDetailLevel(toolDetailLevel),
+    reportLevel,
   };
 }
 
-export function createEvalEnv(baseEnv, toolDetailLevel, options = {}) {
+export function createEvalEnv(baseEnv, reportLevel = "normal", options = {}) {
   return {
     ...baseEnv,
     VITEST_EVALS_REPLAY_MODE: baseEnv.VITEST_EVALS_REPLAY_MODE ?? "auto",
@@ -37,24 +37,10 @@ export function createEvalEnv(baseEnv, toolDetailLevel, options = {}) {
     ...(options.failMode || baseEnv.VITEST_EVALS_FAIL_MODE
       ? { VITEST_EVALS_FAIL_MODE: "1" }
       : {}),
-    ...(toolDetailLevel > 0
+    ...(reportLevel === "info"
       ? {
-          VITEST_EVALS_TOOL_DETAILS: "1",
-          VITEST_EVALS_TOOL_DETAILS_LEVEL: String(toolDetailLevel),
+          VITEST_EVALS_REPORT_LEVEL: "info",
         }
       : {}),
   };
-}
-
-function normalizeToolDetailLevel(level) {
-  if (level <= 0) {
-    return 0;
-  }
-  if (level <= 2) {
-    return 2;
-  }
-  if (level === 3) {
-    return 3;
-  }
-  return 4;
 }

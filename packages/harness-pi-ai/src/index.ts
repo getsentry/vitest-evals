@@ -5,20 +5,30 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedMessage,
+  NormalizedSpan,
   NormalizedSession,
+  NormalizedTrace,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import {
   attachHarnessRunToError,
+  createFailedHarnessRun,
+  createGenAiUsageAttributes,
+  createToolCallSpans,
+  ensureRunTrace,
+  getHarnessRunFromError,
   isHarnessRun,
   isNormalizedSession,
   normalizeMetadata,
   normalizeContent,
+  normalizeSpanAttributes,
+  normalizeSpanError,
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
+  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import {
   executeWithReplay,
@@ -65,6 +75,8 @@ type AnyPiAiToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, PiAiToolDefinition<any, any, TInput, TMetadata>>;
+
+let nextTraceId = 0;
 
 /**
  * Configuration for adapting a Pi AI model into a judge harness.
@@ -796,48 +808,83 @@ export function piAiHarness<
 ): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
+  const harnessName = options.name ?? "pi-ai";
   const harness: Harness<TInput, TOutput, TMetadata> = {
-    name: options.name ?? "pi-ai",
+    name: harnessName,
     run: async (input, context) => {
-      const agent = await resolveAgent(options, {
-        input,
-        context,
-      });
-      const messages: NormalizedMessage[] = [
-        {
-          role: "user",
-          content: normalizeContent(input),
-        },
-      ];
-      const inferredTools = resolveInferredToolSurfaces<TInput, TMetadata>(
-        agent,
-      );
+      const startedAt = new Date();
 
-      if (hasExplicitToolset(options)) {
-        return executePiHarnessRun(
+      try {
+        const agent = await resolveAgent(options, {
+          input,
+          context,
+        });
+        const messages: NormalizedMessage[] = [
+          {
+            role: "user",
+            content: normalizeContent(input),
+          },
+        ];
+        const inferredTools = resolveInferredToolSurfaces<TInput, TMetadata>(
+          agent,
+        );
+
+        if (hasExplicitToolset(options)) {
+          return await executePiHarnessRun(
+            options,
+            agent,
+            input,
+            context,
+            messages,
+            options.tools,
+            inferredTools.nativeToolsets,
+          );
+        }
+
+        return await executePiHarnessRun(
           options,
           agent,
           input,
           context,
           messages,
-          options.tools,
+          inferredTools.runtimeTools,
           inferredTools.nativeToolsets,
         );
-      }
+      } catch (error) {
+        if (getHarnessRunFromError(error)) {
+          throw error;
+        }
 
-      return executePiHarnessRun(
-        options,
-        agent,
-        input,
-        context,
-        messages,
-        inferredTools.runtimeTools,
-        inferredTools.nativeToolsets,
-      );
+        throw attachHarnessRunToError(
+          error,
+          createFailedPiAiRun(input, context, error, harnessName, startedAt),
+        );
+      }
     },
   };
 
   return harness;
+}
+
+function createFailedPiAiRun<TInput, TMetadata extends HarnessMetadata>(
+  input: TInput,
+  context: HarnessContext<TMetadata>,
+  error: unknown,
+  harnessName: string,
+  startedAt: Date,
+) {
+  const run = createFailedHarnessRun(input, error, {
+    artifacts: context.artifacts,
+  });
+  ensureRunTrace(run, {
+    name: harnessName,
+    startedAt,
+    finishedAt: new Date(),
+    operationName: "invoke_agent",
+    source: "harness-pi-ai",
+  });
+
+  return run;
 }
 
 function validateOptions<
@@ -887,6 +934,7 @@ async function executePiHarnessRun<
   runtimeTools: TTools | undefined,
   nativeToolsets?: Array<PiAgentToolLike<TInput, TMetadata>[]>,
 ): Promise<HarnessRun<TOutput>> {
+  const trace = createTraceRecorder(options.name ?? "pi-ai");
   const executionState = createPiToolExecutionState();
   const runtime = createRuntime({
     input,
@@ -922,6 +970,7 @@ async function executePiHarnessRun<
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
+      attachPiAiTrace(result, trace, new Date());
       return result;
     }
 
@@ -945,6 +994,8 @@ async function executePiHarnessRun<
       : (resolveOutput(normalizeResult) as TOutput | undefined);
     const usage = resolveUsage(normalizeResult, runtime.toolCalls.length);
     const session = resolveSession(normalizeResult, messages, output, usage);
+    const errors = resolveErrors(normalizeResult);
+    const finishedAt = new Date();
 
     return {
       session,
@@ -954,19 +1005,38 @@ async function executePiHarnessRun<
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
           : undefined,
-      errors: resolveErrors(normalizeResult),
+      errors,
+      traces: [
+        finishPiAiTrace(trace, {
+          session,
+          usage,
+          errors,
+          finishedAt,
+        }),
+      ],
     } as HarnessRun<TOutput>;
   } catch (error) {
     const usage = resolveUsage(undefined, runtime.toolCalls.length);
+    const session = resolveSession(undefined, messages, undefined, usage);
+    const finishedAt = new Date();
+    const serializedError = serializeError(error);
     const run = {
-      session: resolveSession(undefined, messages, undefined, usage),
+      session,
       output: undefined,
       usage,
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
           : undefined,
-      errors: [serializeError(error)],
+      errors: [serializedError],
+      traces: [
+        finishPiAiTrace(trace, {
+          session,
+          usage,
+          errors: [serializedError],
+          finishedAt,
+        }),
+      ],
     } satisfies HarnessRun;
 
     throw attachHarnessRunToError(error, run);
@@ -1035,6 +1105,115 @@ function hasOutputSelector<
   >,
 ) {
   return Boolean(options.output);
+}
+
+type TraceRecorder = {
+  id: string;
+  rootSpanId: string;
+  name: string;
+  startedAt: Date;
+};
+
+function createTraceRecorder(name: string): TraceRecorder {
+  const id = `pi_ai_trace_${++nextTraceId}`;
+
+  return {
+    id,
+    rootSpanId: `${id}:run`,
+    name,
+    startedAt: new Date(),
+  };
+}
+
+function attachPiAiTrace(
+  run: HarnessRun,
+  trace: TraceRecorder,
+  finishedAt: Date,
+) {
+  const nativeTrace = finishPiAiTrace(trace, {
+    session: run.session,
+    usage: run.usage,
+    errors: run.errors ?? [],
+    finishedAt,
+  });
+
+  run.traces = [...(run.traces ?? []), nativeTrace];
+}
+
+function finishPiAiTrace(
+  trace: TraceRecorder,
+  options: {
+    session: NormalizedSession;
+    usage?: UsageSummary;
+    errors?: unknown[];
+    finishedAt: Date;
+  },
+): NormalizedTrace {
+  const finishedAt = options.finishedAt;
+  const durationMs = finishedAt.getTime() - trace.startedAt.getTime();
+  const rootError = options.errors?.[0]
+    ? normalizeSpanError(options.errors[0])
+    : undefined;
+  const rootSpan: NormalizedSpan = {
+    id: trace.rootSpanId,
+    traceId: trace.id,
+    name: trace.name,
+    kind: "run",
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    status: rootError ? "error" : "ok",
+    ...(rootError ? { error: rootError } : {}),
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.workflow.name": trace.name,
+      ...createGenAiUsageAttributes(options.usage),
+    }),
+  };
+  const modelSpan = createUsageModelSpan(trace, options.usage);
+  const spans = [
+    rootSpan,
+    ...(modelSpan ? [modelSpan] : []),
+    ...createToolCallSpans(collectToolCalls(options.session), {
+      traceId: trace.id,
+      parentId: trace.rootSpanId,
+      spanIdPrefix: `${trace.id}:tool`,
+    }),
+  ];
+
+  return {
+    id: trace.id,
+    name: trace.name,
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    metadata: {
+      source: "harness-pi-ai",
+    },
+    spans,
+  };
+}
+
+function createUsageModelSpan(
+  trace: TraceRecorder,
+  usage: UsageSummary | undefined,
+): NormalizedSpan | undefined {
+  if (!usage?.provider && !usage?.model) {
+    return undefined;
+  }
+
+  return {
+    id: `${trace.id}:model:1`,
+    traceId: trace.id,
+    parentId: trace.rootSpanId,
+    name: usage.model ? `pi-ai ${usage.model}` : "pi-ai model",
+    kind: "model",
+    status: "ok",
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "chat",
+      ...createGenAiUsageAttributes(usage),
+    }),
+  };
 }
 
 function resolveInferredToolSurfaces<TInput, TMetadata extends HarnessMetadata>(
@@ -1302,6 +1481,7 @@ async function withInstrumentedAgentTools<
         });
         const finishedAt = new Date();
         const call = {
+          id: toolCallId,
           name: tool.name,
           arguments: rawArgs,
           result: execution.normalizedResult,
@@ -1326,6 +1506,7 @@ async function withInstrumentedAgentTools<
       } catch (error) {
         const finishedAt = new Date();
         const call = {
+          id: toolCallId,
           name: tool.name,
           arguments: rawArgs,
           error: serializeToolCallError(error),

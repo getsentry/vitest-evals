@@ -1,5 +1,10 @@
 import {
   attachHarnessRunToError,
+  createFailedHarnessRun,
+  createGenAiUsageAttributes,
+  createToolCallSpans,
+  ensureRunTrace,
+  getHarnessRunFromError,
   hasCallableMethod,
   isHarnessRun,
   isNormalizedSession,
@@ -8,7 +13,10 @@ import {
   normalizeRecord,
   resolveHarnessRunErrors,
   serializeError,
+  normalizeSpanAttributes,
+  normalizeSpanError,
   toJsonValue,
+  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import type {
   Harness,
@@ -17,7 +25,9 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedMessage,
+  NormalizedSpan,
   NormalizedSession,
+  NormalizedTrace,
   TimingSummary,
   ToolCallRecord,
   UsageSummary,
@@ -76,6 +86,8 @@ type AnyAiSdkToolset<
   TInput = string,
   TMetadata extends HarnessMetadata = HarnessMetadata,
 > = Record<string, AiSdkToolDefinition<any, any, TInput, TMetadata>>;
+
+let nextTraceId = 0;
 
 /**
  * Configuration for adapting an AI SDK language model into a judge harness.
@@ -598,18 +610,53 @@ export function aiSdkHarness<
 ): Harness<TInput, TOutput, TMetadata> {
   validateOptions(options);
 
+  const harnessName = options.name ?? "ai-sdk";
   const harness: Harness<TInput, TOutput, TMetadata> = {
-    name: options.name ?? "ai-sdk",
+    name: harnessName,
     run: async (input, context) => {
-      const agent = await resolveAgent(options, {
-        input,
-        context,
-      });
-      return runAiSdkHarness(options, agent, input, context);
+      const startedAt = new Date();
+
+      try {
+        const agent = await resolveAgent(options, {
+          input,
+          context,
+        });
+        return await runAiSdkHarness(options, agent, input, context);
+      } catch (error) {
+        if (getHarnessRunFromError(error)) {
+          throw error;
+        }
+
+        throw attachHarnessRunToError(
+          error,
+          createFailedAiSdkRun(input, context, error, harnessName, startedAt),
+        );
+      }
     },
   };
 
   return harness;
+}
+
+function createFailedAiSdkRun<TInput, TMetadata extends HarnessMetadata>(
+  input: TInput,
+  context: HarnessContext<TMetadata>,
+  error: unknown,
+  harnessName: string,
+  startedAt: Date,
+) {
+  const run = createFailedHarnessRun(input, error, {
+    artifacts: context.artifacts,
+  });
+  ensureRunTrace(run, {
+    name: harnessName,
+    startedAt,
+    finishedAt: new Date(),
+    operationName: "invoke_workflow",
+    source: "harness-ai-sdk",
+  });
+
+  return run;
 }
 
 async function runAiSdkHarness<
@@ -632,6 +679,7 @@ async function runAiSdkHarness<
   input: TInput,
   context: HarnessContext<TMetadata>,
 ): Promise<HarnessRun<TOutput>> {
+  const trace = createTraceRecorder(options.name ?? "ai-sdk");
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
   const runtimeToolCalls: ToolCallRecord[] = [];
   const tools = createToolset({
@@ -660,6 +708,7 @@ async function runAiSdkHarness<
       if (Object.keys(context.artifacts).length > 0 && !result.artifacts) {
         result.artifacts = context.artifacts;
       }
+      attachAiSdkTrace(result, trace, result, new Date());
       return result;
     }
 
@@ -690,6 +739,7 @@ async function runAiSdkHarness<
       runtimeToolCalls,
     );
     const errors = resolveHarnessRunErrors(result);
+    const finishedAt = new Date();
 
     return {
       session,
@@ -700,26 +750,45 @@ async function runAiSdkHarness<
           ? context.artifacts
           : undefined,
       errors,
+      traces: [
+        finishAiSdkTrace(trace, {
+          result,
+          session,
+          usage,
+          errors,
+          finishedAt,
+        }),
+      ],
     } as HarnessRun<TOutput>;
   } catch (error) {
+    const finishedAt = new Date();
+    const serializedError = serializeError(error);
+    const usage =
+      runtimeToolCalls.length > 0 ? { toolCalls: runtimeToolCalls.length } : {};
+    const session = resolveSession(
+      input,
+      undefined,
+      undefined,
+      replayMetadataByToolCallId,
+      runtimeToolCalls,
+    );
     const run = {
-      session: resolveSession(
-        input,
-        undefined,
-        undefined,
-        replayMetadataByToolCallId,
-        runtimeToolCalls,
-      ),
+      session,
       output: undefined,
-      usage:
-        runtimeToolCalls.length > 0
-          ? { toolCalls: runtimeToolCalls.length }
-          : {},
+      usage,
       artifacts:
         Object.keys(context.artifacts).length > 0
           ? context.artifacts
           : undefined,
-      errors: [serializeError(error)],
+      errors: [serializedError],
+      traces: [
+        finishAiSdkTrace(trace, {
+          session,
+          usage,
+          errors: [serializedError],
+          finishedAt,
+        }),
+      ],
     } satisfies HarnessRun;
 
     throw attachHarnessRunToError(error, run);
@@ -920,6 +989,167 @@ function isAgentFactory<TAgent, TInput, TMetadata extends HarnessMetadata>(
     !hasCallableMethod(agent, "run") &&
     !hasCallableMethod(agent, "generate")
   );
+}
+
+type TraceRecorder = {
+  id: string;
+  rootSpanId: string;
+  name: string;
+  startedAt: Date;
+};
+
+function createTraceRecorder(name: string): TraceRecorder {
+  const id = `ai_sdk_trace_${++nextTraceId}`;
+
+  return {
+    id,
+    rootSpanId: `${id}:run`,
+    name,
+    startedAt: new Date(),
+  };
+}
+
+function attachAiSdkTrace(
+  run: HarnessRun,
+  trace: TraceRecorder,
+  result: unknown,
+  finishedAt: Date,
+) {
+  const errors = run.errors ?? [];
+  const nativeTrace = finishAiSdkTrace(trace, {
+    result,
+    session: run.session,
+    usage: run.usage,
+    errors,
+    finishedAt,
+  });
+
+  run.traces = [...(run.traces ?? []), nativeTrace];
+}
+
+function finishAiSdkTrace(
+  trace: TraceRecorder,
+  options: {
+    result?: unknown;
+    session: NormalizedSession;
+    usage?: UsageSummary;
+    errors?: unknown[];
+    finishedAt: Date;
+  },
+): NormalizedTrace {
+  const modelSpans = createAiSdkModelSpans(
+    trace,
+    options.result,
+    options.usage,
+  );
+  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
+    traceId: trace.id,
+    parentId: trace.rootSpanId,
+    spanIdPrefix: `${trace.id}:tool`,
+  });
+  const finishedAt = options.finishedAt;
+  const durationMs = finishedAt.getTime() - trace.startedAt.getTime();
+  const rootError = options.errors?.[0]
+    ? normalizeSpanError(options.errors[0])
+    : undefined;
+  const rootSpan: NormalizedSpan = {
+    id: trace.rootSpanId,
+    traceId: trace.id,
+    name: trace.name,
+    kind: "run",
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    status: rootError ? "error" : "ok",
+    ...(rootError ? { error: rootError } : {}),
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "invoke_workflow",
+      "gen_ai.workflow.name": trace.name,
+      ...createGenAiUsageAttributes(options.usage),
+    }),
+  };
+  const spans = [rootSpan, ...modelSpans, ...toolSpans];
+
+  return {
+    id: trace.id,
+    name: trace.name,
+    startedAt: trace.startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    metadata: {
+      source: "harness-ai-sdk",
+    },
+    spans,
+  };
+}
+
+function createAiSdkModelSpans(
+  trace: TraceRecorder,
+  result: unknown,
+  usage: UsageSummary | undefined,
+): NormalizedSpan[] {
+  const steps = resolveSteps(result);
+  if (steps.length === 0) {
+    const fallback = createUsageModelSpan(trace, usage);
+    return fallback ? [fallback] : [];
+  }
+
+  return steps.map((step, index) => {
+    const stepUsage = step.usage;
+
+    return {
+      id: `${trace.id}:model:${index + 1}`,
+      traceId: trace.id,
+      parentId: trace.rootSpanId,
+      name: `ai-sdk step ${step.stepNumber ?? index}`,
+      kind: "model",
+      status: "ok",
+      attributes: normalizeSpanAttributes({
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": step.model?.provider,
+        "gen_ai.request.model": step.model?.modelId,
+        "gen_ai.response.model": step.model?.modelId,
+        "gen_ai.response.finish_reasons": step.finishReason
+          ? [String(step.finishReason)]
+          : undefined,
+        "gen_ai.usage.input_tokens": stepUsage?.inputTokens,
+        "gen_ai.usage.output_tokens": stepUsage?.outputTokens,
+        "gen_ai.usage.reasoning.output_tokens":
+          stepUsage?.outputTokenDetails?.reasoningTokens ??
+          stepUsage?.reasoningTokens,
+        "gen_ai.usage.cache_read.input_tokens":
+          stepUsage?.inputTokenDetails?.cacheReadTokens ??
+          stepUsage?.cachedInputTokens,
+        "gen_ai.usage.cache_creation.input_tokens":
+          stepUsage?.inputTokenDetails?.cacheWriteTokens,
+        "ai.step.number": step.stepNumber,
+        "ai.finish_reason": step.finishReason,
+        "ai.raw_finish_reason": step.rawFinishReason,
+      }),
+    } satisfies NormalizedSpan;
+  });
+}
+
+function createUsageModelSpan(
+  trace: TraceRecorder,
+  usage: UsageSummary | undefined,
+): NormalizedSpan | undefined {
+  if (!usage?.provider && !usage?.model) {
+    return undefined;
+  }
+
+  return {
+    id: `${trace.id}:model:1`,
+    traceId: trace.id,
+    parentId: trace.rootSpanId,
+    name: usage.model ? `ai-sdk ${usage.model}` : "ai-sdk model",
+    kind: "model",
+    status: "ok",
+    attributes: normalizeSpanAttributes({
+      "gen_ai.operation.name": "chat",
+      ...createGenAiUsageAttributes(usage),
+    }),
+  };
 }
 
 function createToolset<

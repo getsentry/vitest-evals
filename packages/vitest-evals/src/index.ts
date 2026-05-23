@@ -10,6 +10,8 @@ import type {
   ToolCallRecord,
 } from "./harness";
 import {
+  createFailedHarnessRun,
+  ensureRunTrace,
   getHarnessRunFromError,
   isHarnessRun,
   isNormalizedSession,
@@ -418,18 +420,45 @@ const evalTest = test
         clearRecordedTaskMeta(task);
 
         let run: HarnessRun;
+        const startedAt = new Date();
         try {
           run = await resolvedHarness.run(input, context);
         } catch (error) {
+          const finishedAt = new Date();
           const partialRun = getHarnessRunFromError(error);
           if (partialRun) {
             if (Object.keys(artifacts).length > 0 && !partialRun.artifacts) {
               partialRun.artifacts = artifacts;
             }
 
+            ensureRunTrace(partialRun, {
+              name: resolvedHarness.name,
+              startedAt,
+              finishedAt,
+            });
             setHarnessMeta(task, resolvedHarness.name, partialRun);
             recordJudgeRunContext(
               partialRun,
+              resolvedHarness,
+              input,
+              explicitJudgeHarness,
+              metadata,
+              signal,
+            );
+          }
+
+          if (!partialRun) {
+            const failedRun = createFailedHarnessRun(input, error, {
+              artifacts,
+            });
+            ensureRunTrace(failedRun, {
+              name: resolvedHarness.name,
+              startedAt,
+              finishedAt,
+            });
+            setHarnessMeta(task, resolvedHarness.name, failedRun);
+            recordJudgeRunContext(
+              failedRun,
               resolvedHarness,
               input,
               explicitJudgeHarness,
@@ -445,6 +474,11 @@ const evalTest = test
           run.artifacts = artifacts;
         }
 
+        ensureRunTrace(run, {
+          name: resolvedHarness.name,
+          startedAt,
+          finishedAt: new Date(),
+        });
         setHarnessMeta(task, resolvedHarness.name, run);
         recordJudgeRunContext(
           run,
@@ -1228,15 +1262,27 @@ export { wrapText } from "./wrapText";
 export {
   assistantMessages,
   attachHarnessRunToError,
+  createFailedHarnessRun,
+  createGenAiUsageAttributes,
   createHarness,
+  createToolCallSpans,
+  ensureRunTrace,
+  failedSpans,
   getHarnessRunFromError,
   latestAssistantMessageContent,
   messagesByRole,
   normalizeHarnessRun,
+  normalizeSpanAttributes,
+  normalizeSpanError,
+  spans,
+  spansByKind,
   systemMessages,
+  toJsonValue,
   toolCalls,
   toolMessages,
   userMessages,
+  type CreateToolCallSpansOptions,
+  type EnsureRunTraceOptions,
   type CreateHarnessOptions,
   type CreateHarnessRunArgs,
   type Harness,
@@ -1245,12 +1291,29 @@ export {
   type HarnessResultLike,
   type HarnessRun,
   type HarnessRunError,
+  type GenAiOperationName,
+  type GenAiOutputType,
+  type GenAiProviderName,
+  type GenAiSemanticAttributeKey,
+  type GenAiSemanticAttributes,
+  type GenAiTokenType,
+  type GenAiToolType,
   type JsonPrimitive,
   type JsonValue,
   type MaybePromise,
   type NormalizedMessage,
   type NormalizedSession,
+  type NormalizedSpan,
+  type NormalizedSpanAttributes,
+  type NormalizedSpanAttributeKey,
+  type NormalizedSpanEvent,
+  type NormalizedTrace,
+  type OpenTelemetrySemanticAttributeKey,
+  type OpenTelemetrySemanticAttributes,
   type SimpleHarnessResult,
+  type SimpleSpanEvent,
+  type SimpleSpanRecord,
+  type SimpleTraceRecord,
   type SimpleToolCallRecord,
   type TimingSummary,
   type ToolCallRecord,

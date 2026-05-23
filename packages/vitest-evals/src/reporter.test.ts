@@ -2,7 +2,14 @@ import { stripVTControlCharacters } from "node:util";
 import { describe, expect, test, vi } from "vitest";
 import DefaultEvalReporter from "./reporter";
 
-function createReporter() {
+type ReporterOptions = {
+  isTTY?: boolean;
+  reportLevel?: "normal" | "info";
+  silent?: boolean | "passed-only";
+  toolDetails?: boolean | number;
+};
+
+function createReporter(options: ReporterOptions = {}) {
   const logger = {
     log: vi.fn(),
     error: vi.fn(),
@@ -10,7 +17,7 @@ function createReporter() {
     printNoTestFound: vi.fn(),
   };
 
-  const reporter = new DefaultEvalReporter({ isTTY: false });
+  const reporter = new DefaultEvalReporter({ isTTY: false, ...options });
   reporter.onInit({
     logger,
     config: {
@@ -23,28 +30,12 @@ function createReporter() {
   return { reporter, logger };
 }
 
+function createInfoReporter() {
+  return createReporter({ reportLevel: "info" });
+}
+
 function createDetailedReporter(toolDetails: boolean | number = 2) {
-  const logger = {
-    log: vi.fn(),
-    error: vi.fn(),
-    printBanner: vi.fn(),
-    printNoTestFound: vi.fn(),
-  };
-
-  const reporter = new DefaultEvalReporter({
-    isTTY: false,
-    toolDetails,
-  });
-  reporter.onInit({
-    logger,
-    config: {
-      hideSkippedTests: false,
-      slowTestThreshold: 300,
-      root: process.cwd(),
-    },
-  } as any);
-
-  return { reporter, logger };
+  return createReporter({ toolDetails });
 }
 
 function createTestCase({
@@ -262,8 +253,8 @@ describe("DefaultEvalReporter", () => {
     );
   });
 
-  test("shows per-tool metrics in verbose tool detail mode", () => {
-    const { reporter, logger } = createDetailedReporter(2);
+  test("shows per-tool metrics in info report mode", () => {
+    const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
       createTestCase({
@@ -379,8 +370,111 @@ describe("DefaultEvalReporter", () => {
     }
   });
 
+  test("uses info report mode from the environment", () => {
+    vi.stubEnv("VITEST_EVALS_REPORT_LEVEL", "info");
+
+    try {
+      const { reporter, logger } = createReporter();
+
+      reporter.onTestCaseResult(
+        createTestCase({
+          harness: {
+            name: "pi-ai",
+            run: {
+              output: {
+                status: "approved",
+              },
+              session: {
+                messages: [
+                  {
+                    role: "assistant",
+                    content: "approved",
+                    toolCalls: [
+                      {
+                        name: "lookupInvoice",
+                        durationMs: 6,
+                        arguments: {
+                          invoiceId: "inv_123",
+                        },
+                        result: {
+                          invoiceId: "inv_123",
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              usage: {
+                totalTokens: 12,
+              },
+              errors: [],
+            },
+          },
+        }) as any,
+      );
+
+      const rendered = logger.log.mock.calls
+        .map(([line]) => stripVTControlCharacters(line))
+        .join("\n");
+
+      expect(rendered).toContain("tool    lookupInvoice");
+      expect(rendered).toContain("args    invoiceId=inv_123");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("respects explicit normal report mode over environment flags", () => {
+    vi.stubEnv("VITEST_EVALS_REPORT_LEVEL", "info");
+
+    try {
+      const { reporter, logger } = createReporter({ reportLevel: "normal" });
+
+      reporter.onTestCaseResult(
+        createTestCase({
+          harness: {
+            name: "pi-ai",
+            run: {
+              output: {
+                status: "approved",
+              },
+              session: {
+                messages: [
+                  {
+                    role: "assistant",
+                    content: "approved",
+                    toolCalls: [
+                      {
+                        name: "lookupInvoice",
+                        durationMs: 6,
+                        result: {
+                          invoiceId: "inv_123",
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              usage: {
+                totalTokens: 12,
+              },
+              errors: [],
+            },
+          },
+        }) as any,
+      );
+
+      expect(logger.log).toHaveBeenCalledTimes(1);
+      expect(
+        stripVTControlCharacters(logger.log.mock.calls[0][0]),
+      ).not.toContain("tool    lookupInvoice");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("prefers token counts over response size when tool usage exists", () => {
-    const { reporter, logger } = createDetailedReporter(2);
+    const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
       createTestCase({
@@ -427,7 +521,7 @@ describe("DefaultEvalReporter", () => {
   });
 
   test("includes replay metadata in tool result summaries", () => {
-    const { reporter, logger } = createDetailedReporter(2);
+    const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
       createTestCase({
@@ -476,8 +570,8 @@ describe("DefaultEvalReporter", () => {
     expect(rendered).toContain("result  invoiceId=inv_123 [23B | 6ms]");
   });
 
-  test("combines summarized tool arguments into the header at the middle verbose tier", () => {
-    const { reporter, logger } = createDetailedReporter(3);
+  test("shows summarized tool arguments in info report mode", () => {
+    const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
       createTestCase({
@@ -532,7 +626,7 @@ describe("DefaultEvalReporter", () => {
     );
   });
 
-  test("shows raw tool payloads at the highest verbose tier", () => {
+  test("keeps legacy raw tool payload support for explicit tool details", () => {
     const { reporter, logger } = createDetailedReporter(4);
 
     reporter.onTestCaseResult(

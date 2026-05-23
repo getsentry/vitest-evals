@@ -19,10 +19,8 @@ Run them with:
 
 ```sh
 pnpm --filter @demo/demo-pi run evals
-pnpm --filter @demo/demo-pi run evals -- -v
-pnpm --filter @demo/demo-pi run evals -- -vv
-pnpm --filter @demo/demo-pi run evals -- -vvv
-pnpm --filter @demo/demo-pi run evals -- -vvvv
+pnpm --filter @demo/demo-pi run evals -- --info
+pnpm --filter @demo/demo-pi run evals:info
 pnpm --filter @demo/demo-pi run evals:verbose
 pnpm --filter @demo/demo-pi run evals:fail
 ```

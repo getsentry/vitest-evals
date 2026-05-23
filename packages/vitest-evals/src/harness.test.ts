@@ -4,14 +4,23 @@ import {
   createJudge,
   createJudgeHarness,
   createHarness,
+  createToolCallSpans,
   describeEval,
+  failedSpans,
+  type GenAiSemanticAttributeKey,
+  getHarnessRunFromError,
   type JudgeContext,
   type JudgeAssertionOptions,
   type JudgeOptions,
   type JudgeAssessorOptions,
   type JudgeHarness,
+  type NormalizedSpanAttributes,
+  normalizeSpanError,
   StructuredOutputJudge,
+  spans,
+  spansByKind,
   ToolCallJudge,
+  toJsonValue,
   toolCalls,
   toolMessages,
   userMessages,
@@ -59,6 +68,24 @@ type _JudgeContextUsesTypedOutput = Expect<
 type _UntypedHarnessRunAllowsMissingOutput = Expect<
   Equal<HarnessRun["output"], JsonValue | undefined>
 >;
+const validSemanticAttributes = {
+  "gen_ai.operation.name": "chat",
+  "gen_ai.provider.name": "openai",
+  "gen_ai.request.stream": true,
+  "gen_ai.usage.input_tokens": 100,
+  "custom.provider.payload": {
+    ok: true,
+  },
+} satisfies NormalizedSpanAttributes;
+void validSemanticAttributes;
+const invalidSemanticAttributes = {
+  // @ts-expect-error GenAI token counts must be numeric.
+  "gen_ai.usage.input_tokens": "100",
+} satisfies NormalizedSpanAttributes;
+void invalidSemanticAttributes;
+const genAiAttributeKey =
+  "gen_ai.request.model" satisfies GenAiSemanticAttributeKey;
+void genAiAttributeKey;
 const invalidStringJudgeRunOptions: JudgeAssertionOptions<
   JudgeContext<unknown, string>
 > = {
@@ -361,6 +388,83 @@ test("createHarness drops non-normalized lightweight tool call fields", async ()
   ]);
 });
 
+test("createHarness attaches fallback traces to direct runs", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      toolCalls: [
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+          arguments: {
+            invoiceId: "inv_123",
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await lightweightHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(spansByKind(result, "run")).toMatchObject([
+    {
+      name: "custom-app",
+      kind: "run",
+      status: "ok",
+      attributes: {
+        "gen_ai.operation.name": "invoke_workflow",
+        "gen_ai.workflow.name": "custom-app",
+      },
+    },
+  ]);
+  expect(spansByKind(result, "tool")).toMatchObject([
+    {
+      id: expect.not.stringMatching(/^call_lookup$/),
+      name: "lookupInvoice",
+      kind: "tool",
+      attributes: {
+        "gen_ai.tool.call.id": "call_lookup",
+        "gen_ai.tool.name": "lookupInvoice",
+      },
+    },
+  ]);
+});
+
+test("createHarness attaches failed runs and traces to thrown errors", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => {
+      throw new TypeError("agent failed");
+    },
+  });
+
+  let thrown: unknown;
+  try {
+    await lightweightHarness.run("Refund invoice inv_123", {
+      metadata: {},
+      artifacts: {},
+      setArtifact: vi.fn(),
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  const run = getHarnessRunFromError(thrown);
+  expect(run).toBeDefined();
+  expect(run?.errors).toEqual([
+    {
+      type: "TypeError",
+      message: "agent failed",
+    },
+  ]);
+  expect(failedSpans(run!).map((span) => span.name)).toEqual(["custom-app"]);
+});
+
 test("createHarness preserves typed lightweight output values", async () => {
   const output = {
     status: "approved",
@@ -441,6 +545,175 @@ test("createHarness serializes Error objects in lightweight errors", async () =>
   ]);
 });
 
+test("createHarness normalizes lightweight traces", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      traces: [
+        {
+          id: "trace_123",
+          name: "refund-flow",
+          metadata: {
+            scenario: "refund",
+            ignored: undefined,
+          },
+          spans: [
+            {
+              id: "span_1",
+              traceId: "trace_123",
+              name: "call-model",
+              kind: "model" as const,
+              status: "ok" as const,
+              attributes: {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "openai",
+                "gen_ai.request.model": "gpt-test",
+                ignored: undefined,
+              },
+              events: [
+                {
+                  name: "first-token",
+                  attributes: {
+                    "gen_ai.response.time_to_first_chunk": 0.12,
+                  },
+                },
+              ],
+            },
+            {
+              name: "lookupInvoice",
+              kind: "tool" as const,
+              status: "error" as const,
+              error: new TypeError("tool failed"),
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const result = await lightweightHarness.run("Refund invoice inv_123", {
+    metadata: {},
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(result.traces).toEqual([
+    {
+      id: "trace_123",
+      name: "refund-flow",
+      metadata: {
+        scenario: "refund",
+      },
+      spans: [
+        {
+          id: "span_1",
+          traceId: "trace_123",
+          name: "call-model",
+          kind: "model",
+          status: "ok",
+          attributes: {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "gpt-test",
+          },
+          events: [
+            {
+              name: "first-token",
+              attributes: {
+                "gen_ai.response.time_to_first_chunk": 0.12,
+              },
+            },
+          ],
+        },
+        {
+          name: "lookupInvoice",
+          kind: "tool",
+          status: "error",
+          error: {
+            type: "TypeError",
+            message: "tool failed",
+          },
+        },
+      ],
+    },
+  ]);
+  expect(spans(result).map((span) => span.name)).toEqual([
+    "call-model",
+    "lookupInvoice",
+  ]);
+  expect(spansByKind(result, "tool")).toHaveLength(1);
+  expect(failedSpans(result).map((span) => span.name)).toEqual([
+    "lookupInvoice",
+  ]);
+});
+
+test("span helpers preserve object-shaped errors and internal span ids", () => {
+  expect(
+    normalizeSpanError({
+      type: "ToolError",
+      message: "tool failed",
+      retryable: false,
+    }),
+  ).toEqual({
+    type: "ToolError",
+    message: "tool failed",
+    retryable: false,
+  });
+
+  expect(
+    createToolCallSpans(
+      [
+        {
+          id: "call_lookup",
+          name: "lookupInvoice",
+        },
+      ],
+      {
+        traceId: "trace_123",
+        parentId: "trace_123:run",
+        spanIdPrefix: "trace_123:tool",
+      },
+    ),
+  ).toMatchObject([
+    {
+      id: "trace_123:tool:1",
+      traceId: "trace_123",
+      parentId: "trace_123:run",
+      attributes: {
+        "gen_ai.tool.call.id": "call_lookup",
+      },
+    },
+  ]);
+});
+
+test("JSON normalization drops non-finite numbers and circular references", () => {
+  const cyclic: Record<string, unknown> = {
+    ok: true,
+  };
+  cyclic.self = cyclic;
+
+  expect(
+    toJsonValue({
+      finite: 1,
+      infinite: Number.POSITIVE_INFINITY,
+      cyclic,
+      list: [Number.NaN, cyclic],
+    }),
+  ).toEqual({
+    finite: 1,
+    cyclic: {
+      ok: true,
+    },
+    list: [
+      null,
+      {
+        ok: true,
+      },
+    ],
+  });
+});
+
 describeEval("harness mode", { harness }, (it) => {
   it("refund request", async ({ run }) => {
     const result = await run("Refund invoice inv_123", {
@@ -461,6 +734,27 @@ describeEval("harness mode", { harness }, (it) => {
         name: "lookupInvoice",
         arguments: {
           invoiceId: "inv_123",
+        },
+      },
+    ]);
+    expect(spansByKind(result, "run")).toMatchObject([
+      {
+        name: "pi-ai",
+        kind: "run",
+        status: "ok",
+        attributes: {
+          "gen_ai.workflow.name": "pi-ai",
+        },
+      },
+    ]);
+    expect(spansByKind(result, "tool")).toMatchObject([
+      {
+        name: "lookupInvoice",
+        kind: "tool",
+        status: "ok",
+        attributes: {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookupInvoice",
         },
       },
     ]);
@@ -878,7 +1172,7 @@ describeEval(
     },
   },
   (it) => {
-    it("drops previous harness metadata before a later plain error", async ({
+    it("records failed harness metadata for a later plain error", async ({
       run,
       task,
     }) => {
@@ -887,7 +1181,41 @@ describeEval(
         "plain harness failure",
       );
 
-      expect(task.meta.harness).toBeUndefined();
+      expect(task.meta.harness).toMatchObject({
+        name: "flaky-harness",
+        run: {
+          session: {
+            messages: [
+              {
+                role: "user",
+                content: "Refund invoice inv_404",
+              },
+            ],
+          },
+          usage: {},
+          errors: [
+            {
+              type: "Error",
+              message: "plain harness failure",
+            },
+          ],
+          traces: [
+            {
+              name: "flaky-harness",
+              spans: [
+                {
+                  name: "flaky-harness",
+                  kind: "run",
+                  status: "error",
+                  attributes: {
+                    "gen_ai.workflow.name": "flaky-harness",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
     });
   },
 );

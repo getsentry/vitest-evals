@@ -71,7 +71,8 @@ export const qaHarness = piAiHarness({
 ```
 
 Return `{ output }` from the Pi entrypoint when tests and judges should assert
-on a parsed domain value.
+on a parsed domain value. The harness attaches native run, model, and tool spans
+to `result.traces` from the Pi runtime activity it observes.
 
 ## Eval
 

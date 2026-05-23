@@ -5,12 +5,12 @@ import { createEvalEnv, parseEvalCliArgs } from "./eval-cli.mjs";
 
 const ROOT = process.cwd();
 const WORKSPACE_ROOTS = ["packages", "apps"];
-const { failMode, forwardedArgs, toolDetailLevel } = parseEvalCliArgs(
+const { failMode, forwardedArgs, reportLevel } = parseEvalCliArgs(
   process.argv.slice(2),
 );
 
 const scriptName = failMode ? "evals:fail" : "evals";
-const env = createEvalEnv(process.env, toolDetailLevel, { failMode });
+const env = createEvalEnv(process.env, reportLevel, { failMode });
 
 const packageDirs = findWorkspacePackageDirs()
   .filter((dir) => hasScript(dir, scriptName))

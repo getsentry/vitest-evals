@@ -58,7 +58,7 @@ Cover:
 Cover:
 
 - compact output
-- verbose tiers
+- normal and info report levels
 - harness summaries
 - judge sub-results
 - failure formatting

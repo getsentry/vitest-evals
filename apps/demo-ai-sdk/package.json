@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "evals": "node ./scripts/run-evals.mjs",
-    "evals:verbose": "node ./scripts/run-evals.mjs -v",
+    "evals:info": "node ./scripts/run-evals.mjs --info",
+    "evals:verbose": "node ./scripts/run-evals.mjs --info",
     "evals:fail": "node ./scripts/run-evals.mjs --fail"
   },
   "dependencies": {
