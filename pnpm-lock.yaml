@@ -114,8 +114,8 @@ importers:
         specifier: ^0.39.2
         version: 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
       '@sentry/starlight-theme':
-        specifier: ^0.6.0
-        version: 0.6.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
+        specifier: ^0.7.0
+        version: 0.7.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
       '@vercel/functions':
         specifier: ^2.0.0
         version: 2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31)
@@ -1270,8 +1270,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sentry/starlight-theme@0.6.0':
-    resolution: {integrity: sha512-olQRVtrN9nJWoVVWhxUqk3KVEBCXRF2xLq4Pkd2/eyfpfzJTzfxFbAI4Sg/GV11IK3fFwNviIyFUPQR6aHsfKA==}
+  '@sentry/starlight-theme@0.7.0':
+    resolution: {integrity: sha512-yDVa7JMKKRsH3BwTFezudPJYHoZbMPi0Kvz28Szj1GT2Q7gj3Kh9cVZrooJbWqO5aexj0MFGYe3ejbTK1VXvcg==}
     engines: {node: '>=22.12.0'}
     peerDependencies:
       '@astrojs/starlight': '>=0.39.0'
@@ -5249,7 +5249,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.46.2':
     optional: true
 
-  '@sentry/starlight-theme@0.6.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
+  '@sentry/starlight-theme@0.7.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
     dependencies:
       '@astrojs/starlight': 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
       '@fontsource-variable/rubik': 5.2.8
