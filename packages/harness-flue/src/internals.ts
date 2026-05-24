@@ -20,7 +20,7 @@ export function createEventCollector() {
   const pendingArgs = new Map<string, unknown>();
 
   const handler = (event: FlueEvent): void => {
-    if (event.type === "tool_start") {
+    if (event.type === "tool_start" && !INTERNAL_TOOLS.has(event.toolName)) {
       pendingArgs.set(event.toolCallId, event.args);
     } else if (
       event.type === "tool_call" &&

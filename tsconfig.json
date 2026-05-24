@@ -6,6 +6,7 @@
     "**/coverage/**",
     "node_modules",
     "packages/docs/src/content.config.ts",
-    "packages/harness-flue/**"
+    "packages/harness-flue/**",
+    "apps/demo-flue/**"
   ]
 }
