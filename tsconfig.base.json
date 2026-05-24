@@ -15,7 +15,6 @@
         "packages/harness-openai-agents/src/index.ts"
       ],
       "@vitest-evals/harness-pi-ai": ["packages/harness-pi-ai/src/index.ts"],
-      "@vitest-evals/harness-flue": ["packages/harness-flue/src/index.ts"],
       "@vitest-evals/github-reporter": [
         "packages/github-reporter/src/index.ts"
       ]
