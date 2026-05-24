@@ -1,0 +1,19 @@
+{
+  "name": "@demo/demo-flue",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "evals": "node ./scripts/run-evals.mjs",
+    "evals:info": "node ./scripts/run-evals.mjs --info",
+    "evals:verbose": "node ./scripts/run-evals.mjs --info"
+  },
+  "dependencies": {
+    "@flue/runtime": "^0.7.0",
+    "@vitest-evals/harness-ai-sdk": "workspace:*",
+    "@vitest-evals/harness-flue": "workspace:*",
+    "ai": "^6.0.141",
+    "@ai-sdk/anthropic": "^3.0.71",
+    "valibot": "^1.1.0",
+    "vitest-evals": "workspace:*"
+  }
+}

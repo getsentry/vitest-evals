@@ -1,0 +1,43 @@
+{
+  "name": "@vitest-evals/harness-flue",
+  "version": "0.11.0",
+  "description": "Flue framework harness adapter for vitest-evals.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getsentry/vitest-evals.git",
+    "directory": "packages/harness-flue"
+  },
+  "author": "Sergiy Dybskiy",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/getsentry/vitest-evals/issues"
+  },
+  "homepage": "https://github.com/getsentry/vitest-evals/tree/main/packages/harness-flue#readme",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config ./tsup.config.ts"
+  },
+  "peerDependencies": {
+    "@flue/runtime": ">=0.7",
+    "vitest-evals": "*"
+  },
+  "devDependencies": {
+    "@flue/runtime": "^0.7.0",
+    "vitest-evals": "workspace:*"
+  }
+}

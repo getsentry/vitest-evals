@@ -5,6 +5,7 @@
     "**/dist/**",
     "**/coverage/**",
     "node_modules",
-    "packages/docs/src/content.config.ts"
+    "packages/docs/src/content.config.ts",
+    "apps/demo-flue/**"
   ]
 }

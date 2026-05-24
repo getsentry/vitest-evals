@@ -1,0 +1,100 @@
+---
+title: Flue Harness
+description: Adapt Flue framework agents for eval runs.
+editUrl: false
+---
+
+Use the Flue harness when your app runs agents built with
+[Flue](https://flueframework.com), the agent harness framework. This page
+follows one small end-to-end story: a Flue agent answers "What is the capital of
+France?" via `session.prompt()`, the harness normalizes that run, and a simple
+judge checks that the answer names Paris.
+
+## Install
+
+```bash title="Flue"
+pnpm add -D vitest-evals @vitest-evals/harness-flue
+```
+
+## App Shape
+
+Keep the agent configuration in app code. The harness should call the same
+model, tools, and prompt that production uses.
+
+```ts title="src/questionAgent.ts"
+export const QUESTION_MODEL = "anthropic/claude-sonnet-4-6";
+
+export function textAnswer(text: string): string {
+  return text.trim();
+}
+```
+
+`QUESTION_MODEL` owns the model choice. `textAnswer()` is the small app parser
+that turns provider text into the value tests and judges should read.
+
+## Configure Harness
+
+The harness creates a Flue session internally and defines the normalized
+`output`. In this case the normalized output is just the trimmed answer text.
+
+```ts title="evals/qaHarness.ts"
+import { flueHarness } from "@vitest-evals/harness-flue";
+import { QUESTION_MODEL, textAnswer } from "../src/questionAgent";
+
+export const qaHarness = flueHarness({
+  name: "question-agent",
+  model: QUESTION_MODEL,
+  run: async (input, session) => {
+    return await session.prompt(
+      `Answer geography questions directly. Keep answers short.\n\n${input}`,
+    );
+  },
+  output: (response) => {
+    if ("text" in response) return textAnswer(response.text);
+    throw new Error("Expected text response");
+  },
+});
+```
+
+Use `output` for the value your evals care about. Tool calls, usage, and errors
+remain available on the normalized harness run for judges and reports.
+
+## Eval
+
+Call `run(input)` once, then judge that same normalized result. The judge is
+deliberately simple so the harness story stays clear.
+
+```ts title="evals/capital.eval.ts"
+import { expect } from "vitest";
+import {
+  createJudge,
+  describeEval,
+  type JudgeContext,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+const CapitalJudge = createJudge(
+  "CapitalJudge",
+  async ({ output }: JudgeContext<string, string>) => {
+    const passed = output.toLowerCase().includes("paris");
+
+    return {
+      score: passed ? 1 : 0,
+      metadata: {
+        rationale: passed
+          ? "The answer names Paris."
+          : `Expected Paris, got: ${output}`,
+      },
+    };
+  },
+);
+
+describeEval("capital questions", { harness: qaHarness }, (it) => {
+  it("knows the capital of France", async ({ run }) => {
+    const result = await run("What is the capital of France?");
+
+    expect(result.output).toContain("Paris");
+    await expect(result).toSatisfyJudge(CapitalJudge);
+  });
+});
+```

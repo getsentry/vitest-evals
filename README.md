@@ -5,14 +5,16 @@ Monorepo for the explicit-run `vitest-evals` shape:
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
   types, and reporter
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
+- `packages/harness-flue`: Flue framework harness adapter
 - `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
 - `packages/github-reporter`: GitHub Actions summary, annotation, and optional
   Check Run publishing from Vitest JSON output
-- `apps/demo-pi`: end-to-end Pi Mono demo evals with an app-local refund agent
 - `apps/demo-ai-sdk`: end-to-end AI SDK demo evals with app-local refund tools
+- `apps/demo-flue`: end-to-end Flue demo evals with app-local refund tools
 - `apps/demo-openai-agents`: end-to-end OpenAI Agents demo evals with
   app-local refund tools
+- `apps/demo-pi`: end-to-end Pi Mono demo evals with an app-local refund agent
 
 ## Reading Guide
 
@@ -34,11 +36,13 @@ Monorepo for the explicit-run `vitest-evals` shape:
 packages/
   vitest-evals/
   harness-ai-sdk/
+  harness-flue/
   harness-openai-agents/
   harness-pi-ai/
   github-reporter/
 apps/
   demo-ai-sdk/
+  demo-flue/
   demo-openai-agents/
   demo-pi/
 ```
