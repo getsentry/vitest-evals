@@ -39,9 +39,11 @@ packages/
       judges/
       legacy/
   harness-ai-sdk/
+  harness-flue/
   harness-pi-ai/
 apps/
   demo-ai-sdk/
+  demo-flue/
   demo-pi/
 docs/
 ```
@@ -61,6 +63,10 @@ Owns:
 ### `packages/harness-ai-sdk`
 
 Owns the AI SDK adapter into `HarnessRun`.
+
+### `packages/harness-flue`
+
+Owns the Flue framework adapter into `HarnessRun`.
 
 ### `packages/harness-pi-ai`
 
@@ -106,6 +112,7 @@ Prefer targeted verification when possible.
 - Root API changes: test `packages/vitest-evals/src/*.test.ts`
 - Reporter changes: test `packages/vitest-evals/src/reporter.test.ts`
 - AI SDK harness changes: test `packages/harness-ai-sdk/src/index.test.ts`
+- Flue harness changes: test `packages/harness-flue/src/index.test.ts`
 - `pi-ai` harness changes: test `packages/harness-pi-ai/src/index.test.ts`
 - Legacy changes: test `packages/vitest-evals/src/legacy/...`
 - Demo behavior changes: run `pnpm evals` or a filtered demo command
