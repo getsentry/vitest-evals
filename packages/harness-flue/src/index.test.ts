@@ -7,7 +7,7 @@ import {
   splitModelId,
   extractOutput,
   type CollectedTurn,
-} from "./index";
+} from "./internals";
 
 const mkUsage = (input: number, output: number): PromptUsage => ({
   input,
