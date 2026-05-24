@@ -6,20 +6,10 @@ import {
   type SimpleHarnessResult,
 } from "vitest-evals/harness";
 import type {
-  FlueHarness,
-  FlueSession,
+  FlueEventCallback,
   PromptResponse,
   PromptResultResponse,
-  ToolDef,
-  AgentInit,
 } from "@flue/runtime";
-import {
-  createFlueContext,
-  InMemorySessionStore,
-  bashFactoryToSessionEnv,
-  resolveModel,
-  type FlueContextConfig,
-} from "@flue/runtime/internal";
 import {
   aggregateUsage,
   createEventCollector,
@@ -30,6 +20,22 @@ import {
 
 type MaybePromise<T> = T | Promise<T>;
 
+/** Context passed to the run function with eval metadata and event capture. */
+export interface FlueRunContext<
+  TMetadata extends HarnessMetadata = HarnessMetadata,
+> {
+  /** Eval metadata from the test case. */
+  metadata: Readonly<TMetadata>;
+  /** Abort signal from Vitest. */
+  signal?: AbortSignal;
+  /**
+   * Event handler that captures tool calls and usage. Pass this to
+   * `ctx.subscribeEvent(eventHandler)` on your FlueContext so the adapter
+   * can observe the run.
+   */
+  eventHandler: FlueEventCallback;
+}
+
 /** Options for creating a Flue framework eval harness. */
 export interface FlueHarnessOptions<
   TInput = string,
@@ -38,24 +44,17 @@ export interface FlueHarnessOptions<
 > {
   /** Stable harness name used in reports. */
   name: string;
-  /** Flue model string, e.g. `"anthropic/claude-sonnet-4-6"`. */
+  /** Flue model string used for provider/model identification in reports, e.g. `"anthropic/claude-sonnet-4-6"`. */
   model: string;
-  /** Sandbox factory. Use `local()` from `@flue/runtime/node` for host access. */
-  sandbox?: AgentInit["sandbox"];
-  /** Agent-wide tools available to every session call. */
-  tools?: ToolDef[];
-  /** Reasoning effort level. */
-  thinkingLevel?: AgentInit["thinkingLevel"];
   /**
-   * Custom run function. Receives the input, a ready-to-use FlueSession,
-   * and eval context. Return the PromptResponse or PromptResultResponse.
-   *
-   * Defaults to `(input, session) => session.prompt(String(input))`.
+   * Run the Flue agent. Create the FlueContext, call `init()`, open a
+   * session, and return the response. Wire `context.eventHandler` into
+   * the FlueContext via `ctx.subscribeEvent(context.eventHandler)` so the
+   * adapter can capture tool calls and usage.
    */
-  run?: (
+  run: (
     input: TInput,
-    session: FlueSession,
-    context: { metadata: Readonly<TMetadata>; signal?: AbortSignal },
+    context: FlueRunContext<TMetadata>,
   ) => MaybePromise<PromptResponse | PromptResultResponse<any>>;
   /** Extract the eval output from the Flue response. Defaults to `response.data ?? response.text`. */
   output?: (
@@ -65,10 +64,11 @@ export interface FlueHarnessOptions<
 }
 
 /**
- * Creates a vitest-evals harness that runs a Flue agent session.
+ * Creates a vitest-evals harness that normalizes a Flue agent run.
  *
- * The adapter owns the Flue runtime lifecycle, captures tool calls and usage
- * from the event stream, and normalizes results into a `HarnessRun`.
+ * The user owns the Flue runtime lifecycle. The adapter provides an event
+ * handler that captures tool calls and usage, and normalizes the response
+ * into a `HarnessRun`.
  */
 export function flueHarness<
   TInput = string,
@@ -81,49 +81,12 @@ export function flueHarness<
     name: options.name,
     run: async ({ input, metadata, signal }) => {
       const collector = createEventCollector();
-      const store = new InMemorySessionStore();
-      const runId = crypto.randomUUID();
 
-      const ctxConfig: FlueContextConfig = {
-        id: `eval-${runId}`,
-        runId,
-        payload: input,
-        env: process.env as Record<string, any>,
-        agentConfig: {
-          systemPrompt: "",
-          skills: {},
-          roles: {},
-          model: resolveModel(options.model),
-          resolveModel,
-        },
-        createDefaultEnv: async () => {
-          const { Bash } = await import("just-bash");
-          return bashFactoryToSessionEnv(() => new Bash());
-        },
-        defaultStore: store,
-      };
-
-      const ctx = createFlueContext(ctxConfig);
-      ctx.subscribeEvent(collector.handler);
-
-      const initOptions: AgentInit = {
-        model: options.model,
-        tools: options.tools,
-        thinkingLevel: options.thinkingLevel,
-      };
-      if (options.sandbox) {
-        initOptions.sandbox = options.sandbox;
-      }
-
-      const harness: FlueHarness = await ctx.init(initOptions);
-      const session = await harness.session();
-
-      const runFn =
-        options.run ??
-        ((inp: TInput, sess: FlueSession) =>
-          sess.prompt(String(inp), { signal }));
-
-      const response = await runFn(input, session, { metadata, signal });
+      const response = await options.run(input, {
+        metadata,
+        signal,
+        eventHandler: collector.handler,
+      });
 
       const usage = aggregateUsage(collector.turns);
       const turnModel = extractModel(collector.turns);

@@ -176,10 +176,6 @@ importers:
         version: link:../vitest-evals
 
   packages/harness-flue:
-    dependencies:
-      just-bash:
-        specifier: ^2.14.2
-        version: 2.14.5
     devDependencies:
       '@flue/runtime':
         specifier: ^0.7.0

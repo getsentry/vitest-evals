@@ -1,16 +1,15 @@
 import { flueHarness } from "@vitest-evals/harness-flue";
 import { Type } from "@flue/runtime";
+import type { ToolDef } from "@flue/runtime";
+import {
+  createFlueContext,
+  InMemorySessionStore,
+  bashFactoryToSessionEnv,
+  resolveModel,
+} from "@flue/runtime/internal";
 import * as v from "valibot";
 import { expect } from "vitest";
 import { type HarnessRun, toolCalls } from "vitest-evals";
-import type { ToolDef } from "@flue/runtime";
-
-type InvoiceRecord = {
-  invoiceId: string;
-  amount: number;
-  refundable: boolean;
-  customer: string;
-};
 
 type RefundDecision =
   | {
@@ -34,7 +33,10 @@ export type RefundCase = {
 
 export const REFUND_MODEL = "anthropic/claude-sonnet-4-6";
 
-const INVOICES: Record<string, InvoiceRecord> = {
+const INVOICES: Record<
+  string,
+  { invoiceId: string; amount: number; refundable: boolean; customer: string }
+> = {
   inv_123: {
     invoiceId: "inv_123",
     amount: 4200,
@@ -90,8 +92,37 @@ const refundResultSchema = v.object({
 export const refundHarness = flueHarness<string, RefundDecision>({
   name: "flue-refund-agent",
   model: REFUND_MODEL,
-  tools: refundTools,
-  run: async (input, session, { signal }) => {
+  run: async (input, { signal, eventHandler }) => {
+    const store = new InMemorySessionStore();
+    const runId = crypto.randomUUID();
+
+    const ctx = createFlueContext({
+      id: `eval-${runId}`,
+      runId,
+      payload: input,
+      env: process.env as Record<string, any>,
+      agentConfig: {
+        systemPrompt: "",
+        skills: {},
+        roles: {},
+        model: resolveModel(REFUND_MODEL),
+        resolveModel,
+      },
+      createDefaultEnv: async () => {
+        const { Bash } = await import("just-bash");
+        return bashFactoryToSessionEnv(() => new Bash());
+      },
+      defaultStore: store,
+    });
+
+    ctx.subscribeEvent(eventHandler);
+
+    const harness = await ctx.init({
+      model: REFUND_MODEL,
+      tools: refundTools,
+    });
+    const session = await harness.session();
+
     return await session.prompt(
       [
         "You are the demo refund operations agent.",
@@ -102,10 +133,7 @@ export const refundHarness = flueHarness<string, RefundDecision>({
         "",
         input,
       ].join("\n"),
-      {
-        result: refundResultSchema,
-        signal,
-      },
+      { result: refundResultSchema, signal },
     );
   },
   output: (response) => {
@@ -118,9 +146,7 @@ export async function assertRefundCase(
   run: HarnessRun,
   expected: Pick<RefundCase, "expectedStatus" | "expectedTools">,
 ) {
-  expect(run.output).toMatchObject({
-    status: expected.expectedStatus,
-  });
+  expect(run.output).toMatchObject({ status: expected.expectedStatus });
   expect(toolCalls(run.session).map((call) => call.name)).toEqual(
     expected.expectedTools,
   );

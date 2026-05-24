@@ -30,11 +30,7 @@
     }
   },
   "scripts": {
-    "build": "tsup --config ./tsup.config.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "just-bash": "^2.14.2"
+    "build": "tsup --config ./tsup.config.ts"
   },
   "peerDependencies": {
     "@flue/runtime": ">=0.7",
