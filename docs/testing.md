@@ -27,8 +27,14 @@ packages/harness-openai-agents/src/
   index.test.ts
 packages/harness-pi-ai/src/
   index.test.ts
+packages/core/src/
+  index.test.ts
+  node.test.ts
 packages/github-reporter/src/
   report.test.ts
+packages/report-ui/src/
+  server.test.ts
+  app/model.test.ts
 apps/demo-pi/src/
   refundAgent.test.ts
 apps/demo-openai-agents/src/
@@ -68,6 +74,8 @@ Cover:
 
 Cover:
 
+- shared core schema/collector behavior when the persisted JSON contract
+  changes
 - native action input parsing when the workflow-facing contract changes
 - Vitest JSON metadata collection
 - sharded report merging when multiple JSON files are accepted

@@ -1,11 +1,11 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli.ts"],
+  entry: ["src/index.ts", "src/node.ts"],
   format: ["cjs", "esm"],
   dts: true,
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["@vitest-evals/core", "@vitest-evals/core/node", "vitest"],
+  external: ["zod"],
 });

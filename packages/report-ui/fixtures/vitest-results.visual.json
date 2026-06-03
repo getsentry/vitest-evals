@@ -1,0 +1,509 @@
+{
+  "numFailedTests": 2,
+  "numPassedTests": 2,
+  "numPendingTests": 1,
+  "numTodoTests": 0,
+  "numTotalTests": 5,
+  "startTime": 1000,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/repo/apps/demo/evals/refund.eval.ts",
+      "status": "failed",
+      "message": "",
+      "startTime": 1000,
+      "endTime": 7100,
+      "assertionResults": [
+        {
+          "ancestorTitles": ["refund agent", "fraud policy"],
+          "fullName": "refund agent fraud policy rejects invoice with suspicious velocity and mismatched account history",
+          "title": "rejects invoice with suspicious velocity and mismatched account history",
+          "status": "failed",
+          "duration": 92,
+          "failureMessages": [
+            "Score: 0.20 below threshold: 0.80",
+            "StructuredOutputJudge: expected status=denied and reason to mention fraud review"
+          ],
+          "location": {
+            "line": 42,
+            "column": 3
+          },
+          "tags": ["fraud", "refund"],
+          "meta": {
+            "eval": {
+              "avgScore": 0.2,
+              "thresholdFailed": true,
+              "output": {
+                "status": "manual_review",
+                "reason": "invoice has unusually high activity and account mismatch",
+                "riskFactors": [
+                  "velocity",
+                  "billing_account_mismatch",
+                  "recent_chargeback"
+                ]
+              },
+              "scores": [
+                {
+                  "name": "StructuredOutputJudge",
+                  "score": 0.2,
+                  "metadata": {
+                    "rationale": "status mismatch; expected denied, got manual_review"
+                  }
+                },
+                {
+                  "name": "ToolCallJudge",
+                  "score": 1,
+                  "metadata": {
+                    "matchedTools": ["lookupInvoice", "inspectAccountRisk"]
+                  }
+                }
+              ]
+            },
+            "harness": {
+              "name": "pi-ai",
+              "run": {
+                "output": {
+                  "status": "manual_review",
+                  "reason": "invoice has unusually high activity and account mismatch"
+                },
+                "usage": {
+                  "provider": "anthropic",
+                  "model": "claude-sonnet-4-5",
+                  "inputTokens": 980,
+                  "outputTokens": 240,
+                  "totalTokens": 1220,
+                  "toolCalls": 3,
+                  "metadata": {
+                    "cacheReadTokens": 320
+                  }
+                },
+                "timings": {
+                  "totalMs": 4100
+                },
+                "session": {
+                  "messages": [
+                    {
+                      "role": "system",
+                      "content": "You are a refund policy agent. Follow fraud controls exactly."
+                    },
+                    {
+                      "role": "user",
+                      "content": "Refund invoice inv_404 for account acct_suspicious"
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "I need to inspect the invoice and account risk profile.",
+                      "toolCalls": [
+                        {
+                          "name": "lookupInvoice",
+                          "arguments": {
+                            "invoiceId": "inv_404"
+                          },
+                          "result": {
+                            "refundable": true,
+                            "amount": 19900,
+                            "currency": "usd"
+                          },
+                          "durationMs": 6
+                        },
+                        {
+                          "name": "inspectAccountRisk",
+                          "arguments": {
+                            "accountId": "acct_suspicious"
+                          },
+                          "result": {
+                            "risk": "high",
+                            "signals": ["velocity", "chargeback"]
+                          },
+                          "durationMs": 18
+                        },
+                        {
+                          "name": "createRefund",
+                          "arguments": {
+                            "invoiceId": "inv_404"
+                          },
+                          "error": {
+                            "message": "blocked by fraud policy"
+                          },
+                          "durationMs": 11
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "This should be sent to manual review because the account risk is high."
+                    }
+                  ]
+                },
+                "traces": [
+                  {
+                    "id": "trace_fraud",
+                    "name": "refund fraud eval",
+                    "startedAt": "2026-06-03T08:00:00.000Z",
+                    "finishedAt": "2026-06-03T08:00:04.100Z",
+                    "durationMs": 4100,
+                    "spans": [
+                      {
+                        "id": "trace_fraud:run",
+                        "traceId": "trace_fraud",
+                        "name": "refund agent",
+                        "kind": "agent",
+                        "startedAt": "2026-06-03T08:00:00.000Z",
+                        "durationMs": 4100,
+                        "attributes": {
+                          "gen_ai.workflow.name": "refund-agent",
+                          "gen_ai.provider.name": "anthropic"
+                        }
+                      },
+                      {
+                        "id": "trace_fraud:model:1",
+                        "traceId": "trace_fraud",
+                        "parentId": "trace_fraud:run",
+                        "name": "claude-sonnet-4-5",
+                        "kind": "model",
+                        "startedAt": "2026-06-03T08:00:00.080Z",
+                        "durationMs": 1620,
+                        "attributes": {
+                          "gen_ai.request.model": "claude-sonnet-4-5",
+                          "gen_ai.usage.input_tokens": 980,
+                          "gen_ai.usage.output_tokens": 240,
+                          "gen_ai.input.messages": [
+                            {
+                              "role": "system",
+                              "content": "You are a refund policy agent. Follow fraud controls exactly."
+                            },
+                            {
+                              "role": "user",
+                              "content": "Refund invoice inv_404 for account acct_suspicious"
+                            }
+                          ],
+                          "gen_ai.output.messages": [
+                            {
+                              "role": "assistant",
+                              "content": "I need to inspect the invoice and account risk profile."
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "trace_fraud:tool:lookup",
+                        "traceId": "trace_fraud",
+                        "parentId": "trace_fraud:run",
+                        "name": "lookupInvoice",
+                        "kind": "tool",
+                        "startedAt": "2026-06-03T08:00:01.900Z",
+                        "durationMs": 6,
+                        "status": "ok",
+                        "attributes": {
+                          "gen_ai.tool.name": "lookupInvoice",
+                          "gen_ai.tool.call.arguments": {
+                            "invoiceId": "inv_404"
+                          },
+                          "gen_ai.tool.call.result": {
+                            "refundable": true,
+                            "amount": 19900,
+                            "currency": "usd"
+                          }
+                        }
+                      },
+                      {
+                        "id": "trace_fraud:tool:risk",
+                        "traceId": "trace_fraud",
+                        "parentId": "trace_fraud:run",
+                        "name": "inspectAccountRisk",
+                        "kind": "tool",
+                        "startedAt": "2026-06-03T08:00:02.080Z",
+                        "durationMs": 18,
+                        "status": "ok",
+                        "attributes": {
+                          "gen_ai.tool.name": "inspectAccountRisk",
+                          "gen_ai.tool.call.arguments": {
+                            "accountId": "acct_suspicious"
+                          },
+                          "gen_ai.tool.call.result": {
+                            "risk": "high",
+                            "signals": ["velocity", "chargeback"]
+                          }
+                        }
+                      },
+                      {
+                        "id": "trace_fraud:tool:refund",
+                        "traceId": "trace_fraud",
+                        "parentId": "trace_fraud:run",
+                        "name": "createRefund",
+                        "kind": "tool",
+                        "startedAt": "2026-06-03T08:00:02.440Z",
+                        "durationMs": 11,
+                        "status": "error",
+                        "attributes": {
+                          "gen_ai.tool.name": "createRefund",
+                          "gen_ai.tool.call.arguments": {
+                            "invoiceId": "inv_404"
+                          }
+                        },
+                        "error": {
+                          "message": "blocked by fraud policy",
+                          "type": "PolicyError"
+                        }
+                      },
+                      {
+                        "id": "trace_fraud:model:2",
+                        "traceId": "trace_fraud",
+                        "parentId": "trace_fraud:run",
+                        "name": "claude-sonnet-4-5",
+                        "kind": "model",
+                        "startedAt": "2026-06-03T08:00:02.900Z",
+                        "durationMs": 980,
+                        "attributes": {
+                          "gen_ai.request.model": "claude-sonnet-4-5",
+                          "gen_ai.output.messages": [
+                            {
+                              "role": "assistant",
+                              "content": "This should be sent to manual review because the account risk is high."
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "artifacts": {
+                  "invoiceId": "inv_404",
+                  "accountId": "acct_suspicious"
+                },
+                "errors": []
+              }
+            }
+          }
+        },
+        {
+          "ancestorTitles": ["refund agent", "happy path"],
+          "fullName": "refund agent happy path approves standard refundable invoice",
+          "title": "approves standard refundable invoice",
+          "status": "passed",
+          "duration": 37,
+          "failureMessages": [],
+          "location": {
+            "line": 86,
+            "column": 3
+          },
+          "tags": ["refund"],
+          "meta": {
+            "eval": {
+              "avgScore": 1,
+              "output": {
+                "status": "approved",
+                "refundId": "re_123",
+                "customerMessage": "Your refund has been approved and will settle in 5-10 business days."
+              },
+              "scores": [
+                {
+                  "name": "StructuredOutputJudge",
+                  "score": 1
+                }
+              ]
+            },
+            "harness": {
+              "name": "pi-ai",
+              "run": {
+                "output": {
+                  "status": "approved",
+                  "refundId": "re_123"
+                },
+                "usage": {
+                  "provider": "anthropic",
+                  "model": "claude-sonnet-4-5",
+                  "totalTokens": 860,
+                  "toolCalls": 2
+                },
+                "timings": {
+                  "totalMs": 2100
+                },
+                "session": {
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": "Refund invoice inv_123"
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "The invoice is refundable and the refund has been created.",
+                      "toolCalls": [
+                        {
+                          "name": "lookupInvoice",
+                          "durationMs": 4
+                        },
+                        {
+                          "name": "createRefund",
+                          "durationMs": 21
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "errors": []
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "/repo/apps/demo/evals/surprisingly/deeply/nested/path/with/a/very-long-file-name-that-should-never-break-the-report-layout.eval.ts",
+      "status": "failed",
+      "message": "",
+      "startTime": 1200,
+      "endTime": 9100,
+      "assertionResults": [
+        {
+          "ancestorTitles": ["support escalation routing"],
+          "fullName": "support escalation routing classifies borderline legal-policy requests with a very long human-readable scenario name",
+          "title": "classifies borderline legal-policy requests with a very long human-readable scenario name",
+          "status": "failed",
+          "duration": 128,
+          "failureMessages": [
+            "FactualityJudge rationale drifted from expected policy citation."
+          ],
+          "location": {
+            "line": 17,
+            "column": 5
+          },
+          "tags": ["routing", "legal"],
+          "meta": {
+            "eval": {
+              "avgScore": 0.64,
+              "thresholdFailed": true,
+              "output": {
+                "route": "general_support",
+                "confidence": 0.61,
+                "notes": "The response references the right policy family but misses the escalation requirement."
+              },
+              "scores": [
+                {
+                  "name": "FactualityJudge",
+                  "score": 0.64,
+                  "metadata": {
+                    "rationale": "The answer cites a support policy but omits legal escalation."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ancestorTitles": ["support escalation routing"],
+          "fullName": "support escalation routing skips draft-only work item",
+          "title": "skips draft-only work item",
+          "status": "skipped",
+          "duration": 0,
+          "failureMessages": [],
+          "location": {
+            "line": 58,
+            "column": 5
+          },
+          "tags": ["draft"],
+          "meta": {
+            "eval": {
+              "avgScore": null,
+              "scores": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "/repo/apps/demo/evals/search.eval.ts",
+      "status": "passed",
+      "message": "",
+      "startTime": 2000,
+      "endTime": 6100,
+      "assertionResults": [
+        {
+          "ancestorTitles": ["retrieval"],
+          "fullName": "retrieval returns compact citations for a noisy query",
+          "title": "returns compact citations for a noisy query",
+          "status": "passed",
+          "duration": 61,
+          "failureMessages": [],
+          "location": {
+            "line": 22,
+            "column": 3
+          },
+          "tags": ["retrieval"],
+          "meta": {
+            "eval": {
+              "avgScore": 0.92,
+              "output": {
+                "answer": "The refund window is 30 days for standard purchases.",
+                "citations": [
+                  {
+                    "title": "Refund policy",
+                    "url": "https://example.test/policies/refunds",
+                    "excerpt": "Standard purchases can be refunded within 30 days."
+                  }
+                ],
+                "debug": {
+                  "queryExpansion": [
+                    "refund deadline",
+                    "standard purchase refund window"
+                  ],
+                  "rerankerScores": [0.94, 0.72, 0.31]
+                }
+              },
+              "scores": [
+                {
+                  "name": "FactualityJudge",
+                  "score": 0.92
+                }
+              ]
+            },
+            "harness": {
+              "name": "ai-sdk",
+              "run": {
+                "output": {
+                  "answer": "The refund window is 30 days for standard purchases."
+                },
+                "usage": {
+                  "provider": "openai",
+                  "model": "gpt-5-mini",
+                  "inputTokens": 720,
+                  "outputTokens": 118,
+                  "totalTokens": 838,
+                  "toolCalls": 1
+                },
+                "timings": {
+                  "totalMs": 1800
+                },
+                "session": {
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": "how long do i have to get money back???"
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "The refund window is 30 days for standard purchases.",
+                      "toolCalls": [
+                        {
+                          "name": "searchKnowledgeBase",
+                          "arguments": {
+                            "query": "standard purchase refund window"
+                          },
+                          "result": {
+                            "documents": 3
+                          },
+                          "durationMs": 33
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "errors": []
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

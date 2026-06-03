@@ -17,9 +17,7 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "exports": {
     ".": {
       "source": "./src/index.ts",
@@ -60,6 +58,9 @@
   },
   "scripts": {
     "build": "tsup --config ./tsup.config.ts"
+  },
+  "dependencies": {
+    "@vitest-evals/core": "workspace:*"
   },
   "peerDependencies": {
     "ai": ">=4 <7",

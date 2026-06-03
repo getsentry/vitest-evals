@@ -1,11 +1,14 @@
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile } from "node:fs/promises";
+import {
+  readVitestJsonReportFile,
+  resolveResultFiles,
+} from "@vitest-evals/core/node";
 import { renderWorkflowCommands } from "./annotations";
 import { collectEvalReport } from "./collect";
 import { publishCheckRun, type PublishCheckRunResult } from "./github";
 import { mergeEvalReports } from "./merge";
-import { resolveResultFiles } from "./results";
 import { renderJobSummary, type SummaryOptions } from "./summary";
-import type { EvalReport, VitestJsonReport } from "./types";
+import type { EvalReport } from "./types";
 
 /** Options for reading eval JSON files and publishing GitHub report surfaces. */
 export type PublishEvalReportOptions = SummaryOptions & {
@@ -48,7 +51,7 @@ export async function publishEvalReport(
 
   const reports = await Promise.all(
     resultFiles.map(async (resultFile) => {
-      const json = await readVitestJsonReport(resultFile);
+      const json = await readVitestJsonReportFile(resultFile);
       return collectEvalReport(json, {
         workspace: options.workspace,
       });
@@ -111,15 +114,4 @@ export async function publishEvalReport(
     resultFiles,
     checkRun,
   };
-}
-
-async function readVitestJsonReport(resultFile: string) {
-  try {
-    return JSON.parse(await readFile(resultFile, "utf8")) as VitestJsonReport;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to read eval result file ${resultFile}: ${message}`,
-    );
-  }
 }

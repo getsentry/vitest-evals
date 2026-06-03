@@ -27,6 +27,7 @@ packages/
       reporter.ts
       judges/
       legacy/
+  core/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
@@ -37,11 +38,12 @@ apps/
   demo-pi/
 ```
 
-## Core Package
+## Vitest Package
 
 ### `packages/vitest-evals/src/harness.ts`
 
-Defines the normalized runtime model:
+Defines the harness runtime integration and re-exports normalized model pieces
+from `packages/core`:
 
 - `Harness`
 - `HarnessRun`
@@ -51,9 +53,9 @@ Defines the normalized runtime model:
 - `NormalizedTrace` and `NormalizedSpan`
 - helper accessors such as `toolCalls(session)` and `assistantMessages(session)`
 
-The normalized session is intentionally JSON-serializable so it can be
-persisted, attached to errors, and emitted by reporters without custom
-serialization logic.
+The normalized session model lives in `packages/core` and is intentionally
+JSON-serializable so it can be persisted, attached to errors, and emitted by
+reporters without custom serialization logic.
 
 Normalized traces are also JSON-serializable. First-party harnesses attach
 native run, model, and tool spans automatically when they observe those
@@ -134,13 +136,50 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 - judge sub-results
 - richer failure diagnostics
 
+## Shared Core Package
+
+`packages/core` owns dependency-light primitives shared by the Vitest
+integration, GitHub reporter, and report UI. Its main entry stays browser-safe,
+while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
+report consumers. It exports stable schemas, TypeScript types, and helpers for:
+
+- JSON-safe values
+- normalized harness runs, sessions, messages, tool calls, usage, timings,
+  traces, spans, span events, errors, and artifacts
+- `task.meta.eval`
+- `task.meta.harness`
+- Vitest JSON reports
+- a full-fidelity multi-run workspace model for rich report UIs
+- path, glob, and directory resolution for Node report consumers
+
+The schemas are tolerant of provider-specific JSON metadata, but the known
+normalized fields are explicitly typed so the artifact contract can be shared
+long term. Consumers that read report artifacts should validate and collect
+through this package instead of duplicating Vitest JSON or metadata shapes.
+Vitest lifecycle APIs such as `describeEval(...)`, matchers, and the terminal
+reporter stay in `packages/vitest-evals`.
+
+## Report UI
+
+`packages/report-ui` is the local browser surface for Vitest JSON artifacts. It
+accepts files, simple globs, or directories; collects them through
+`@vitest-evals/core/node`; serves the collected `ReportWorkspace` at
+`/data/workspace.json`; and renders a React SPA for run summaries, eval cases,
+scores, harness output, sessions, tool calls, and trace trees.
+
+The React app consumes the shared `ReportWorkspace` schema from
+`@vitest-evals/core` instead of inventing a UI-only data shape. Server-only
+filesystem and HTTP behavior stays in `packages/report-ui` and the core Node
+subpath.
+
 ## GitHub Reporting
 
 `packages/github-reporter` is the implementation behind the native
 `getsentry/vitest-evals` GitHub Action. It reads Vitest's
-built-in JSON output instead of attaching directly to the Vitest reporter
-lifecycle. That JSON output includes each assertion's `meta` field, so it
-preserves the normalized eval and harness metadata recorded by core.
+built-in JSON output through `packages/core` instead of attaching directly to
+the Vitest reporter lifecycle. That JSON output includes each assertion's
+`meta` field, so it preserves the normalized eval and harness metadata recorded
+by the Vitest integration.
 
 This split keeps the terminal reporter focused on local output and gives CI a
 stable artifact to process:

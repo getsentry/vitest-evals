@@ -1,209 +1,69 @@
-/** Primitive scalar values allowed in normalized JSON-safe eval data. */
-export type JsonPrimitive = string | number | boolean | null;
+import {
+  assistantMessages,
+  failedSpans,
+  latestAssistantMessageContent,
+  messagesByRole,
+  spans,
+  spansByKind,
+  systemMessages,
+  toolCalls,
+  toolMessages,
+  userMessages,
+} from "@vitest-evals/core";
+import type {
+  GenAiOperationName,
+  HarnessRun,
+  HarnessRunError,
+  JsonPrimitive,
+  JsonValue,
+  NormalizedMessage,
+  NormalizedSession,
+  NormalizedSpan,
+  NormalizedSpanAttributes,
+  NormalizedSpanEvent,
+  NormalizedTrace,
+  TimingSummary,
+  ToolCallRecord,
+  UsageSummary,
+} from "@vitest-evals/core";
 
-/** JSON-safe value shape used by normalized sessions, artifacts, and errors. */
-export type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-/** Well-known OpenTelemetry GenAI operation names. */
-export type GenAiOperationName =
-  | "chat"
-  | "create_agent"
-  | "embeddings"
-  | "execute_tool"
-  | "generate_content"
-  | "invoke_agent"
-  | "invoke_workflow"
-  | "retrieval"
-  | "text_completion"
-  | (string & {});
-
-/** Well-known OpenTelemetry GenAI output content types. */
-export type GenAiOutputType =
-  | "image"
-  | "json"
-  | "speech"
-  | "text"
-  | (string & {});
-
-/** Well-known OpenTelemetry GenAI provider names. */
-export type GenAiProviderName =
-  | "anthropic"
-  | "aws.bedrock"
-  | "azure.ai.inference"
-  | "azure.ai.openai"
-  | "cohere"
-  | "deepseek"
-  | "gcp.gemini"
-  | "gcp.gen_ai"
-  | "gcp.vertex_ai"
-  | "groq"
-  | "ibm.watsonx.ai"
-  | "mistral_ai"
-  | "openai"
-  | "perplexity"
-  | "x_ai"
-  | (string & {});
-
-/** Well-known OpenTelemetry GenAI token types. */
-export type GenAiTokenType = "input" | "output" | (string & {});
-
-/** Well-known OpenTelemetry GenAI tool execution types. */
-export type GenAiToolType =
-  | "datastore"
-  | "extension"
-  | "function"
-  | (string & {});
-
-/** Typed subset of OpenTelemetry GenAI semantic attributes. */
-export type GenAiSemanticAttributes = {
-  "gen_ai.agent.description"?: string;
-  "gen_ai.agent.id"?: string;
-  "gen_ai.agent.name"?: string;
-  "gen_ai.agent.version"?: string;
-  "gen_ai.conversation.id"?: string;
-  "gen_ai.data_source.id"?: string;
-  "gen_ai.embeddings.dimension.count"?: number;
-  "gen_ai.evaluation.explanation"?: string;
-  "gen_ai.evaluation.name"?: string;
-  "gen_ai.evaluation.score.label"?: string;
-  "gen_ai.evaluation.score.value"?: number;
-  "gen_ai.input.messages"?: JsonValue;
-  "gen_ai.operation.name"?: GenAiOperationName;
-  "gen_ai.output.messages"?: JsonValue;
-  "gen_ai.output.type"?: GenAiOutputType;
-  "gen_ai.prompt.name"?: string;
-  "gen_ai.provider.name"?: GenAiProviderName;
-  "gen_ai.request.choice.count"?: number;
-  "gen_ai.request.encoding_formats"?: string[];
-  "gen_ai.request.frequency_penalty"?: number;
-  "gen_ai.request.max_tokens"?: number;
-  "gen_ai.request.model"?: string;
-  "gen_ai.request.presence_penalty"?: number;
-  "gen_ai.request.seed"?: number;
-  "gen_ai.request.stop_sequences"?: string[];
-  "gen_ai.request.stream"?: boolean;
-  "gen_ai.request.temperature"?: number;
-  "gen_ai.request.top_k"?: number;
-  "gen_ai.request.top_p"?: number;
-  "gen_ai.response.finish_reasons"?: string[];
-  "gen_ai.response.id"?: string;
-  "gen_ai.response.model"?: string;
-  "gen_ai.response.time_to_first_chunk"?: number;
-  "gen_ai.retrieval.documents"?: JsonValue;
-  "gen_ai.retrieval.query.text"?: string;
-  "gen_ai.system_instructions"?: JsonValue;
-  "gen_ai.token.type"?: GenAiTokenType;
-  "gen_ai.tool.call.arguments"?: JsonValue;
-  "gen_ai.tool.call.id"?: string;
-  "gen_ai.tool.call.result"?: JsonValue;
-  "gen_ai.tool.definitions"?: JsonValue;
-  "gen_ai.tool.description"?: string;
-  "gen_ai.tool.name"?: string;
-  "gen_ai.tool.type"?: GenAiToolType;
-  "gen_ai.usage.cache_creation.input_tokens"?: number;
-  "gen_ai.usage.cache_read.input_tokens"?: number;
-  "gen_ai.usage.input_tokens"?: number;
-  "gen_ai.usage.output_tokens"?: number;
-  "gen_ai.usage.reasoning.output_tokens"?: number;
-  "gen_ai.workflow.name"?: string;
-};
-
-/** Attribute keys defined by the OpenTelemetry GenAI semantic conventions. */
-export type GenAiSemanticAttributeKey = keyof GenAiSemanticAttributes;
-
-/** Typed OpenTelemetry semantic attributes accepted on normalized spans. */
-export type OpenTelemetrySemanticAttributes = GenAiSemanticAttributes & {
-  "error.type"?: string;
-  "server.address"?: string;
-  "server.port"?: number;
-};
-
-/** Known OpenTelemetry semantic attribute keys accepted on normalized spans. */
-export type OpenTelemetrySemanticAttributeKey =
-  keyof OpenTelemetrySemanticAttributes;
-
-/** Attribute keys accepted on normalized spans. */
-export type NormalizedSpanAttributeKey =
-  | OpenTelemetrySemanticAttributeKey
-  | (string & {});
-
-/**
- * JSON-safe span attributes. Known OpenTelemetry GenAI keys are typed while
- * custom provider and application keys remain allowed.
- */
-export type NormalizedSpanAttributes = OpenTelemetrySemanticAttributes & {
-  [key: string]: JsonValue | undefined;
-};
-
-/** Event attached to one normalized span. */
-export type NormalizedSpanEvent = {
-  /** Event name emitted by the runtime or harness. */
-  name: string;
-  /** ISO timestamp for the event when available. */
-  timestamp?: string;
-  /** JSON-safe event attributes. */
-  attributes?: NormalizedSpanAttributes;
-};
-
-/** Normalized operation span captured during a harness run. */
-export type NormalizedSpan = {
-  /** Runtime or provider span id when one is available. */
-  id?: string;
-  /** Trace id this span belongs to. */
-  traceId?: string;
-  /** Parent span id when the runtime exposes hierarchy. */
-  parentId?: string;
-  /** Human-readable operation name. */
-  name: string;
-  /** Coarse operation kind used by reporters and judges. */
-  kind?:
-    | "run"
-    | "agent"
-    | "model"
-    | "tool"
-    | "guardrail"
-    | "handoff"
-    | "custom";
-  /** ISO timestamp for the start of the span. */
-  startedAt?: string;
-  /** ISO timestamp for the end of the span. */
-  finishedAt?: string;
-  /** Span duration in milliseconds. */
-  durationMs?: number;
-  /** Success or failure status for the span. */
-  status?: "ok" | "error";
-  /** Normalized error when the span failed. */
-  error?: {
-    message: string;
-    type?: string;
-    [key: string]: JsonValue | undefined;
-  };
-  /** JSON-safe operation attributes. */
-  attributes?: NormalizedSpanAttributes;
-  /** Events observed inside this span. */
-  events?: NormalizedSpanEvent[];
-};
-
-/** Normalized trace captured during a harness run. */
-export type NormalizedTrace = {
-  /** Runtime or provider trace id when one is available. */
-  id?: string;
-  /** Human-readable trace or workflow name. */
-  name?: string;
-  /** ISO timestamp for the start of the trace. */
-  startedAt?: string;
-  /** ISO timestamp for the end of the trace. */
-  finishedAt?: string;
-  /** Trace duration in milliseconds. */
-  durationMs?: number;
-  /** Extra JSON-safe trace metadata. */
-  metadata?: Record<string, JsonValue>;
-  /** Spans that make up this trace. */
-  spans: NormalizedSpan[];
-};
+export {
+  assistantMessages,
+  failedSpans,
+  latestAssistantMessageContent,
+  messagesByRole,
+  spans,
+  spansByKind,
+  systemMessages,
+  toolCalls,
+  toolMessages,
+  userMessages,
+} from "@vitest-evals/core";
+export type {
+  GenAiOperationName,
+  GenAiOutputType,
+  GenAiProviderName,
+  GenAiSemanticAttributeKey,
+  GenAiSemanticAttributes,
+  GenAiTokenType,
+  GenAiToolType,
+  HarnessRun,
+  HarnessRunError,
+  JsonPrimitive,
+  JsonValue,
+  NormalizedMessage,
+  NormalizedSession,
+  NormalizedSpan,
+  NormalizedSpanAttributeKey,
+  NormalizedSpanAttributes,
+  NormalizedSpanEvent,
+  NormalizedTrace,
+  OpenTelemetrySemanticAttributeKey,
+  OpenTelemetrySemanticAttributes,
+  TimingSummary,
+  ToolCallRecord,
+  UsageSummary,
+} from "@vitest-evals/core";
 
 /** Options for converting normalized tool calls into trace spans. */
 export type CreateToolCallSpansOptions = {
@@ -231,178 +91,8 @@ export type EnsureRunTraceOptions = {
   source?: string;
 };
 
-/**
- * Normalized record for one tool call observed during a harness run.
- *
- * @example
- * ```ts
- * const call: ToolCallRecord = {
- *   name: "lookupInvoice",
- *   arguments: { invoiceId: "inv_123" },
- *   result: { refundable: true },
- * };
- * ```
- */
-export type ToolCallRecord = {
-  /** Provider or runtime tool-call id when one is available. */
-  id?: string;
-  /** Tool name as exposed to the agent or application runtime. */
-  name: string;
-  /** JSON-safe tool arguments after provider/runtime normalization. */
-  arguments?: Record<string, JsonValue>;
-  /** JSON-safe tool result returned by the application tool. */
-  result?: JsonValue;
-  /** Normalized tool error when execution failed. */
-  error?: {
-    message: string;
-    type?: string;
-    [key: string]: JsonValue | undefined;
-  };
-  /** ISO timestamp for the start of tool execution. */
-  startedAt?: string;
-  /** ISO timestamp for the end of tool execution. */
-  finishedAt?: string;
-  /** Tool execution duration in milliseconds. */
-  durationMs?: number;
-  /** Extra JSON-safe tool metadata for reporters and custom judges. */
-  metadata?: Record<string, JsonValue>;
-};
-
-/**
- * Normalized message recorded in a harness session transcript.
- *
- * @example
- * ```ts
- * const message: NormalizedMessage = {
- *   role: "assistant",
- *   content: { status: "approved" },
- *   toolCalls: [{ name: "lookupInvoice" }],
- * };
- * ```
- */
-export type NormalizedMessage = {
-  /** Transcript role for the normalized message. */
-  role: "system" | "user" | "assistant" | "tool";
-  /** JSON-safe message content. */
-  content?: JsonValue;
-  /** Tool calls associated with this message. */
-  toolCalls?: ToolCallRecord[];
-  /** Extra JSON-safe message metadata. */
-  metadata?: Record<string, JsonValue>;
-};
-
-/**
- * Provider usage summary attached to a normalized harness run.
- *
- * @example
- * ```ts
- * const usage: UsageSummary = {
- *   provider: "openai",
- *   model: "gpt-4o-mini",
- *   inputTokens: 212,
- *   outputTokens: 48,
- *   totalTokens: 260,
- * };
- * ```
- */
-export type UsageSummary = {
-  /** Provider that served the application run. */
-  provider?: string;
-  /** Model used for the application run. */
-  model?: string;
-  /** Input, prompt, or request tokens consumed by the run. */
-  inputTokens?: number;
-  /** Output or completion tokens produced by the run. */
-  outputTokens?: number;
-  /** Reasoning tokens reported by providers that expose them. */
-  reasoningTokens?: number;
-  /** Total token count reported by the provider or adapter. */
-  totalTokens?: number;
-  /** Count of tool calls observed during the run. */
-  toolCalls?: number;
-  /** Retry count observed during the run. */
-  retries?: number;
-  /** Provider-specific JSON-safe usage details. Cost estimates belong here. */
-  metadata?: Record<string, JsonValue>;
-};
-
-/** Timing summary attached to a normalized harness run. */
-export type TimingSummary = {
-  /** End-to-end run duration in milliseconds. */
-  totalMs?: number;
-  /** Extra JSON-safe timing metadata. */
-  metadata?: Record<string, JsonValue>;
-};
-
-/**
- * JSON-serializable transcript produced by the system under test.
- *
- * @example
- * ```ts
- * const session: NormalizedSession = {
- *   provider: "openai",
- *   model: "gpt-4o-mini",
- *   messages: [
- *     { role: "user", content: "Refund invoice inv_123" },
- *     { role: "assistant", content: { status: "approved" } },
- *   ],
- * };
- * ```
- */
-export type NormalizedSession = {
-  /** Ordered normalized transcript messages. */
-  messages: NormalizedMessage[];
-  /** Provider that produced the session when known. */
-  provider?: string;
-  /** Model that produced the session when known. */
-  model?: string;
-  /** Extra JSON-safe session metadata. */
-  metadata?: Record<string, JsonValue>;
-};
-
 type OutputField<TOutput extends JsonValue | undefined> =
   undefined extends TOutput ? { output?: TOutput } : { output: TOutput };
-
-/**
- * Normalized result returned by every harness execution.
- *
- * @example
- * ```ts
- * const run: HarnessRun<{ status: "approved" }> = {
- *   output: { status: "approved" },
- *   session: {
- *     messages: [
- *       { role: "user", content: "Refund invoice inv_123" },
- *       { role: "assistant", content: { status: "approved" } },
- *     ],
- *   },
- *   usage: { totalTokens: 260 },
- *   errors: [],
- * };
- * ```
- */
-export type HarnessRun<
-  TOutput extends JsonValue | undefined = JsonValue | undefined,
-> = OutputField<TOutput> & {
-  /** Normalized transcript and provider/session metadata. */
-  session: NormalizedSession;
-  /** Stable provider usage units such as tokens, tools, and retries. */
-  usage: UsageSummary;
-  /** Optional timing summary for the run. */
-  timings?: TimingSummary;
-  /** JSON-safe run artifacts captured by the harness or test context. */
-  artifacts?: Record<string, JsonValue>;
-  /** Normalized traces and spans captured during execution. */
-  traces?: NormalizedTrace[];
-  /** Normalized errors captured during execution. */
-  errors: Array<Record<string, JsonValue>>;
-};
-
-/** Error value with an attached partial or complete normalized harness run. */
-export type HarnessRunError = Error & {
-  /** Attached normalized harness run recovered by `getHarnessRunFromError(...)`. */
-  vitestEvalsRun: HarnessRun;
-};
 
 /** Per-run metadata shape accepted by harnesses and eval tests. */
 export type HarnessMetadata = Record<string, unknown>;
@@ -1206,22 +896,6 @@ export function createGenAiUsageAttributes(
 }
 
 /**
- * Flattens every recorded tool call from a normalized session.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const names = toolCalls(result.session).map((call) => call.name);
- *
- * expect(names).toEqual(["lookupInvoice", "createRefund"]);
- * ```
- */
-export function toolCalls(session: NormalizedSession): ToolCallRecord[] {
-  return session.messages.flatMap((message) => message.toolCalls ?? []);
-}
-
-/**
  * Converts normalized tool-call records into trace spans.
  *
  * Tool-call ids are preserved as GenAI attributes. Pass `spanIdPrefix` when the
@@ -1323,141 +997,6 @@ let nextGeneratedTraceId = 0;
 function createGeneratedTraceId() {
   nextGeneratedTraceId += 1;
   return `trace_${nextGeneratedTraceId}`;
-}
-
-/**
- * Flattens every recorded span from a normalized harness run.
- *
- * @param run - Normalized harness run produced by a harness.
- *
- * @example
- * ```ts
- * const modelSpans = spans(result).filter((span) => span.kind === "model");
- * ```
- */
-export function spans(run: HarnessRun): NormalizedSpan[] {
-  return (run.traces ?? []).flatMap((trace) => trace.spans);
-}
-
-/**
- * Returns spans of one coarse operation kind from a normalized run.
- *
- * @param run - Normalized harness run produced by a harness.
- * @param kind - Span kind to keep.
- */
-export function spansByKind(
-  run: HarnessRun,
-  kind: NonNullable<NormalizedSpan["kind"]>,
-): NormalizedSpan[] {
-  return spans(run).filter((span) => span.kind === kind);
-}
-
-/**
- * Returns every span that explicitly failed or carries a normalized error.
- *
- * @param run - Normalized harness run produced by a harness.
- */
-export function failedSpans(run: HarnessRun): NormalizedSpan[] {
-  return spans(run).filter((span) => span.status === "error" || span.error);
-}
-
-/**
- * Filters normalized session messages by role.
- *
- * @param session - Normalized session produced by a harness run.
- * @param role - Message role to keep.
- *
- * @example
- * ```ts
- * const assistantText = messagesByRole(result.session, "assistant")
- *   .map((message) => message.content)
- *   .join("\n");
- * ```
- */
-export function messagesByRole(
-  session: NormalizedSession,
-  role: NormalizedMessage["role"],
-): NormalizedMessage[] {
-  return session.messages.filter((message) => message.role === role);
-}
-
-function hasNonEmptyMessageContent(message: NormalizedMessage) {
-  return (
-    message.content !== undefined &&
-    (typeof message.content !== "string" || message.content.trim().length > 0)
-  );
-}
-
-/**
- * Returns every normalized system message from a session.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const systemPrompts = systemMessages(result.session);
- * ```
- */
-export function systemMessages(session: NormalizedSession) {
-  return messagesByRole(session, "system");
-}
-
-/**
- * Returns every normalized user message from a session.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const firstPrompt = userMessages(result.session)[0]?.content;
- * ```
- */
-export function userMessages(session: NormalizedSession) {
-  return messagesByRole(session, "user");
-}
-
-/**
- * Returns every normalized assistant message from a session.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const finalAnswer = assistantMessages(result.session).at(-1)?.content;
- * ```
- */
-export function assistantMessages(session: NormalizedSession) {
-  return messagesByRole(session, "assistant");
-}
-
-/**
- * Returns the latest assistant message content, ignoring empty text messages.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const finalAnswer = latestAssistantMessageContent(result.session);
- * ```
- */
-export function latestAssistantMessageContent(session: NormalizedSession) {
-  return [...assistantMessages(session)]
-    .reverse()
-    .find(hasNonEmptyMessageContent)?.content;
-}
-
-/**
- * Returns every normalized tool message from a session.
- *
- * @param session - Normalized session produced by a harness run.
- *
- * @example
- * ```ts
- * const toolOutputs = toolMessages(result.session).map((message) => message.content);
- * ```
- */
-export function toolMessages(session: NormalizedSession) {
-  return messagesByRole(session, "tool");
 }
 
 /**

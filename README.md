@@ -4,6 +4,10 @@ Monorepo for the explicit-run `vitest-evals` shape:
 
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
   types, and reporter
+- `packages/core`: shared primitives, JSON artifact schemas, and full-report
+  collection helpers
+- `packages/report-ui`: local React SPA and CLI for inspecting Vitest JSON
+  report artifacts
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
@@ -33,10 +37,12 @@ Monorepo for the explicit-run `vitest-evals` shape:
 ```text
 packages/
   vitest-evals/
+  core/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
   github-reporter/
+  report-ui/
 apps/
   demo-ai-sdk/
   demo-openai-agents/
@@ -114,6 +120,19 @@ separate Check Run when `publish-check` is enabled and `checks: write`
 permission is configured. It can also reduce sharded eval JSON artifacts into
 one combined report.
 See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow.
+
+## Local Report UI
+
+Use `vitest-evals-view` to inspect one or more JSON reports locally. It accepts
+files, simple globs, and directories of JSON artifacts, then serves a React SPA
+with run summaries, eval cases, harness output, sessions, tools, and trace
+details.
+
+```sh
+pnpm exec vitest-evals-view vitest-results.json
+pnpm exec vitest-evals-view "eval-results/*.json"
+pnpm exec vitest-evals-view eval-results/
+```
 
 ## Releases
 

@@ -144,6 +144,18 @@ compatibility.
 
 Full transcripts and spans are preserved in the Vitest JSON report metadata.
 
+## Local Report UI
+
+The local report UI reads the same Vitest JSON artifacts and serves a React SPA
+for drilling into runs, eval cases, harness output, sessions, tool calls,
+scores, and trace spans.
+
+```sh
+pnpm exec vitest-evals-view vitest-results.json
+pnpm exec vitest-evals-view "eval-results/*.json"
+pnpm exec vitest-evals-view eval-results/
+```
+
 ## GitHub Actions Reporting
 
 Use Vitest JSON as the eval report artifact. It preserves the `meta` field that

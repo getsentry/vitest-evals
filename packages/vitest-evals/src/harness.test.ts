@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import { EvalTaskMetaSchema } from "@vitest-evals/core";
 import {
   assistantMessages,
   createJudge,
@@ -715,7 +716,7 @@ test("JSON normalization drops non-finite numbers and circular references", () =
 });
 
 describeEval("harness mode", { harness }, (it) => {
-  it("refund request", async ({ run }) => {
+  it("refund request", async ({ run, task }) => {
     const result = await run("Refund invoice inv_123", {
       metadata: {
         name: "refund request",
@@ -758,6 +759,7 @@ describeEval("harness mode", { harness }, (it) => {
         },
       },
     ]);
+    expect(EvalTaskMetaSchema.safeParse(task.meta).success).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(runSpy).toHaveBeenCalledWith(
       "Refund invoice inv_123",

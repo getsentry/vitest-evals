@@ -1,4 +1,4 @@
-import { splitResultsInput } from "../results";
+import { splitResultsInput } from "@vitest-evals/core/node";
 
 export type ActionInputs = {
   results: string[];

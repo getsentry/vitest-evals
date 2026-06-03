@@ -67,8 +67,13 @@ Package purposes:
   runners, local tool capture, and replay metadata.
 - `@vitest-evals/harness-pi-ai`: adapter for Pi agents and replay-capable
   tool execution.
+- `@vitest-evals/core`: shared primitives, schemas, and collection helpers for
+  normalized runs and Vitest JSON eval artifacts. Its `./node` subpath contains
+  shared path, glob, directory, and JSON file readers for report consumers.
 - `@vitest-evals/github-reporter`: implementation package behind the GitHub
   Action. Most users should consume the action as `getsentry/vitest-evals@v0`.
+- `@vitest-evals/report-ui`: local `vitest-evals-view` CLI and React SPA for
+  inspecting JSON report artifacts, harness sessions, tool calls, and traces.
 
 ## Configure Vitest
 

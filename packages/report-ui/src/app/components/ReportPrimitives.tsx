@@ -1,0 +1,119 @@
+import type { ReactNode } from "react";
+import type { ReportCase } from "@vitest-evals/core";
+import {
+  formatJson,
+  formatScore,
+  scoreTone,
+  type summarizeWorkspace,
+} from "../model";
+import { CodeBlock, EmptyState, cx, toneTextClass, type Tone } from "../ui";
+
+export function JsonBlock({ value }: { value: unknown }) {
+  if (value === undefined || value === "") {
+    return <EmptyState>n/a</EmptyState>;
+  }
+
+  return <CodeBlock value={formatJson(value)} />;
+}
+
+export function FactsGrid({
+  compact,
+  children,
+}: {
+  compact?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <dl
+      className={cx(
+        "grid gap-px bg-line-subtle",
+        compact
+          ? "rounded-lg border border-line-subtle sm:grid-cols-2 2xl:grid-cols-4"
+          : "border-b border-line-subtle sm:grid-cols-2 2xl:grid-cols-4",
+      )}
+    >
+      {children}
+    </dl>
+  );
+}
+
+export function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 bg-panel px-3 py-2">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-semibold text-ink">{value}</dd>
+    </div>
+  );
+}
+
+export function StatusMark({ status }: { status: ReportCase["status"] }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-muted-strong">
+      <span
+        className={cx(
+          "h-2.5 w-2.5 shrink-0 rounded-[2px]",
+          statusFillClass(statusTone(status)),
+        )}
+        aria-hidden="true"
+      />
+      <span>{status}</span>
+    </span>
+  );
+}
+
+export function ScoreValue({
+  score,
+  size = "md",
+}: {
+  score: number | null | undefined;
+  size?: "md" | "lg";
+}) {
+  const tone = scoreTone(score) as Tone;
+  return (
+    <span
+      className={cx(
+        "font-semibold tabular-nums",
+        size === "lg" ? "text-2xl" : "text-sm",
+        toneTextClass(tone),
+      )}
+    >
+      {formatScore(score)}
+    </span>
+  );
+}
+
+export function passRate(summary: ReturnType<typeof summarizeWorkspace>) {
+  if (summary.caseCount === 0) {
+    return "n/a";
+  }
+  return `${Math.round((summary.passed / summary.caseCount) * 100)}%`;
+}
+
+export function statusTone(status: ReportCase["status"]): Tone {
+  switch (status) {
+    case "passed":
+      return "good";
+    case "failed":
+      return "bad";
+    case "pending":
+    case "todo":
+      return "warn";
+    default:
+      return "empty";
+  }
+}
+
+export function statusFillClass(tone: Tone) {
+  switch (tone) {
+    case "good":
+      return "bg-pass-line";
+    case "warn":
+      return "bg-warn";
+    case "bad":
+      return "bg-fail-line";
+    case "trace":
+      return "bg-trace";
+    default:
+      return "bg-muted";
+  }
+}

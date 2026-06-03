@@ -33,6 +33,7 @@ When changing behavior, decide first which surface you are touching:
 
 - root harness/judge API
 - reporter output
+- shared primitives, JSON artifact schemas, and collection
 - GitHub JSON post-processing output
 - a first-party harness package
 - legacy scorer compatibility
@@ -53,7 +54,8 @@ That split should stay explicit in both code and documentation.
 
 Owns:
 
-- normalized harness/session types
+- harness execution and normalization helpers
+- re-exports for normalized core types and read helpers
 - root `describeEval(...)`
 - judge helpers and matcher APIs
 - reporter integration
@@ -81,6 +83,37 @@ Owns:
 - adapting `pi-ai` style agents into `HarnessRun`
 - wrapped tool runtime injection
 - tool replay/VCR behavior
+
+### `packages/core`
+
+Owns:
+
+- dependency-light primitives shared across package boundaries
+- schemas and TypeScript types for normalized runs, sessions, traces, and
+  persisted Vitest JSON eval artifacts
+- `task.meta.eval` and `task.meta.harness` parsing
+- full-fidelity collection of multiple JSON reports for rich consumers
+- Node-only path, glob, directory, and JSON file readers under
+  `@vitest-evals/core/node`
+- tolerant preservation of provider-specific JSON metadata
+
+Use this package when code needs shared data contracts without depending on
+Vitest lifecycle APIs. Keep `describeEval(...)`, matchers, and the terminal
+reporter in `packages/vitest-evals`; keep GitHub-specific summaries,
+annotations, and Check Run payloads in `packages/github-reporter`.
+
+### `packages/report-ui`
+
+Owns:
+
+- the `vitest-evals-view` local report CLI
+- the static HTTP server that exposes `/data/workspace.json`
+- the React SPA for runs, cases, scores, sessions, tool calls, and traces
+- browser-only presentation helpers over the shared `ReportWorkspace` model
+
+Keep the UI package focused on interaction and local serving. Shared artifact
+schemas and collection behavior belong in `packages/core`; CI-specific
+rendering belongs in `packages/github-reporter`.
 
 ### `packages/github-reporter`
 
@@ -179,6 +212,10 @@ For targeted work, prefer narrow verification:
 - harness changes: run the relevant harness package tests
 - demo app changes: run `pnpm evals` or a filtered app eval command
 - legacy changes: run the moved tests under `packages/vitest-evals/src/legacy`
+- shared core changes: run `packages/core/src/index.test.ts` and the GitHub
+  reporter tests
+- report UI changes: run `packages/report-ui/src/server.test.ts`,
+  `packages/report-ui/src/app/model.test.ts`, and the report UI build
 
 ## Documentation Expectations
 
