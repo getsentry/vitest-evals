@@ -4,6 +4,7 @@ import {
   loadWorkspace,
   resolveSelectedCase,
   resolveSelectedCaseId,
+  summarizeVisibleWorkspace,
 } from "./App";
 
 const cases: ReportWorkspace["cases"] = [
@@ -51,6 +52,104 @@ describe("case selection", () => {
   test("preserves a selected case that remains visible", () => {
     expect(resolveSelectedCase("failed-case", cases)).toEqual(cases[0]);
     expect(resolveSelectedCaseId("failed-case", cases)).toBe("failed-case");
+  });
+});
+
+describe("visible summary", () => {
+  test("summarizes only visible cases when filters are active", () => {
+    expect(
+      summarizeVisibleWorkspace(
+        {
+          schemaVersion: 1,
+          runs: [
+            {
+              id: "run-1",
+              status: "failed",
+              durationMs: 1000,
+              totals: {
+                evalFailed: 1,
+                evalPassed: 0,
+                evalTotal: 1,
+                failed: 1,
+                passed: 0,
+                skipped: 0,
+                total: 1,
+              },
+            },
+            {
+              id: "run-2",
+              status: "passed",
+              durationMs: 2000,
+              totals: {
+                evalFailed: 0,
+                evalPassed: 1,
+                evalTotal: 1,
+                failed: 0,
+                passed: 1,
+                skipped: 0,
+                total: 1,
+              },
+            },
+          ],
+          cases: [
+            cases[0]!,
+            {
+              ...cases[1]!,
+              runId: "run-2",
+            },
+          ],
+        },
+        {
+          query: "",
+          runId: "run-2",
+          status: "passed",
+        },
+        [
+          {
+            ...cases[1]!,
+            runId: "run-2",
+          },
+        ],
+      ),
+    ).toMatchObject({
+      caseCount: 1,
+      durationMs: 2000,
+      failed: 0,
+      passed: 1,
+      runCount: 1,
+    });
+  });
+
+  test("keeps run counts for unfiltered empty reports", () => {
+    expect(
+      summarizeVisibleWorkspace(
+        {
+          schemaVersion: 1,
+          runs: [
+            {
+              id: "run-1",
+              status: "passed",
+              totals: {
+                evalFailed: 0,
+                evalPassed: 0,
+                evalTotal: 0,
+                failed: 0,
+                passed: 1,
+                skipped: 0,
+                total: 1,
+              },
+            },
+          ],
+          cases: [],
+        },
+        {
+          query: "",
+          runId: "all",
+          status: "all",
+        },
+        [],
+      ).runCount,
+    ).toBe(1);
   });
 });
 

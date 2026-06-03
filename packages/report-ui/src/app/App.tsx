@@ -56,10 +56,13 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
 
-  const summary = useMemo(() => summarizeWorkspace(workspace), [workspace]);
   const filteredCases = useMemo(
     () => filterReportCases(workspace.cases, filters),
     [workspace.cases, filters],
+  );
+  const summary = useMemo(
+    () => summarizeVisibleWorkspace(workspace, filters, filteredCases),
+    [workspace, filters, filteredCases],
   );
   const selectedCase = resolveSelectedCase(selectedCaseId, filteredCases);
 
@@ -130,6 +133,38 @@ export function resolveSelectedCaseId(
     return selectedCaseId;
   }
   return filteredCases[0]?.id;
+}
+
+export function summarizeVisibleWorkspace(
+  workspace: ReportWorkspace,
+  filters: CaseFilters,
+  filteredCases: ReportWorkspace["cases"],
+) {
+  return summarizeWorkspace({
+    ...workspace,
+    cases: filteredCases,
+    runs: hasActiveCaseFilters(filters)
+      ? visibleRunsForCases(workspace.runs, filteredCases)
+      : workspace.runs,
+  });
+}
+
+function hasActiveCaseFilters(filters: CaseFilters) {
+  return (
+    filters.query.trim().length > 0 ||
+    filters.status !== "all" ||
+    filters.runId !== "all"
+  );
+}
+
+function visibleRunsForCases(
+  runs: ReportWorkspace["runs"],
+  filteredCases: ReportWorkspace["cases"],
+) {
+  const visibleRunIds = new Set(
+    filteredCases.map((testCase) => testCase.runId),
+  );
+  return runs.filter((run) => visibleRunIds.has(run.id));
 }
 
 export async function loadWorkspace(
