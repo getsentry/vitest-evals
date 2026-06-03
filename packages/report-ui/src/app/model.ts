@@ -27,7 +27,7 @@ export type WorkspaceSummary = {
   averageScore?: number;
   totalTokens: number;
   toolCallCount: number;
-  durationMs: number;
+  durationMs?: number;
 };
 
 export type SpanNode = NormalizedSpan & {
@@ -302,6 +302,10 @@ function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
     const start = Math.min(...intervals.map((interval) => interval.start));
     const end = Math.max(...intervals.map((interval) => interval.end));
     return Math.max(0, end - start);
+  }
+
+  if (durations.length === 0) {
+    return undefined;
   }
 
   return durations.reduce((total, duration) => total + duration, 0);

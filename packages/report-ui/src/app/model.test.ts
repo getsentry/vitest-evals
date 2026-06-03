@@ -184,6 +184,22 @@ describe("summarizeWorkspace", () => {
       }).durationMs,
     ).toBe(8000);
   });
+
+  test("keeps runtime unknown when no runs have durations", () => {
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        runs: [
+          {
+            id: "shard-a.json",
+            source: "shard-a.json",
+            status: "failed",
+            totals: workspace.runs[0]!.totals,
+          },
+        ],
+      }).durationMs,
+    ).toBeUndefined();
+  });
 });
 
 describe("filterReportCases", () => {
