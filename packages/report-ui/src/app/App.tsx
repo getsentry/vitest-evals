@@ -60,9 +60,18 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
     () => filterReportCases(workspace.cases, filters),
     [workspace.cases, filters],
   );
+  const visibleRuns = useMemo(
+    () => visibleWorkspaceRuns(workspace.runs, filters, filteredCases),
+    [workspace.runs, filters, filteredCases],
+  );
   const summary = useMemo(
-    () => summarizeVisibleWorkspace(workspace, filters, filteredCases),
-    [workspace, filters, filteredCases],
+    () =>
+      summarizeWorkspace({
+        ...workspace,
+        cases: filteredCases,
+        runs: visibleRuns,
+      }),
+    [workspace, filteredCases, visibleRuns],
   );
   const selectedCase = resolveSelectedCase(selectedCaseId, filteredCases);
 
@@ -84,7 +93,7 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
           runCount={summary.runCount}
         />
         <SummaryBar summary={summary} />
-        <RunStrip runs={workspace.runs} selectedRunId={filters.runId} />
+        <RunStrip runs={visibleRuns} selectedRunId={filters.runId} />
 
         <section className="grid gap-3" aria-label="Report workspace">
           <CaseWorkbench
@@ -143,10 +152,20 @@ export function summarizeVisibleWorkspace(
   return summarizeWorkspace({
     ...workspace,
     cases: filteredCases,
-    runs: hasActiveCaseFilters(filters)
-      ? visibleRunsForCases(workspace.runs, filteredCases)
-      : workspace.runs,
+    runs: visibleWorkspaceRuns(workspace.runs, filters, filteredCases),
   });
+}
+
+export function visibleWorkspaceRuns(
+  runs: ReportWorkspace["runs"],
+  filters: CaseFilters,
+  filteredCases: ReportWorkspace["cases"],
+) {
+  if (!hasActiveCaseFilters(filters)) {
+    return runs;
+  }
+
+  return visibleRunsForCases(runs, filteredCases);
 }
 
 function hasActiveCaseFilters(filters: CaseFilters) {

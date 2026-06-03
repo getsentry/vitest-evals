@@ -5,6 +5,7 @@ import {
   resolveSelectedCase,
   resolveSelectedCaseId,
   summarizeVisibleWorkspace,
+  visibleWorkspaceRuns,
 } from "./App";
 
 const cases: ReportWorkspace["cases"] = [
@@ -56,41 +57,43 @@ describe("case selection", () => {
 });
 
 describe("visible summary", () => {
+  const runs: ReportWorkspace["runs"] = [
+    {
+      id: "run-1",
+      status: "failed",
+      durationMs: 1000,
+      totals: {
+        evalFailed: 1,
+        evalPassed: 0,
+        evalTotal: 1,
+        failed: 1,
+        passed: 0,
+        skipped: 0,
+        total: 1,
+      },
+    },
+    {
+      id: "run-2",
+      status: "passed",
+      durationMs: 2000,
+      totals: {
+        evalFailed: 0,
+        evalPassed: 1,
+        evalTotal: 1,
+        failed: 0,
+        passed: 1,
+        skipped: 0,
+        total: 1,
+      },
+    },
+  ];
+
   test("summarizes only visible cases when filters are active", () => {
     expect(
       summarizeVisibleWorkspace(
         {
           schemaVersion: 1,
-          runs: [
-            {
-              id: "run-1",
-              status: "failed",
-              durationMs: 1000,
-              totals: {
-                evalFailed: 1,
-                evalPassed: 0,
-                evalTotal: 1,
-                failed: 1,
-                passed: 0,
-                skipped: 0,
-                total: 1,
-              },
-            },
-            {
-              id: "run-2",
-              status: "passed",
-              durationMs: 2000,
-              totals: {
-                evalFailed: 0,
-                evalPassed: 1,
-                evalTotal: 1,
-                failed: 0,
-                passed: 1,
-                skipped: 0,
-                total: 1,
-              },
-            },
-          ],
+          runs,
           cases: [
             cases[0]!,
             {
@@ -118,6 +121,37 @@ describe("visible summary", () => {
       passed: 1,
       runCount: 1,
     });
+  });
+
+  test("returns the same visible runs used by filtered summaries", () => {
+    expect(
+      visibleWorkspaceRuns(
+        runs,
+        {
+          query: "",
+          runId: "run-2",
+          status: "passed",
+        },
+        [
+          {
+            ...cases[1]!,
+            runId: "run-2",
+          },
+        ],
+      ),
+    ).toEqual([runs[1]]);
+
+    expect(
+      visibleWorkspaceRuns(
+        runs,
+        {
+          query: "",
+          runId: "all",
+          status: "all",
+        },
+        [],
+      ),
+    ).toEqual(runs);
   });
 
   test("keeps run counts for unfiltered empty reports", () => {
