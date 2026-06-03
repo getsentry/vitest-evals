@@ -279,15 +279,21 @@ function toolCallsForCase(testCase: ReportCase) {
 
 function toolCallCountForCase(testCase: ReportCase) {
   const run = testCase.harness?.run;
+  const sessionToolCallCount = run ? toolCalls(run.session).length : 0;
+  const evalToolCallCount = testCase.eval?.toolCalls?.length ?? 0;
   if (run?.usage.toolCalls !== undefined) {
-    return Math.max(run.usage.toolCalls, testCase.eval?.toolCalls?.length ?? 0);
+    return Math.max(
+      run.usage.toolCalls,
+      sessionToolCallCount,
+      evalToolCallCount,
+    );
   }
 
   if (!run && !testCase.eval?.toolCalls) {
     return undefined;
   }
 
-  return toolCallsForCase(testCase).length;
+  return Math.max(sessionToolCallCount, evalToolCallCount);
 }
 
 function workspaceDurationMs(runs: ReportWorkspace["runs"]) {

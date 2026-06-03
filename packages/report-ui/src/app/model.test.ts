@@ -268,6 +268,22 @@ describe("case helpers", () => {
     });
   });
 
+  test("does not let usage undercount recorded session tool calls", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    testCase.harness!.run!.usage.toolCalls = 1;
+    testCase.harness!.run!.session.messages[0]!.toolCalls!.push({
+      name: "createRefund",
+    });
+
+    expect(caseToolCallCount(testCase)).toBe(2);
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        cases: [testCase],
+      }).toolCallCount,
+    ).toBe(2);
+  });
+
   test("formats scores for compact UI surfaces", () => {
     expect(formatScore(0.2)).toBe("20%");
     expect(scoreTone(1)).toBe("good");
