@@ -149,7 +149,7 @@ function TranscriptMessageHeader({
 function MessageBody({ value }: { value: unknown }) {
   if (value === undefined || value === "") {
     return (
-      <p className="font-mono text-[0.85rem] leading-snug text-[#888]">
+      <p className="font-mono text-[0.85rem] leading-snug text-empty">
         No content
       </p>
     );
@@ -246,7 +246,7 @@ function transcriptRoleLabel(role: TranscriptMessage["role"]): string {
 function transcriptMessageClass(role: TranscriptMessage["role"]): string {
   return cx(
     "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 border-l-4 py-2 pl-3",
-    role === "assistant" && "border-l-trace bg-selected pr-3 text-ink",
+    role === "assistant" && "border-l-trace bg-trace-soft pr-3 text-ink",
     role === "user" && "border-l-ink bg-panel pr-3 text-ink",
     role === "system" && "border-l-warn bg-panel pr-3 text-ink",
     role === "tool" && "border-l-line text-muted-strong",

@@ -5,22 +5,25 @@
     BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-  --color-canvas: #f6f7f9;
+  --color-canvas: #f7f9f8;
   --color-panel: #ffffff;
-  --color-panel-subtle: #fbfcfe;
-  --color-line: #d9dee7;
-  --color-line-subtle: #e8ecf2;
-  --color-ink: #162033;
-  --color-muted: #66758a;
-  --color-muted-strong: #536579;
-  --color-selected: #f3f6ff;
-  --color-selected-line: #bfd0ff;
-  --color-pass: #087443;
-  --color-pass-line: #10a76b;
-  --color-warn: #9a5b00;
-  --color-fail: #b42318;
-  --color-fail-line: #d14335;
-  --color-trace: #4f70e8;
+  --color-panel-subtle: #f1f4f2;
+  --color-line: #cfd8d3;
+  --color-line-subtle: #e3e8e5;
+  --color-ink: #17201c;
+  --color-muted: #68766f;
+  --color-muted-strong: #53625b;
+  --color-selected: #e8f2ef;
+  --color-selected-line: #72aaa0;
+  --color-code: #24342e;
+  --color-empty: #8b9691;
+  --color-pass: #247857;
+  --color-pass-line: #32a06f;
+  --color-warn: #946800;
+  --color-fail: #b12a22;
+  --color-fail-line: #d43f34;
+  --color-trace: #2f5f8f;
+  --color-trace-soft: #e7eff6;
 }
 
 @layer base {
