@@ -13,4 +13,5 @@ export default defineConfig({
   clean: true,
   outDir: "../../github-reporter/dist/action",
   external: [],
+  noExternal: ["@vitest-evals/core", "@vitest-evals/core/node"],
 });
