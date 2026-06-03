@@ -92,10 +92,12 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
           caseCount={summary.caseCount}
           runCount={summary.runCount}
         />
-        <SummaryBar summary={summary} />
-        <RunStrip runs={visibleRuns} selectedRunId={filters.runId} />
-
-        <section className="grid gap-3" aria-label="Report workspace">
+        <section
+          className="overflow-hidden rounded-md border border-line bg-panel shadow-[0_1px_0_rgba(23,32,28,0.03)]"
+          aria-label="Report workspace"
+        >
+          <SummaryBar summary={summary} />
+          <RunStrip runs={visibleRuns} selectedRunId={filters.runId} />
           <CaseWorkbench
             cases={filteredCases}
             filters={filters}

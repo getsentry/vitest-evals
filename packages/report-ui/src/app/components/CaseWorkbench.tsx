@@ -7,15 +7,7 @@ import {
   type CaseFilters,
   type CaseStatusFilter,
 } from "../model";
-import {
-  EmptyState,
-  Field,
-  Input,
-  Panel,
-  SectionHeader,
-  Select,
-  cx,
-} from "../ui";
+import { EmptyState, Field, Input, SectionHeader, Select, cx } from "../ui";
 import { ScoreValue, StatusMark } from "./ReportPrimitives";
 
 type CaseColumn = {
@@ -85,7 +77,7 @@ export function CaseWorkbench({
   onSelectCase: (testCase: ReportCase) => void;
 }) {
   return (
-    <Panel className="min-h-[620px]">
+    <section className="min-h-[620px] min-w-0 bg-panel">
       <SectionHeader
         title="Eval cases"
         detail={`${cases.length} of ${totalCases} case(s)`}
@@ -100,7 +92,7 @@ export function CaseWorkbench({
         selectedCaseId={selectedCaseId}
         onSelectCase={onSelectCase}
       />
-    </Panel>
+    </section>
   );
 }
 

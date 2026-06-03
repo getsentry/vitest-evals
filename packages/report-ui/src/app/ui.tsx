@@ -74,10 +74,12 @@ export function Metric({
   tone?: Tone;
 }) {
   return (
-    <div className="min-h-[76px] bg-panel px-4 py-3">
-      <span className="block text-xs text-muted">{label}</span>
+    <div className="min-h-16 bg-panel px-3 py-2.5">
+      <span className="block text-[0.68rem] font-semibold uppercase text-muted">
+        {label}
+      </span>
       <strong
-        className={cx("mt-1 block text-2xl font-semibold", toneTextClass(tone))}
+        className={cx("mt-1 block text-xl font-semibold", toneTextClass(tone))}
       >
         {value}
       </strong>

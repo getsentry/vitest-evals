@@ -7,7 +7,7 @@ import {
   type summarizeWorkspace,
 } from "../model";
 import { Metric, cx, type Tone } from "../ui";
-import { passRate } from "./ReportPrimitives";
+import { passRate, statusFillClass } from "./ReportPrimitives";
 
 export function ReportHeader({
   caseCount,
@@ -17,16 +17,20 @@ export function ReportHeader({
   runCount: number;
 }) {
   return (
-    <header className="flex flex-col gap-4 pb-4 md:flex-row md:items-end md:justify-between">
-      <div className="min-w-0">
+    <header className="flex flex-col gap-3 border-b border-line pb-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
         <p className="text-xs font-semibold uppercase text-muted-strong">
           vitest-evals
         </p>
-        <h1 className="mt-1 text-3xl font-semibold text-ink">Report</h1>
+        <h1 className="text-2xl font-semibold text-ink">Eval report</h1>
       </div>
-      <div className="flex flex-wrap gap-2 text-sm text-muted">
-        <span>{runCount} run(s)</span>
-        <span>{caseCount} eval case(s)</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <span>
+          <strong className="font-semibold text-ink">{runCount}</strong> runs
+        </span>
+        <span>
+          <strong className="font-semibold text-ink">{caseCount}</strong> cases
+        </span>
       </div>
     </header>
   );
@@ -39,7 +43,7 @@ export function SummaryBar({
 }) {
   return (
     <section
-      className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-6"
+      className="grid grid-cols-2 gap-px border-b border-line bg-line-subtle sm:grid-cols-3 lg:grid-cols-6"
       aria-label="Report summary"
     >
       <Metric label="Pass rate" value={passRate(summary)} tone="good" />
@@ -68,36 +72,50 @@ export function RunStrip({
   selectedRunId: string;
 }) {
   return (
-    <section
-      className="my-3 grid gap-2 lg:grid-cols-2 2xl:grid-cols-3"
-      aria-label="Runs"
-    >
-      {runs.map((run) => (
-        <div
-          className={cx(
-            "flex min-h-[68px] min-w-0 items-center justify-between gap-4 rounded-lg border border-line bg-panel p-3",
-            run.status === "passed"
-              ? "border-l-4 border-l-pass-line"
-              : "border-l-4 border-l-fail-line",
-            selectedRunId === run.id &&
-              "outline outline-2 outline-selected-line",
-          )}
-          key={run.id}
-        >
-          <div className="min-w-0">
-            <strong className="block truncate text-sm font-semibold">
-              {run.source ?? run.id}
-            </strong>
-            <span className="mt-1 block text-xs text-muted">
-              {formatDuration(run.durationMs)}
-            </span>
+    <section className="border-b border-line bg-panel-subtle" aria-label="Runs">
+      <div className="flex overflow-x-auto">
+        {runs.map((run) => (
+          <div
+            className={cx(
+              "flex min-h-12 min-w-[320px] flex-1 items-center justify-between gap-4 border-r border-line-subtle px-3 py-2 last:border-r-0",
+              selectedRunId === run.id && "bg-selected",
+            )}
+            key={run.id}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className={cx(
+                  "size-2 shrink-0 rounded-[2px]",
+                  statusFillClass(run.status === "passed" ? "good" : "bad"),
+                )}
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <strong className="block truncate text-sm font-semibold">
+                  {run.source ?? run.id}
+                </strong>
+                <span className="block text-xs text-muted">
+                  {formatDuration(run.durationMs)}
+                </span>
+              </div>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-3 text-right text-xs text-muted">
+              <span>
+                <strong className="block font-semibold text-pass">
+                  {run.totals.evalPassed}
+                </strong>
+                passed
+              </span>
+              <span>
+                <strong className="block font-semibold text-fail">
+                  {run.totals.evalFailed}
+                </strong>
+                failed
+              </span>
+            </div>
           </div>
-          <div className="shrink-0 text-right text-xs text-muted">
-            <span className="block">{run.totals.evalPassed} passed</span>
-            <span className="block">{run.totals.evalFailed} failed</span>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   );
 }
