@@ -123,15 +123,15 @@ See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow.
 
 ## Local Report UI
 
-Use `vitest-evals-view` to inspect one or more JSON reports locally. It accepts
-files, simple globs, and directories of JSON artifacts, then serves a React SPA
-with run summaries, eval cases, harness output, sessions, tools, and trace
-details.
+Use `vitest-evals serve` to inspect one or more JSON reports locally. It
+accepts files, simple globs, and directories of JSON artifacts, then serves a
+React SPA with run summaries, eval cases, harness output, sessions, tools, and
+trace details.
 
 ```sh
-pnpm exec vitest-evals-view vitest-results.json
-pnpm exec vitest-evals-view "eval-results/*.json"
-pnpm exec vitest-evals-view eval-results/
+pnpm exec vitest-evals serve vitest-results.json
+pnpm exec vitest-evals serve "eval-results/*.json"
+pnpm exec vitest-evals serve eval-results/
 ```
 
 ## Releases

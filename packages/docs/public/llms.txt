@@ -72,8 +72,9 @@ Package purposes:
   shared path, glob, directory, and JSON file readers for report consumers.
 - `@vitest-evals/github-reporter`: implementation package behind the GitHub
   Action. Most users should consume the action as `getsentry/vitest-evals@v0`.
-- `@vitest-evals/report-ui`: local `vitest-evals-view` CLI and React SPA for
-  inspecting JSON report artifacts, harness sessions, tool calls, and traces.
+- `@vitest-evals/report-ui`: implementation package behind
+  `vitest-evals serve`, the local React SPA for inspecting JSON report
+  artifacts, harness sessions, tool calls, and traces.
 
 ## Configure Vitest
 

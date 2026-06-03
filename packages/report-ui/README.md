@@ -3,13 +3,13 @@
 Local React report UI for `vitest-evals` JSON artifacts.
 
 ```bash
-pnpm exec vitest-evals-view vitest-results.json
-pnpm exec vitest-evals-view "eval-results/*.json"
-pnpm exec vitest-evals-view eval-results/
+pnpm exec vitest-evals serve vitest-results.json
+pnpm exec vitest-evals serve "eval-results/*.json"
+pnpm exec vitest-evals serve eval-results/
 ```
 
-The CLI accepts Vitest JSON result files, simple `*` and `**` globs, and
-directories containing JSON files. It collects them into the shared
+The product CLI accepts Vitest JSON result files, simple `*` and `**` globs,
+and directories containing JSON files. It collects them into the shared
 `ReportWorkspace` model from `@vitest-evals/core`, serves the SPA locally, and
 exposes the collected data at `/data/workspace.json`.
 

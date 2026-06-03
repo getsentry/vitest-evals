@@ -221,6 +221,9 @@ importers:
       '@vitest-evals/core':
         specifier: workspace:*
         version: link:../core
+      '@vitest-evals/report-ui':
+        specifier: workspace:*
+        version: link:../report-ui
       ai:
         specifier: '>=4 <7'
         version: 6.0.141(zod@4.3.6)

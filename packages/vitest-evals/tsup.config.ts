@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["@vitest-evals/core", "ai", "zod"],
+  external: ["@vitest-evals/core", "@vitest-evals/report-ui", "ai", "zod"],
 });

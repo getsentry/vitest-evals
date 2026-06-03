@@ -5,7 +5,8 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { extname, resolve, sep } from "node:path";
+import { dirname, extname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import { readReportWorkspace } from "@vitest-evals/core/node";
 
@@ -241,5 +242,26 @@ function cacheControlFor(filePath: string) {
 }
 
 function defaultAssetsDir() {
-  return resolve(__dirname, "client");
+  return resolve(moduleDir(), "client");
+}
+
+function moduleDir() {
+  if (typeof __dirname === "string") {
+    return __dirname;
+  }
+
+  const moduleUrl = currentModuleUrl();
+  if (!moduleUrl) {
+    throw new Error("Unable to resolve report UI asset directory");
+  }
+
+  return dirname(fileURLToPath(moduleUrl));
+}
+
+function currentModuleUrl() {
+  // ESM builds do not have __dirname; the stack exposes the bundled file URL
+  // without emitting CJS build warnings for import.meta.
+  const stack = new Error().stack ?? "";
+  const match = stack.match(/(?:at .* \()?((?:file):\/\/[^)\s]+):\d+:\d+\)?/);
+  return match?.[1];
 }

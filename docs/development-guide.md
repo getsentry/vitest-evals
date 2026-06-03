@@ -106,7 +106,7 @@ annotations, and Check Run payloads in `packages/github-reporter`.
 
 Owns:
 
-- the `vitest-evals-view` local report CLI
+- the `vitest-evals serve` local report CLI
 - the static HTTP server that exposes `/data/workspace.json`
 - the React SPA for runs, cases, scores, sessions, tool calls, and traces
 - browser-only presentation helpers over the shared `ReportWorkspace` model

@@ -17,7 +17,10 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": ["dist"],
+  "bin": {
+    "vitest-evals": "./bin/vitest-evals.js"
+  },
+  "files": ["bin", "dist"],
   "exports": {
     ".": {
       "source": "./src/index.ts",
@@ -60,7 +63,8 @@
     "build": "tsup --config ./tsup.config.ts"
   },
   "dependencies": {
-    "@vitest-evals/core": "workspace:*"
+    "@vitest-evals/core": "workspace:*",
+    "@vitest-evals/report-ui": "workspace:*"
   },
   "peerDependencies": {
     "ai": ">=4 <7",

@@ -161,11 +161,12 @@ reporter stay in `packages/vitest-evals`.
 
 ## Report UI
 
-`packages/report-ui` is the local browser surface for Vitest JSON artifacts. It
-accepts files, simple globs, or directories; collects them through
-`@vitest-evals/core/node`; serves the collected `ReportWorkspace` at
-`/data/workspace.json`; and renders a React SPA for run summaries, eval cases,
-scores, harness output, sessions, tool calls, and trace trees.
+`packages/report-ui` is the implementation package behind `vitest-evals serve`,
+the local browser surface for Vitest JSON artifacts. It accepts files, simple
+globs, or directories; collects them through `@vitest-evals/core/node`; serves
+the collected `ReportWorkspace` at `/data/workspace.json`; and renders a React
+SPA for run summaries, eval cases, scores, harness output, sessions, tool
+calls, and trace trees.
 
 The React app consumes the shared `ReportWorkspace` schema from
 `@vitest-evals/core` instead of inventing a UI-only data shape. Server-only

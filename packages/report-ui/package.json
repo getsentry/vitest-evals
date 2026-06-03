@@ -17,9 +17,6 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "bin": {
-    "vitest-evals-view": "./dist/cli.js"
-  },
   "files": ["dist"],
   "publishConfig": {
     "access": "public"

@@ -11,7 +11,7 @@ type MutableReportUiCliOptions = Omit<ReportUiCliOptions, "inputs"> & {
   inputs: string[];
 };
 
-/** Parses `vitest-evals-view` CLI arguments. */
+/** Parses `vitest-evals serve` CLI arguments. */
 export function parseCliArgs(
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -27,7 +27,6 @@ export function parseCliArgs(
     const arg = args[index];
     switch (arg) {
       case "--json":
-      case "--input":
         options.inputs.push(readValue(args, ++index, arg));
         break;
       case "--workspace":

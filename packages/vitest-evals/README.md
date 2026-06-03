@@ -151,9 +151,9 @@ for drilling into runs, eval cases, harness output, sessions, tool calls,
 scores, and trace spans.
 
 ```sh
-pnpm exec vitest-evals-view vitest-results.json
-pnpm exec vitest-evals-view "eval-results/*.json"
-pnpm exec vitest-evals-view eval-results/
+pnpm exec vitest-evals serve vitest-results.json
+pnpm exec vitest-evals serve "eval-results/*.json"
+pnpm exec vitest-evals serve eval-results/
 ```
 
 ## GitHub Actions Reporting
