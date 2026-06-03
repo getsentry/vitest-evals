@@ -1,11 +1,7 @@
 import { z } from "zod";
-import { HarnessRunSchema } from "../harness";
+import { HarnessRunSchema, ToolCallRecordSchema } from "../harness";
 import { JsonObjectSchema, JsonValueSchema } from "../json";
-import {
-  isJsonObject,
-  NullableFiniteNumberSchema,
-  OptionalFiniteNumberSchema,
-} from "../schema-utils";
+import { isJsonObject, NullableFiniteNumberSchema } from "../schema-utils";
 
 /** Harness metadata stored by vitest-evals on Vitest task metadata. */
 export const HarnessMetaSchema = z
@@ -34,9 +30,10 @@ export type EvalScore = z.infer<typeof EvalScoreSchema>;
 export const EvalMetaSchema = z
   .object({
     scores: z.array(EvalScoreSchema).optional(),
-    avgScore: OptionalFiniteNumberSchema,
+    avgScore: NullableFiniteNumberSchema,
     output: JsonValueSchema.optional(),
     thresholdFailed: z.boolean().optional(),
+    toolCalls: z.array(ToolCallRecordSchema).optional(),
   })
   .strict();
 

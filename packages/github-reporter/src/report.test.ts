@@ -189,6 +189,17 @@ describe("collectEvalReport", () => {
     expect(renderJobSummary(report)).not.toContain("Infinity");
     expect(renderWorkflowCommands(report)[0]).toContain("score n/a");
   });
+
+  test("uses validated core duration collection", () => {
+    const json = structuredClone(sampleJson);
+    json.testResults[0]!.endTime = 500;
+
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(report.durationMs).toBeUndefined();
+  });
 });
 
 describe("mergeEvalReports", () => {

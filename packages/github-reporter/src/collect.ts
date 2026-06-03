@@ -34,7 +34,7 @@ export function collectEvalReport(
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
   const usage = sumUsage(cases);
-  const durationMs = resolveRunDuration(input);
+  const durationMs = workspace.runs[0]?.durationMs;
 
   return {
     status: input.success && failures.length === 0 ? "passed" : "failed",
@@ -215,17 +215,4 @@ function sumUsage(cases: EvalCase[]) {
   }
 
   return usage;
-}
-
-function resolveRunDuration(input: VitestJsonReport) {
-  const startTimes = input.testResults
-    .map((file) => file.startTime)
-    .filter((time) => Number.isFinite(time));
-  const endTimes = input.testResults
-    .map((file) => file.endTime)
-    .filter((time) => Number.isFinite(time));
-  if (startTimes.length === 0 || endTimes.length === 0) {
-    return undefined;
-  }
-  return Math.max(...endTimes) - Math.min(...startTimes);
 }

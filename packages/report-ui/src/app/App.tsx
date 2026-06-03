@@ -23,7 +23,11 @@ export function App() {
 
   useEffect(() => {
     const abortController = new AbortController();
-    loadWorkspace(abortController.signal).then(setLoadState);
+    loadWorkspace(abortController.signal).then((nextState) => {
+      if (!abortController.signal.aborted && nextState) {
+        setLoadState(nextState);
+      }
+    });
     return () => abortController.abort();
   }, []);
 
@@ -57,20 +61,17 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
     () => filterReportCases(workspace.cases, filters),
     [workspace.cases, filters],
   );
-  const selectedCase =
-    workspace.cases.find((testCase) => testCase.id === selectedCaseId) ??
-    filteredCases[0] ??
-    workspace.cases[0];
+  const selectedCase = resolveSelectedCase(selectedCaseId, filteredCases);
 
   useEffect(() => {
-    if (
-      selectedCaseId &&
-      filteredCases.some((testCase) => testCase.id === selectedCaseId)
-    ) {
-      return;
+    const nextSelectedCaseId = resolveSelectedCaseId(
+      selectedCaseId,
+      filteredCases,
+    );
+    if (nextSelectedCaseId !== selectedCaseId) {
+      setSelectedCaseId(nextSelectedCaseId);
     }
-    setSelectedCaseId(filteredCases[0]?.id ?? workspace.cases[0]?.id);
-  }, [filteredCases, selectedCaseId, workspace.cases]);
+  }, [filteredCases, selectedCaseId]);
 
   return (
     <main className="min-h-screen bg-canvas text-ink">
@@ -111,7 +112,29 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
   );
 }
 
-async function loadWorkspace(signal: AbortSignal): Promise<LoadState> {
+export function resolveSelectedCase(
+  selectedCaseId: string | undefined,
+  filteredCases: ReportWorkspace["cases"],
+) {
+  return filteredCases.find((testCase) => testCase.id === selectedCaseId);
+}
+
+export function resolveSelectedCaseId(
+  selectedCaseId: string | undefined,
+  filteredCases: ReportWorkspace["cases"],
+) {
+  if (
+    selectedCaseId &&
+    filteredCases.some((testCase) => testCase.id === selectedCaseId)
+  ) {
+    return selectedCaseId;
+  }
+  return filteredCases[0]?.id;
+}
+
+export async function loadWorkspace(
+  signal: AbortSignal,
+): Promise<LoadState | undefined> {
   try {
     const response = await fetch("/data/workspace.json", { signal });
     if (!response.ok) {
@@ -121,7 +144,7 @@ async function loadWorkspace(signal: AbortSignal): Promise<LoadState> {
     return { status: "ready", workspace };
   } catch (error) {
     if (signal.aborted) {
-      return { status: "loading" };
+      return undefined;
     }
     return {
       status: "error",

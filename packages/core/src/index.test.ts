@@ -186,6 +186,37 @@ describe("readEvalTaskMeta", () => {
   test("ignores metadata without eval or harness fields", () => {
     expect(readEvalTaskMeta({ retry: 1 })).toBeUndefined();
   });
+
+  test("preserves eval metadata with null scores and recorded tool calls", () => {
+    expect(
+      readEvalTaskMeta({
+        eval: {
+          avgScore: null,
+          output: {
+            status: "skipped",
+          },
+          scores: [],
+          toolCalls: [
+            {
+              name: "lookupInvoice",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      eval: {
+        avgScore: null,
+        output: {
+          status: "skipped",
+        },
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+          },
+        ],
+      },
+    });
+  });
 });
 
 describe("UsageSummarySchema", () => {
@@ -267,6 +298,37 @@ describe("collectReportWorkspace", () => {
           },
         },
       },
+    });
+  });
+
+  test("collects eval-only cases when avgScore is null", () => {
+    const json = structuredClone(sampleJson);
+    json.testResults[0]!.assertionResults = [
+      {
+        ancestorTitles: ["refund agent"],
+        fullName: "refund agent skipped case",
+        title: "skipped case",
+        status: "skipped",
+        duration: 0,
+        failureMessages: [],
+        meta: {
+          eval: {
+            avgScore: null,
+            scores: [],
+            thresholdFailed: false,
+          },
+        },
+      },
+    ];
+
+    const workspace = collectReportWorkspace(json);
+
+    expect(workspace.cases).toHaveLength(1);
+    expect(workspace.cases[0]?.eval?.avgScore).toBeNull();
+    expect(workspace.runs[0]?.totals).toMatchObject({
+      evalTotal: 1,
+      evalPassed: 0,
+      evalFailed: 0,
     });
   });
 });
