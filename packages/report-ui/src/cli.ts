@@ -3,6 +3,13 @@ import { parseCliArgs } from "./cli-options";
 import { currentModuleUrl } from "./esm-runtime.js";
 import { serveReportUi, type ReportUiServer } from "./server";
 
+type ShutdownSignal = "SIGINT" | "SIGTERM";
+
+type ShutdownLifecycle = {
+  exit(code: number): unknown;
+  once(signal: ShutdownSignal, listener: () => Promise<void> | void): unknown;
+};
+
 /** Output streams used by the report UI CLI runner. */
 export type ReportUiCliIo = {
   stdout?: Pick<NodeJS.WriteStream, "write">;
@@ -45,13 +52,28 @@ export async function runReportUiCli(
   installShutdownHandlers(server);
 }
 
-function installShutdownHandlers(server: ReportUiServer) {
+/** Installs signal handlers that close the report UI server and end the CLI. */
+export function installShutdownHandlers(
+  server: Pick<ReportUiServer, "close">,
+  lifecycle: ShutdownLifecycle = process,
+) {
+  let shuttingDown = false;
   const shutdown = async () => {
-    await server.close();
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    try {
+      await server.close();
+      lifecycle.exit(0);
+    } catch {
+      lifecycle.exit(1);
+    }
   };
 
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  lifecycle.once("SIGINT", shutdown);
+  lifecycle.once("SIGTERM", shutdown);
 }
 
 function usage(commandName: string) {
