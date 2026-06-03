@@ -60,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build core
+        run: pnpm --filter @vitest-evals/core run build
+
       - name: Build reporter
         run: pnpm --filter @vitest-evals/github-reporter run build
 
