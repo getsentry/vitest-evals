@@ -199,4 +199,57 @@ describe("case helpers", () => {
     expect(scoreTone(0.7)).toBe("warn");
     expect(scoreTone(0.2)).toBe("bad");
   });
+
+  test("preserves repeated trace messages as distinct turns", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: { messages: [] },
+      usage: {},
+      traces: [
+        {
+          spans: [
+            {
+              id: "model-1",
+              kind: "model",
+              name: "model",
+              startedAt: "2026-06-03T08:00:00.000Z",
+              attributes: {
+                "gen_ai.input.messages": [{ role: "user", content: "yes" }],
+                "gen_ai.output.messages": [
+                  { role: "assistant", content: "Continue?" },
+                ],
+              },
+            },
+            {
+              id: "model-2",
+              kind: "model",
+              name: "model",
+              startedAt: "2026-06-03T08:00:01.000Z",
+              attributes: {
+                "gen_ai.input.messages": [
+                  { role: "user", content: "yes" },
+                  { role: "assistant", content: "Continue?" },
+                  { role: "user", content: "yes" },
+                ],
+                "gen_ai.output.messages": [
+                  { role: "assistant", content: "Done" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      transcript.events
+        .filter((event) => event.kind === "message")
+        .map((event) => [event.role, event.content]),
+    ).toEqual([
+      ["user", "yes"],
+      ["assistant", "Continue?"],
+      ["user", "yes"],
+      ["assistant", "Done"],
+    ]);
+  });
 });

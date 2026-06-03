@@ -102,6 +102,11 @@ Vitest lifecycle APIs. Keep `describeEval(...)`, matchers, and the terminal
 reporter in `packages/vitest-evals`; keep GitHub-specific summaries,
 annotations, and Check Run payloads in `packages/github-reporter`.
 
+Keep `packages/core/src/index.ts` as a public barrel. Normalized harness run,
+session, trace, and helper contracts belong under `src/harness`; Vitest JSON
+parsing, eval task metadata, and collected report workspaces belong under
+`src/report`; primitive JSON and schema utilities stay at the package root.
+
 ### `packages/report-ui`
 
 Owns:
@@ -114,6 +119,10 @@ Owns:
 Keep the UI package focused on interaction and local serving. Shared artifact
 schemas and collection behavior belong in `packages/core`; CI-specific
 rendering belongs in `packages/github-reporter`.
+
+In a source checkout, build the package before invoking the published-style
+binary through `pnpm exec vitest-evals serve ...`; the workspace bin shim loads
+the built `packages/vitest-evals/dist/cli.mjs`.
 
 ### `packages/github-reporter`
 

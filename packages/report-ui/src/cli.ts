@@ -1,4 +1,6 @@
+import { pathToFileURL } from "node:url";
 import { parseCliArgs } from "./cli-options";
+import { currentModuleUrl } from "./esm-runtime.js";
 import { serveReportUi, type ReportUiServer } from "./server";
 
 /** Output streams used by the report UI CLI runner. */
@@ -71,13 +73,9 @@ function writeLine(
   (stdout ?? process.stdout).write(`${message}\n`);
 }
 
-declare const require: NodeJS.Require | undefined;
-declare const module: NodeJS.Module | undefined;
-
 if (
-  typeof require !== "undefined" &&
-  typeof module !== "undefined" &&
-  require.main === module
+  process.argv[1] &&
+  currentModuleUrl() === pathToFileURL(process.argv[1]).href
 ) {
   runReportUiCli(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));

@@ -2,11 +2,13 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   collectReportWorkspace,
-  parseVitestJsonReport,
   type CollectReportWorkspaceOptions,
   type ReportWorkspace,
+} from "./report/workspace";
+import {
+  parseVitestJsonReport,
   type VitestJsonReport,
-} from "./index";
+} from "./report/vitest-json";
 
 /** Options for resolving eval result file paths. */
 export type ResolveReportFilesOptions = {

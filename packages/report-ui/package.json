@@ -15,8 +15,9 @@
   "homepage": "https://github.com/getsentry/vitest-evals/tree/main/packages/report-ui#readme",
   "sideEffects": false,
   "types": "./dist/index.d.ts",
+  "type": "module",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "files": ["dist"],
   "publishConfig": {
     "access": "public"
@@ -25,8 +26,7 @@
     ".": {
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.js"
     }
   },
   "scripts": {

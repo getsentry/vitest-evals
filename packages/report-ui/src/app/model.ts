@@ -87,6 +87,11 @@ export type TranscriptOperation = {
   attributes?: NormalizedSpan["attributes"];
 };
 
+type TraceMessage = {
+  content?: JsonValue;
+  role: NormalizedMessage["role"];
+};
+
 export type Transcript = {
   events: TranscriptEvent[];
   operations: TranscriptOperation[];
@@ -313,24 +318,25 @@ function sessionTranscriptEvents(run: HarnessRun) {
 
 function traceTranscriptEvents(run: HarnessRun) {
   const events: TranscriptEvent[] = [];
-  const seenMessages = new Set<string>();
+  const messages: TraceMessage[] = [];
   for (const [index, span] of sortedRunSpans(run).entries()) {
     const attributes = span.attributes;
-    const messages = [
-      ...jsonMessageEvents(
+    events.push(
+      ...appendTraceMessages(
+        messages,
         attributes?.["gen_ai.input.messages"],
         span,
         "input",
-        seenMessages,
       ),
-      ...jsonMessageEvents(
+    );
+    events.push(
+      ...appendTraceMessages(
+        messages,
         attributes?.["gen_ai.output.messages"],
         span,
         "output",
-        seenMessages,
       ),
-    ];
-    events.push(...messages);
+    );
 
     if (operationKind(span) === "tool") {
       events.push(traceToolEvent(span, index));
@@ -349,17 +355,39 @@ function traceTranscriptEvents(run: HarnessRun) {
   return events;
 }
 
-function jsonMessageEvents(
+function appendTraceMessages(
+  existingMessages: TraceMessage[],
   value: JsonValue | undefined,
   span: NormalizedSpan,
   direction: "input" | "output",
-  seenMessages: Set<string>,
 ) {
+  const snapshot = jsonMessages(value);
+  if (snapshot.length === 0) {
+    return [];
+  }
+
+  const startIndex = commonPrefixLength(existingMessages, snapshot);
+  const nextMessages = snapshot.slice(startIndex);
+  existingMessages.push(...nextMessages);
+
+  return nextMessages.map((message, index): TranscriptMessage => {
+    const messageIndex = startIndex + index;
+    return {
+      content: message.content,
+      id: `${span.id ?? "span"}:${direction}:message-${messageIndex}`,
+      kind: "message",
+      role: message.role,
+      spanId: span.id,
+    };
+  });
+}
+
+function jsonMessages(value: JsonValue | undefined) {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.flatMap((entry, index): TranscriptMessage[] => {
+  return value.flatMap((entry): TraceMessage[] => {
     if (!isJsonObject(entry)) {
       return [];
     }
@@ -369,22 +397,38 @@ function jsonMessageEvents(
     }
 
     const content = entry.content;
-    const fingerprint = `${role}:${formatJson(content)}`;
-    if (seenMessages.has(fingerprint)) {
-      return [];
-    }
-    seenMessages.add(fingerprint);
-
     return [
       {
         content,
-        id: `${span.id ?? "span"}:${direction}:message-${index}`,
-        kind: "message",
         role,
-        spanId: span.id,
       },
     ];
   });
+}
+
+function commonPrefixLength(
+  existingMessages: TraceMessage[],
+  snapshot: TraceMessage[],
+) {
+  let index = 0;
+  while (
+    index < existingMessages.length &&
+    index < snapshot.length &&
+    sameTraceMessage(existingMessages[index], snapshot[index])
+  ) {
+    index += 1;
+  }
+  return index;
+}
+
+function sameTraceMessage(
+  left: TraceMessage | undefined,
+  right: TraceMessage | undefined,
+) {
+  return (
+    left?.role === right?.role &&
+    formatJson(left?.content) === formatJson(right?.content)
+  );
 }
 
 function transcriptOperations(run: HarnessRun) {

@@ -13,6 +13,7 @@ import {
   toolCalls,
   toolMessages,
   traceSpans,
+  UsageSummarySchema,
   userMessages,
   type VitestJsonReport,
 } from "./index";
@@ -184,6 +185,26 @@ describe("readEvalTaskMeta", () => {
 
   test("ignores metadata without eval or harness fields", () => {
     expect(readEvalTaskMeta({ retry: 1 })).toBeUndefined();
+  });
+});
+
+describe("UsageSummarySchema", () => {
+  test("keeps provider-specific usage data under metadata", () => {
+    expect(
+      UsageSummarySchema.safeParse({
+        totalTokens: 120,
+        estimatedCostUsd: 0.02,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      UsageSummarySchema.safeParse({
+        totalTokens: 120,
+        metadata: {
+          estimatedCostUsd: 0.02,
+        },
+      }).success,
+    ).toBe(true);
   });
 });
 
