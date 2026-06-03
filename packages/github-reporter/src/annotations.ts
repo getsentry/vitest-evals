@@ -129,9 +129,9 @@ function formatRawDetails(testCase: AnnotatedEvalCase) {
     lines.push("", "Final:", stringifyValue(finalOutput, 8000));
   }
 
-  if (testCase.harness?.toolCalls.length) {
+  if (testCase.toolCalls.length) {
     lines.push("", "Tools:");
-    for (const toolCall of testCase.harness.toolCalls) {
+    for (const toolCall of testCase.toolCalls) {
       lines.push(
         `- ${toolCall.name}: ${toolCall.error ? `error: ${toolCall.error}` : "ok"}`,
       );

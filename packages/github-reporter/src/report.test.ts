@@ -200,6 +200,61 @@ describe("collectEvalReport", () => {
 
     expect(report.durationMs).toBeUndefined();
   });
+
+  test("includes tool calls stored on eval metadata", () => {
+    const json = structuredClone(sampleJson);
+    const assertion = json.testResults[0]!.assertionResults[0]!;
+    assertion.meta = {
+      eval: {
+        avgScore: 0.5,
+        thresholdFailed: true,
+        output: {
+          status: "denied",
+        },
+        scores: [
+          {
+            name: "ToolCallJudge",
+            score: 0.5,
+            metadata: {
+              rationale: "missing notification",
+            },
+          },
+        ],
+        toolCalls: [
+          {
+            name: "validateRefund",
+            durationMs: 8,
+          },
+          {
+            name: "notifyCustomer",
+            error: {
+              message: "blocked by policy",
+            },
+          },
+        ],
+      },
+    };
+
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(report.usage.toolCalls).toBe(2);
+    expect(report.failures[0]?.harness).toBeUndefined();
+    expect(report.failures[0]?.toolCalls).toMatchObject([
+      {
+        durationMs: 8,
+        name: "validateRefund",
+      },
+      {
+        error: "blocked by policy",
+        name: "notifyCustomer",
+      },
+    ]);
+    expect(renderJobSummary(report)).toContain(
+      "notifyCustomer  error: blocked by policy",
+    );
+  });
 });
 
 describe("mergeEvalReports", () => {
@@ -272,6 +327,19 @@ describe("mergeEvalReports", () => {
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
     expect(report.durationMs).toBe(7000);
+  });
+
+  test("sums durations when some merged reports do not have start times", () => {
+    const first = collectEvalReport(sampleJson, { workspace: "/repo" });
+    const second = {
+      ...first,
+      startedAt: undefined,
+      durationMs: 2000,
+      cases: [],
+      failures: [],
+    };
+
+    expect(mergeEvalReports([first, second]).durationMs).toBe(6500);
   });
 });
 

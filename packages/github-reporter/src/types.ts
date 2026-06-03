@@ -24,6 +24,7 @@ export type EvalCase = {
   durationMs?: number;
   location?: VitestJsonLocation;
   failureMessages: string[];
+  toolCalls: ToolCallSummary[];
   eval?: {
     avgScore?: number;
     thresholdFailed?: boolean;

@@ -2,6 +2,7 @@ import {
   collectReportWorkspace,
   type HarnessRun,
   type ReportCase,
+  type ToolCallRecord,
 } from "@vitest-evals/core";
 import type {
   CollectOptions,
@@ -68,7 +69,7 @@ export function collectEvalReport(
 function collectEvalCase(reportCase: ReportCase): EvalCase {
   const scores = (reportCase.eval?.scores ?? []).map(normalizeScore);
   const harnessRun = reportCase.harness?.run;
-  const toolCalls = collectToolCalls(harnessRun?.session);
+  const toolCalls = collectToolCalls(reportCase);
   const evalCase: EvalCase = {
     id: reportCase.id,
     file: reportCase.file,
@@ -79,6 +80,7 @@ function collectEvalCase(reportCase: ReportCase): EvalCase {
     durationMs: numberField(reportCase.durationMs),
     location: reportCase.location,
     failureMessages: reportCase.failureMessages,
+    toolCalls,
     eval: reportCase.eval
       ? {
           avgScore: numberField(reportCase.eval.avgScore),
@@ -118,7 +120,16 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function collectToolCalls(session: HarnessRun["session"] | undefined) {
+function collectToolCalls(reportCase: ReportCase) {
+  const harnessCalls = collectSessionToolCalls(
+    reportCase.harness?.run?.session,
+  );
+  return harnessCalls.length > 0
+    ? harnessCalls
+    : (reportCase.eval?.toolCalls ?? []).map(toToolCallSummary);
+}
+
+function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
   const messages = session?.messages ?? [];
   const toolCalls: ToolCallSummary[] = [];
 
@@ -128,15 +139,19 @@ function collectToolCalls(session: HarnessRun["session"] | undefined) {
     }
 
     for (const call of message.toolCalls) {
-      toolCalls.push({
-        name: call.name,
-        error: getToolCallError(call.error),
-        durationMs: numberField(call.durationMs),
-      });
+      toolCalls.push(toToolCallSummary(call));
     }
   }
 
   return toolCalls;
+}
+
+function toToolCallSummary(call: ToolCallRecord): ToolCallSummary {
+  return {
+    name: call.name,
+    error: getToolCallError(call.error),
+    durationMs: numberField(call.durationMs),
+  };
 }
 
 function getToolCallError(value: unknown) {
@@ -210,9 +225,17 @@ function sumUsage(cases: EvalCase[]) {
       (caseUsage?.inputTokens ?? 0) +
         (caseUsage?.outputTokens ?? 0) +
         (caseUsage?.reasoningTokens ?? 0);
-    usage.toolCalls +=
-      caseUsage?.toolCalls ?? testCase.harness?.toolCalls.length ?? 0;
+    usage.toolCalls += toolCallCount(testCase);
   }
 
   return usage;
+}
+
+function toolCallCount(testCase: EvalCase) {
+  const usageToolCalls = testCase.harness?.usage?.toolCalls;
+  if (usageToolCalls !== undefined) {
+    return Math.max(usageToolCalls, testCase.toolCalls.length);
+  }
+
+  return testCase.toolCalls.length;
 }
