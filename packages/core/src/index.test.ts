@@ -270,6 +270,92 @@ describe("readEvalTaskMeta", () => {
       },
     });
   });
+
+  test("preserves known metadata when persisted blocks include unknown keys", () => {
+    const meta = readEvalTaskMeta({
+      eval: {
+        avgScore: 1,
+        estimatedCostUsd: 0.02,
+        scores: [
+          {
+            name: "StructuredOutputJudge",
+            score: 1,
+            unexpected: true,
+          },
+        ],
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+            unexpected: true,
+          },
+        ],
+      },
+      harness: {
+        name: "legacy",
+        run: {
+          extraRunField: true,
+          session: {
+            extraSessionField: true,
+            messages: [
+              {
+                extraMessageField: true,
+                role: "assistant",
+                toolCalls: [
+                  {
+                    name: "lookupInvoice",
+                    unexpected: true,
+                  },
+                ],
+              },
+            ],
+          },
+          usage: {
+            estimatedCostUsd: 0.02,
+            totalTokens: 42,
+          },
+        },
+      },
+    });
+
+    expect(meta).toMatchObject({
+      eval: {
+        avgScore: 1,
+        scores: [
+          {
+            name: "StructuredOutputJudge",
+            score: 1,
+          },
+        ],
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+          },
+        ],
+      },
+      harness: {
+        run: {
+          errors: [],
+          session: {
+            messages: [
+              {
+                role: "assistant",
+                toolCalls: [
+                  {
+                    name: "lookupInvoice",
+                  },
+                ],
+              },
+            ],
+          },
+          usage: {
+            totalTokens: 42,
+          },
+        },
+      },
+    });
+    expect(meta?.eval).not.toHaveProperty("estimatedCostUsd");
+    expect(meta?.harness?.run?.usage).not.toHaveProperty("estimatedCostUsd");
+  });
 });
 
 describe("UsageSummarySchema", () => {

@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { HarnessRunSchema, ToolCallRecordSchema } from "../harness";
+import {
+  HarnessRunSchema,
+  NormalizedMessageSchema,
+  NormalizedSessionSchema,
+  NormalizedSpanEventSchema,
+  NormalizedSpanSchema,
+  NormalizedTraceSchema,
+  TimingSummarySchema,
+  ToolCallRecordSchema,
+  UsageSummarySchema,
+} from "../harness";
 import { JsonObjectSchema, JsonValueSchema } from "../json";
 import { isJsonObject, NullableFiniteNumberSchema } from "../schema-utils";
 
@@ -51,14 +61,43 @@ export const EvalTaskMetaSchema = z
 /** Combined eval and harness metadata stored on a Vitest assertion. */
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
+const LenientToolCallRecordSchema = ToolCallRecordSchema.strip();
+const LenientMessageSchema = NormalizedMessageSchema.extend({
+  toolCalls: z.array(LenientToolCallRecordSchema).optional(),
+}).strip();
+const LenientSessionSchema = NormalizedSessionSchema.extend({
+  messages: z.array(LenientMessageSchema).default([]),
+}).strip();
+const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
+const LenientSpanSchema = NormalizedSpanSchema.extend({
+  events: z.array(LenientSpanEventSchema).optional(),
+}).strip();
+const LenientTraceSchema = NormalizedTraceSchema.extend({
+  spans: z.array(LenientSpanSchema).default([]),
+}).strip();
+const LenientHarnessRunSchema = HarnessRunSchema.extend({
+  session: LenientSessionSchema,
+  usage: UsageSummarySchema.strip(),
+  timings: TimingSummarySchema.strip().optional(),
+  traces: z.array(LenientTraceSchema).optional(),
+}).strip();
+const LenientHarnessMetaSchema = HarnessMetaSchema.extend({
+  run: LenientHarnessRunSchema.optional(),
+}).strip();
+const LenientEvalScoreSchema = EvalScoreSchema.strip();
+const LenientEvalMetaSchema = EvalMetaSchema.extend({
+  scores: z.array(LenientEvalScoreSchema).optional(),
+  toolCalls: z.array(LenientToolCallRecordSchema).optional(),
+}).strip();
+
 /** Reads eval metadata from an arbitrary Vitest assertion meta value. */
 export function readEvalTaskMeta(input: unknown): EvalTaskMeta | undefined {
   if (!isJsonObject(input)) {
     return undefined;
   }
 
-  const evalResult = EvalMetaSchema.safeParse(input.eval);
-  const harnessResult = HarnessMetaSchema.safeParse(input.harness);
+  const evalResult = LenientEvalMetaSchema.safeParse(input.eval);
+  const harnessResult = LenientHarnessMetaSchema.safeParse(input.harness);
   const meta: EvalTaskMeta = {
     ...(evalResult.success && input.eval !== undefined
       ? { eval: evalResult.data }
