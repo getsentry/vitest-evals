@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { FiniteNumberSchema, parseWithSchema } from "../schema-utils";
+import {
+  FiniteNumberSchema,
+  OptionalFiniteNumberSchema,
+  parseWithSchema,
+} from "../schema-utils";
 
 /** Status values emitted by Vitest JSON reports. */
 export const VitestJsonStatusSchema = z.enum([
@@ -49,8 +53,8 @@ export const VitestJsonFileSchema = z
     message: z.string(),
     name: z.string(),
     status: z.enum(["failed", "passed"]),
-    startTime: FiniteNumberSchema,
-    endTime: FiniteNumberSchema,
+    startTime: OptionalFiniteNumberSchema,
+    endTime: OptionalFiniteNumberSchema,
     assertionResults: z.array(VitestJsonAssertionSchema).default([]),
   })
   .passthrough();

@@ -167,6 +167,31 @@ describe("parseVitestJsonReport", () => {
       "Invalid Vitest JSON report",
     );
   });
+
+  test("tolerates missing or invalid file timing values", () => {
+    const report = parseVitestJsonReport({
+      ...sampleJson,
+      testResults: [
+        {
+          ...sampleJson.testResults[0]!,
+          startTime: null,
+          endTime: Number.POSITIVE_INFINITY,
+        },
+        {
+          assertionResults: [],
+          message: "",
+          name: "/repo/apps/demo/evals/missing-timing.eval.ts",
+          status: "passed",
+        },
+      ],
+    });
+
+    expect(report.testResults[0]?.startTime).toBeUndefined();
+    expect(report.testResults[0]?.endTime).toBeUndefined();
+    expect(report.testResults[1]?.startTime).toBeUndefined();
+    expect(report.testResults[1]?.endTime).toBeUndefined();
+    expect(collectReportWorkspace(report).runs[0]?.durationMs).toBeUndefined();
+  });
 });
 
 describe("readEvalTaskMeta", () => {
@@ -214,6 +239,34 @@ describe("readEvalTaskMeta", () => {
             name: "lookupInvoice",
           },
         ],
+      },
+    });
+  });
+
+  test("defaults missing harness errors for legacy run metadata", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "legacy",
+          run: {
+            session: {
+              messages: [],
+            },
+            usage: {
+              totalTokens: 42,
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      harness: {
+        name: "legacy",
+        run: {
+          errors: [],
+          usage: {
+            totalTokens: 42,
+          },
+        },
       },
     });
   });

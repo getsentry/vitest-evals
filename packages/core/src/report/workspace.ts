@@ -203,17 +203,15 @@ function formatDisplayName(assertion: VitestJsonAssertion) {
 function resolveRunDuration(report: VitestJsonReport) {
   const intervals = report.testResults
     .map((file) => {
-      if (
-        !Number.isFinite(file.startTime) ||
-        !Number.isFinite(file.endTime) ||
-        file.endTime < file.startTime
-      ) {
+      const start = file.startTime;
+      const end = file.endTime;
+      if (!isFiniteNumber(start) || !isFiniteNumber(end) || end < start) {
         return undefined;
       }
 
       return {
-        start: file.startTime,
-        end: file.endTime,
+        start,
+        end,
       };
     })
     .filter((interval): interval is { start: number; end: number } =>
@@ -228,6 +226,10 @@ function resolveRunDuration(report: VitestJsonReport) {
     Math.max(...intervals.map((interval) => interval.end)) -
     Math.min(...intervals.map((interval) => interval.start))
   );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function normalizeReportPath(path: string, workspace?: string) {

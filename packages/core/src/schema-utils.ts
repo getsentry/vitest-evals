@@ -5,7 +5,9 @@ export const FiniteNumberSchema = z.number().finite();
 
 export const OptionalFiniteNumberSchema = z.preprocess(
   (value) =>
-    typeof value === "number" && !Number.isFinite(value) ? undefined : value,
+    value === null || (typeof value === "number" && !Number.isFinite(value))
+      ? undefined
+      : value,
   FiniteNumberSchema.optional(),
 );
 

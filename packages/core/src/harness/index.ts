@@ -272,7 +272,7 @@ export const HarnessRunSchema = z
     timings: TimingSummarySchema.optional(),
     artifacts: JsonObjectSchema.optional(),
     traces: z.array(NormalizedTraceSchema).optional(),
-    errors: z.array(JsonObjectSchema),
+    errors: z.array(JsonObjectSchema).default([]),
   })
   .strict();
 
