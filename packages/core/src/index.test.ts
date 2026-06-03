@@ -271,6 +271,32 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
+  test("defaults missing harness usage for partial run metadata", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "partial",
+          run: {
+            session: {
+              messages: [{ role: "user", content: "hello" }],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      harness: {
+        name: "partial",
+        run: {
+          errors: [],
+          session: {
+            messages: [{ role: "user", content: "hello" }],
+          },
+          usage: {},
+        },
+      },
+    });
+  });
+
   test("preserves known metadata when persisted blocks include unknown keys", () => {
     const meta = readEvalTaskMeta({
       eval: {

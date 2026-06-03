@@ -328,7 +328,28 @@ function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
 
 function transcriptEvents(run: HarnessRun) {
   const traceEvents = traceTranscriptEvents(run);
-  return traceEvents.length > 0 ? traceEvents : sessionTranscriptEvents(run);
+  if (traceEvents.length === 0) {
+    return sessionTranscriptEvents(run);
+  }
+
+  return traceEvents.some((event) => event.kind === "message")
+    ? traceEvents
+    : [...sessionMessageEvents(run), ...traceEvents];
+}
+
+function sessionMessageEvents(run: HarnessRun) {
+  return run.session.messages.flatMap((message, messageIndex) =>
+    message.content === undefined
+      ? []
+      : [
+          {
+            content: message.content,
+            id: `message-${messageIndex}`,
+            kind: "message" as const,
+            role: message.role,
+          },
+        ],
+  );
 }
 
 function sessionTranscriptEvents(run: HarnessRun) {

@@ -80,23 +80,41 @@ export async function serveReportWorkspace(
 
 function createRequestHandler(workspace: ReportWorkspace, assetsDir: string) {
   return async (request: IncomingMessage, response: ServerResponse) => {
-    const requestUrl = new URL(
-      request.url ?? "/",
-      `http://${request.headers.host ?? "localhost"}`,
-    );
+    try {
+      const requestUrl = new URL(
+        request.url ?? "/",
+        `http://${request.headers.host ?? "localhost"}`,
+      );
 
-    if (requestUrl.pathname === "/data/workspace.json") {
-      sendJson(response, workspace);
-      return;
+      if (requestUrl.pathname === "/data/workspace.json") {
+        sendJson(response, workspace);
+        return;
+      }
+
+      if (requestUrl.pathname === "/healthz") {
+        sendText(response, 200, "ok\n", "text/plain; charset=utf-8");
+        return;
+      }
+
+      await serveAsset(requestUrl.pathname, assetsDir, response);
+    } catch (error) {
+      sendInternalServerError(response, error);
     }
-
-    if (requestUrl.pathname === "/healthz") {
-      sendText(response, 200, "ok\n", "text/plain; charset=utf-8");
-      return;
-    }
-
-    await serveAsset(requestUrl.pathname, assetsDir, response);
   };
+}
+
+function sendInternalServerError(response: ServerResponse, error: unknown) {
+  if (response.headersSent) {
+    response.destroy(error instanceof Error ? error : undefined);
+    return;
+  }
+
+  sendText(
+    response,
+    500,
+    "Internal server error\n",
+    "text/plain; charset=utf-8",
+  );
 }
 
 async function serveAsset(

@@ -77,7 +77,7 @@ const LenientTraceSchema = NormalizedTraceSchema.extend({
 }).strip();
 const LenientHarnessRunSchema = HarnessRunSchema.extend({
   session: LenientSessionSchema,
-  usage: UsageSummarySchema.strip(),
+  usage: UsageSummarySchema.strip().default({}),
   timings: TimingSummarySchema.strip().optional(),
   traces: z.array(LenientTraceSchema).optional(),
 }).strip();

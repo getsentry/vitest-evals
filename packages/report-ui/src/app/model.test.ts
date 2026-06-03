@@ -343,4 +343,45 @@ describe("case helpers", () => {
       ["assistant", "Done"],
     ]);
   });
+
+  test("keeps session messages when sparse traces only provide tool events", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: {
+        messages: [
+          { role: "user", content: "Refund invoice inv_123" },
+          { role: "assistant", content: "Approved" },
+        ],
+      },
+      usage: {},
+      traces: [
+        {
+          spans: [
+            {
+              id: "tool-1",
+              kind: "tool",
+              name: "lookupInvoice",
+              attributes: {
+                "gen_ai.tool.name": "lookupInvoice",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      transcript.events.map((event) =>
+        event.kind === "message"
+          ? [event.kind, event.role, event.content]
+          : event.kind === "tool"
+            ? [event.kind, event.name]
+            : [event.kind, event.operation.name],
+      ),
+    ).toEqual([
+      ["message", "user", "Refund invoice inv_123"],
+      ["message", "assistant", "Approved"],
+      ["tool", "lookupInvoice"],
+    ]);
+  });
 });

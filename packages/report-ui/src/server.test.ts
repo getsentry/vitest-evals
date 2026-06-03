@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -125,6 +125,28 @@ describe("serveReportWorkspace", () => {
       const response = await fetch(`${server.url}/cases/case-1`);
       await expect(response.text()).resolves.toContain("spa");
     } finally {
+      await server.close();
+    }
+  });
+
+  test("returns 500 when asset reads fail", async () => {
+    const assetsDir = await mkdtemp(join(tmpdir(), "vitest-evals-ui-"));
+    const assetPath = join(assetsDir, "locked.txt");
+    await writeFile(assetPath, "secret");
+    await chmod(assetPath, 0o000);
+
+    const server = await serveReportWorkspace(workspace, {
+      assetsDir,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    try {
+      const response = await fetch(`${server.url}/locked.txt`);
+      expect(response.status).toBe(500);
+      await expect(response.text()).resolves.toBe("Internal server error\n");
+    } finally {
+      await chmod(assetPath, 0o600);
       await server.close();
     }
   });
