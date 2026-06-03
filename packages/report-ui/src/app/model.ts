@@ -124,7 +124,7 @@ export function summarizeWorkspace(
       0,
     ),
     toolCallCount: workspace.cases.reduce(
-      (total, testCase) => total + toolCallCountFor(testCase.harness?.run),
+      (total, testCase) => total + (toolCallCountForCase(testCase) ?? 0),
       0,
     ),
     durationMs: workspaceDurationMs(workspace.runs),
@@ -151,8 +151,7 @@ export function filterReportCases(cases: ReportCase[], filters: CaseFilters) {
 
 /** Returns every tool call captured for a report case. */
 export function caseToolCalls(testCase: ReportCase) {
-  const run = testCase.harness?.run;
-  return run ? toolCalls(run.session) : [];
+  return toolCallsForCase(testCase);
 }
 
 /** Returns the best available token total for a report case. */
@@ -166,11 +165,7 @@ export function caseTotalTokens(testCase: ReportCase) {
 
 /** Returns the best available tool call count for a report case. */
 export function caseToolCallCount(testCase: ReportCase) {
-  const run = testCase.harness?.run;
-  if (!run) {
-    return undefined;
-  }
-  return toolCallCountFor(run);
+  return toolCallCountForCase(testCase);
 }
 
 /** Returns every trace span captured for a report case. */
@@ -274,11 +269,25 @@ function totalTokensFor(run: HarnessRun | undefined) {
   );
 }
 
-function toolCallCountFor(run: HarnessRun | undefined) {
-  if (!run) {
-    return 0;
+function toolCallsForCase(testCase: ReportCase) {
+  const run = testCase.harness?.run;
+  const runToolCalls = run ? toolCalls(run.session) : [];
+  return runToolCalls.length > 0
+    ? runToolCalls
+    : (testCase.eval?.toolCalls ?? []);
+}
+
+function toolCallCountForCase(testCase: ReportCase) {
+  const run = testCase.harness?.run;
+  if (run?.usage.toolCalls !== undefined) {
+    return Math.max(run.usage.toolCalls, testCase.eval?.toolCalls?.length ?? 0);
   }
-  return run.usage.toolCalls ?? toolCalls(run.session).length;
+
+  if (!run && !testCase.eval?.toolCalls) {
+    return undefined;
+  }
+
+  return toolCallsForCase(testCase).length;
 }
 
 function workspaceDurationMs(runs: ReportWorkspace["runs"]) {

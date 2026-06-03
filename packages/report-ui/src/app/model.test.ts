@@ -118,6 +118,11 @@ const workspace: ReportWorkspace = {
       eval: {
         avgScore: 1,
         scores: [{ name: "StructuredOutputJudge", score: 1 }],
+        toolCalls: [
+          {
+            name: "validateRefund",
+          },
+        ],
       },
     },
   ],
@@ -132,7 +137,7 @@ describe("summarizeWorkspace", () => {
       failed: 1,
       averageScore: 0.6,
       totalTokens: 1220,
-      toolCallCount: 1,
+      toolCallCount: 2,
       durationMs: 4500,
     });
   });
@@ -227,8 +232,14 @@ describe("filterReportCases", () => {
 describe("case helpers", () => {
   test("returns captured tool calls and trace trees", () => {
     expect(caseToolCalls(workspace.cases[0]!)).toHaveLength(1);
+    expect(caseToolCalls(workspace.cases[1]!)).toEqual([
+      {
+        name: "validateRefund",
+      },
+    ]);
     expect(caseTotalTokens(workspace.cases[0]!)).toBe(1220);
     expect(caseToolCallCount(workspace.cases[0]!)).toBe(1);
+    expect(caseToolCallCount(workspace.cases[1]!)).toBe(1);
     expect(
       buildSpanTree(workspace.cases[0]!.harness?.run?.traces?.[0]?.spans ?? []),
     ).toMatchObject([
