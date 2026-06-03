@@ -39,7 +39,7 @@ export function SummaryBar({
 }) {
   return (
     <section
-      className="grid overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2 lg:grid-cols-6"
+      className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-6"
       aria-label="Report summary"
     >
       <Metric label="Pass rate" value={passRate(summary)} tone="good" />
