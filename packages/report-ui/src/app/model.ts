@@ -127,10 +127,7 @@ export function summarizeWorkspace(
       (total, testCase) => total + toolCallCountFor(testCase.harness?.run),
       0,
     ),
-    durationMs: workspace.runs.reduce(
-      (total, run) => total + (run.durationMs ?? 0),
-      0,
-    ),
+    durationMs: workspaceDurationMs(workspace.runs),
   };
 }
 
@@ -282,6 +279,32 @@ function toolCallCountFor(run: HarnessRun | undefined) {
     return 0;
   }
   return run.usage.toolCalls ?? toolCalls(run.session).length;
+}
+
+function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
+  const durations = runs
+    .map((run) => run.durationMs)
+    .filter((duration): duration is number => isFiniteNumber(duration));
+  const intervals = runs.flatMap((run) => {
+    if (!isFiniteNumber(run.startedAt) || !isFiniteNumber(run.durationMs)) {
+      return [];
+    }
+
+    return [
+      {
+        end: run.startedAt + run.durationMs,
+        start: run.startedAt,
+      },
+    ];
+  });
+
+  if (intervals.length > 0 && intervals.length === durations.length) {
+    const start = Math.min(...intervals.map((interval) => interval.start));
+    const end = Math.max(...intervals.map((interval) => interval.end));
+    return Math.max(0, end - start);
+  }
+
+  return durations.reduce((total, duration) => total + duration, 0);
 }
 
 function transcriptEvents(run: HarnessRun) {
@@ -547,6 +570,10 @@ function numberAttribute(
 ) {
   const value = attributes?.[key];
   return typeof value === "number" ? value : undefined;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function messageRole(value: JsonValue | undefined) {

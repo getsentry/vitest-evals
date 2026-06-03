@@ -136,6 +136,54 @@ describe("summarizeWorkspace", () => {
       durationMs: 4500,
     });
   });
+
+  test("uses the wall-clock envelope for parallel runs", () => {
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        runs: [
+          {
+            ...workspace.runs[0]!,
+            durationMs: 5000,
+            id: "shard-a.json",
+            source: "shard-a.json",
+            startedAt: 1000,
+          },
+          {
+            ...workspace.runs[0]!,
+            durationMs: 3000,
+            id: "shard-b.json",
+            source: "shard-b.json",
+            startedAt: 2000,
+          },
+        ],
+      }).durationMs,
+    ).toBe(5000);
+  });
+
+  test("falls back to summed durations for runs without start times", () => {
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        runs: [
+          {
+            id: "shard-a.json",
+            source: "shard-a.json",
+            status: "failed",
+            durationMs: 5000,
+            totals: workspace.runs[0]!.totals,
+          },
+          {
+            id: "shard-b.json",
+            source: "shard-b.json",
+            status: "failed",
+            durationMs: 3000,
+            totals: workspace.runs[0]!.totals,
+          },
+        ],
+      }).durationMs,
+    ).toBe(8000);
+  });
 });
 
 describe("filterReportCases", () => {
