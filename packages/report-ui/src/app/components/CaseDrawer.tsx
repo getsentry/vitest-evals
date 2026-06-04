@@ -70,35 +70,43 @@ export function CaseDrawer({
         aria-labelledby="case-detail-title"
         open
       >
-        <header className="border-b border-line-subtle bg-panel-subtle">
-          <div className="flex min-w-0 items-start justify-between gap-4 px-4 py-3">
+        <header className="border-b border-line-subtle bg-panel">
+          <div className="grid min-w-0 gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <StatusMark status={testCase.status} />
                 <h2
-                  className="truncate text-lg font-semibold text-ink"
+                  className="truncate text-xl font-semibold leading-tight text-ink"
                   id="case-detail-title"
                 >
                   {testCase.displayName}
                 </h2>
               </div>
-              <p className="mt-2 truncate text-sm text-muted">
+              <p className="mt-2 truncate text-sm leading-snug text-muted">
                 {testCase.displayFile}
               </p>
             </div>
-            <div className="flex shrink-0 items-start gap-4">
-              <div className="border-l border-line-subtle pl-4 text-right">
+            <div className="flex min-w-0 shrink-0 items-start justify-between gap-4 lg:justify-end">
+              <div className="text-right">
                 <span className="block text-[0.68rem] font-semibold uppercase text-muted">
                   Score
                 </span>
                 <ScoreValue score={testCase.eval?.avgScore} size="lg" />
               </div>
               <button
-                className="h-8 border-b-2 border-transparent px-2 text-sm font-semibold text-muted-strong outline-none hover:border-line hover:text-ink focus:border-selected-line"
+                className="relative grid size-8 place-items-center border border-transparent text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
                 type="button"
+                aria-label="Close case details"
                 onClick={onClose}
               >
-                Close
+                <span
+                  className="absolute h-px w-3 rotate-45 bg-current"
+                  aria-hidden="true"
+                />
+                <span
+                  className="absolute h-px w-3 -rotate-45 bg-current"
+                  aria-hidden="true"
+                />
               </button>
             </div>
           </div>
@@ -112,7 +120,7 @@ export function CaseDrawer({
         </FactsGrid>
 
         <nav
-          className="flex gap-3 border-b border-line-subtle px-4 py-2"
+          className="flex gap-3 border-b border-line-subtle px-5 py-2"
           aria-label="Case detail views"
         >
           {DETAIL_TABS.map((tab) => (

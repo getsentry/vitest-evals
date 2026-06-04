@@ -23,70 +23,6 @@ export function toneTextClass(tone: Tone) {
   return toneText[tone];
 }
 
-export function Panel({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cx(
-        "min-w-0 overflow-hidden rounded-lg border border-line bg-panel",
-        className,
-      )}
-    >
-      {children}
-    </section>
-  );
-}
-
-export function SectionHeader({
-  title,
-  detail,
-  action,
-}: {
-  title: string;
-  detail?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <header className="flex min-w-0 items-start justify-between gap-4 border-b border-line-subtle px-4 py-3">
-      <div className="min-w-0">
-        <h2 className="truncate text-sm font-semibold text-ink">{title}</h2>
-        {detail ? (
-          <p className="mt-1 truncate text-xs text-muted">{detail}</p>
-        ) : null}
-      </div>
-      {action}
-    </header>
-  );
-}
-
-export function Metric({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: Tone;
-}) {
-  return (
-    <div className="min-h-16 bg-panel px-3 py-2.5">
-      <span className="block text-[0.68rem] font-semibold uppercase text-muted">
-        {label}
-      </span>
-      <strong
-        className={cx("mt-1 block text-xl font-semibold", toneTextClass(tone))}
-      >
-        {value}
-      </strong>
-    </div>
-  );
-}
-
 export function Field({
   htmlFor,
   label,
@@ -114,7 +50,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink outline-none",
+        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
         "placeholder:text-muted focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}
@@ -127,7 +63,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
     <select
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink outline-none",
+        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
         "focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}
@@ -162,7 +98,7 @@ export function TabButton({
 
 export function CodeBlock({ value }: { value: string }) {
   return (
-    <pre className="max-w-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-panel-subtle p-3 font-mono text-xs leading-relaxed text-code">
+    <pre className="max-w-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-line-subtle bg-panel-subtle p-3 font-mono text-xs leading-relaxed text-code">
       {value}
     </pre>
   );

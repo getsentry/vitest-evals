@@ -16,20 +16,30 @@ export function ReportHeader({
   runCount: number;
 }) {
   return (
-    <header className="flex flex-col gap-3 border-b border-line pb-3 md:flex-row md:items-center md:justify-between">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-        <p className="text-xs font-semibold uppercase text-muted-strong">
-          vitest-evals
-        </p>
-        <h1 className="text-2xl font-semibold text-ink">Run inspection</h1>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <span>
-          <strong className="font-semibold text-ink">{runCount}</strong> runs
-        </span>
-        <span>
-          <strong className="font-semibold text-ink">{caseCount}</strong> cases
-        </span>
+    <header className="mb-4">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2 text-[0.68rem] font-semibold uppercase text-muted-strong">
+          <span className="font-mono text-ink">vitest-evals</span>
+          <span className="h-1 w-1 rounded-full bg-line" aria-hidden="true" />
+          <span>report viewer</span>
+        </div>
+        <h1 className="mt-1 truncate text-[2rem] font-semibold leading-tight text-ink">
+          Run inspection
+        </h1>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <span>
+            <strong className="font-semibold text-ink">
+              {formatNumber(runCount)}
+            </strong>{" "}
+            runs
+          </span>
+          <span>
+            <strong className="font-semibold text-ink">
+              {formatNumber(caseCount)}
+            </strong>{" "}
+            cases
+          </span>
+        </div>
       </div>
     </header>
   );
@@ -44,14 +54,14 @@ export function SummaryBar({
 
   return (
     <section
-      className="border-b border-line bg-panel"
+      className="border-b border-line-subtle bg-panel px-4 py-4"
       aria-label="Report summary"
     >
-      <div className="grid lg:grid-cols-[minmax(220px,0.85fr)_minmax(340px,1.3fr)_minmax(320px,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(240px,0.82fr)_minmax(360px,1.28fr)_minmax(420px,1fr)] xl:items-center">
         <div
           className={cx(
-            "min-w-0 border-b border-line-subtle px-4 py-3 lg:border-b-0 lg:border-r",
-            summary.failed > 0 ? "bg-fail-line/5" : "bg-panel",
+            "min-w-0 border-l-4 py-1 pl-4",
+            summary.failed > 0 ? "border-l-fail-line" : "border-l-pass-line",
           )}
         >
           <span className="text-[0.68rem] font-semibold uppercase text-muted-strong">
@@ -92,7 +102,7 @@ export function SummaryBar({
           </div>
         </div>
 
-        <div className="min-w-0 border-b border-line-subtle px-4 py-3 lg:border-b-0 lg:border-r">
+        <div className="min-w-0">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[0.68rem] font-semibold uppercase text-muted-strong">
               Outcome mix
@@ -109,7 +119,7 @@ export function SummaryBar({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-px bg-line-subtle sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line-subtle pt-4 sm:grid-cols-4 xl:border-l xl:border-t-0 xl:py-1 xl:pl-5 xl:pt-0">
           <SummaryCounter
             label="Runtime"
             value={formatDuration(summary.durationMs)}
@@ -126,7 +136,7 @@ export function SummaryBar({
             label="Avg score"
             value={formatScore(summary.averageScore)}
           />
-        </div>
+        </dl>
       </div>
     </section>
   );
@@ -140,12 +150,15 @@ export function RunStrip({
   selectedRunId: string;
 }) {
   return (
-    <section className="border-b border-line bg-panel-subtle" aria-label="Runs">
+    <section
+      className="border-b border-line-subtle bg-panel-subtle"
+      aria-label="Runs"
+    >
       <div className="flex overflow-x-auto">
         {runs.map((run) => (
           <div
             className={cx(
-              "flex min-h-12 min-w-[320px] flex-1 items-center justify-between gap-4 border-r border-line-subtle px-3 py-2 last:border-r-0",
+              "flex min-h-12 min-w-[320px] flex-1 items-center justify-between gap-4 border-r border-line-subtle px-4 py-2.5 last:border-r-0",
               selectedRunId === run.id && "bg-selected",
             )}
             key={run.id}
@@ -190,13 +203,13 @@ export function RunStrip({
 
 function SummaryCounter({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 bg-panel px-3 py-3">
-      <span className="block text-[0.68rem] font-semibold uppercase text-muted">
+    <div className="min-w-0">
+      <dt className="text-[0.68rem] font-semibold uppercase text-muted">
         {label}
-      </span>
-      <strong className="mt-1 block truncate font-mono text-lg font-semibold tabular-nums text-ink">
+      </dt>
+      <dd className="mt-1 truncate font-mono text-lg font-semibold tabular-nums text-ink">
         {value}
-      </strong>
+      </dd>
     </div>
   );
 }
@@ -217,7 +230,7 @@ function OutcomeBar({
   }
 
   return (
-    <div className="mt-3 flex h-3 overflow-hidden rounded-[3px] border border-line-subtle bg-panel">
+    <div className="mt-3 flex h-2.5 overflow-hidden rounded-[3px] bg-line-subtle">
       {segments.map((segment) => (
         <span
           aria-hidden="true"

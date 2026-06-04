@@ -134,6 +134,7 @@ function ToolFrame({
         ) : undefined
       }
       rightClassName="min-w-0 max-md:hidden"
+      wrapLeft
     />
   );
   const mobileMeta =

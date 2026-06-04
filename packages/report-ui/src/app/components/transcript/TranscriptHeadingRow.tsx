@@ -7,12 +7,14 @@ export function TranscriptHeadingRow({
   leftClassName,
   right,
   rightClassName,
+  wrapLeft,
 }: {
   className?: string;
   left: ReactNode;
   leftClassName?: string;
   right?: ReactNode;
   rightClassName?: string;
+  wrapLeft?: boolean;
 }) {
   const hasRight = right !== undefined && right !== null && right !== false;
 
@@ -25,7 +27,8 @@ export function TranscriptHeadingRow({
     >
       <div
         className={cx(
-          "flex min-w-0 items-center gap-2 overflow-hidden",
+          "flex min-w-0 items-center gap-2",
+          wrapLeft ? "flex-wrap overflow-visible" : "overflow-hidden",
           leftClassName,
         )}
       >

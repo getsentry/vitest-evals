@@ -7,7 +7,7 @@ import {
   type CaseFilters,
   type CaseStatusFilter,
 } from "../model";
-import { EmptyState, Field, Input, SectionHeader, Select, cx } from "../ui";
+import { EmptyState, Field, Input, Select, cx } from "../ui";
 import { ScoreValue, StatusMark } from "./ReportPrimitives";
 
 type CaseColumn = {
@@ -78,15 +78,23 @@ export function CaseWorkbench({
 }) {
   return (
     <section className="min-h-[620px] min-w-0 bg-panel">
-      <SectionHeader
-        title="Case ledger"
-        detail={`${cases.length} of ${totalCases} case(s)`}
-      />
-      <CaseFilterControls
-        filters={filters}
-        runs={runs}
-        onFiltersChange={onFiltersChange}
-      />
+      <div className="border-b border-line-subtle px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-ink">
+              Case ledger
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              {cases.length} of {totalCases} case(s)
+            </p>
+          </div>
+        </div>
+        <CaseFilterControls
+          filters={filters}
+          runs={runs}
+          onFiltersChange={onFiltersChange}
+        />
+      </div>
       <CaseTable
         cases={cases}
         selectedCaseId={selectedCaseId}
@@ -106,7 +114,7 @@ function CaseFilterControls({
   onFiltersChange: (filters: CaseFilters) => void;
 }) {
   return (
-    <div className="grid gap-2 border-b border-line-subtle bg-panel-subtle px-3 py-2.5 md:grid-cols-[minmax(220px,1fr)_150px_220px]">
+    <div className="mt-3 grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_220px]">
       <Field label="Search" htmlFor="case-search">
         <Input
           id="case-search"
@@ -169,16 +177,13 @@ function CaseTable({
   }
 
   return (
-    <div className="max-h-[calc(100vh-340px)] min-h-[430px] overflow-auto">
-      <table className="w-full min-w-[680px] table-fixed border-collapse text-sm">
-        <thead className="sticky top-0 z-10 bg-canvas text-left text-[0.68rem] font-semibold uppercase text-muted-strong">
+    <div className="h-[clamp(320px,calc(100vh-360px),720px)] overflow-auto">
+      <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+        <thead className="sticky top-0 z-10 bg-panel text-left text-[0.68rem] font-semibold uppercase text-muted-strong shadow-[0_1px_0_var(--color-line-subtle)]">
           <tr>
             {CASE_COLUMNS.map((column) => (
               <th
-                className={cx(
-                  "border-b border-line-subtle px-3 py-2",
-                  column.className,
-                )}
+                className={cx("px-4 py-2.5", column.className)}
                 key={column.id}
               >
                 {column.header}
@@ -213,21 +218,21 @@ function CaseRow({
   return (
     <tr
       className={cx(
-        "border-b border-line-subtle bg-panel hover:bg-panel-subtle",
-        selected && "bg-selected",
+        "border-b border-line-subtle",
+        selected ? "bg-selected" : "bg-panel",
       )}
     >
       <td
         className={cx(
-          "min-w-0 border-l-4 px-3 py-3 align-middle",
+          "min-w-0 border-l-4 px-4 py-3 align-middle",
           caseRailClass(testCase.status, selected),
         )}
       >
         <StatusMark status={testCase.status} />
       </td>
-      <td className="min-w-0 px-3 py-3 align-middle">
+      <td className="min-w-0 p-0 align-middle">
         <button
-          className="block w-full min-w-0 rounded-md text-left outline-none focus:ring-2 focus:ring-selected-line"
+          className="block w-full min-w-0 px-4 py-3 text-left outline-none hover:bg-panel-subtle focus-visible:bg-selected focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
           type="button"
           aria-pressed={selected}
           onClick={() => onSelectCase(testCase)}
@@ -240,16 +245,16 @@ function CaseRow({
           </span>
         </button>
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums">
+      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums">
         <ScoreValue score={testCase.eval?.avgScore} />
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatDuration(testCase.durationMs)}
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatNumber(caseTotalTokens(testCase))}
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatNumber(caseToolCallCount(testCase))}
       </td>
     </tr>

@@ -26,10 +26,10 @@ export function FactsGrid({
   return (
     <dl
       className={cx(
-        "grid gap-px bg-line-subtle",
+        "grid",
         compact
-          ? "rounded-lg border border-line-subtle sm:grid-cols-2 2xl:grid-cols-4"
-          : "border-b border-line-subtle sm:grid-cols-2 2xl:grid-cols-4",
+          ? "gap-x-6 gap-y-3 rounded-md border border-line-subtle bg-panel-subtle p-4 sm:grid-cols-2 2xl:grid-cols-4"
+          : "gap-x-8 gap-y-3 border-b border-line-subtle bg-panel px-5 py-3 sm:grid-cols-2 lg:grid-cols-4",
       )}
     >
       {children}
@@ -39,8 +39,10 @@ export function FactsGrid({
 
 export function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 bg-panel px-3 py-2">
-      <dt className="text-xs text-muted">{label}</dt>
+    <div className="min-w-0">
+      <dt className="text-[0.68rem] font-semibold uppercase text-muted">
+        {label}
+      </dt>
       <dd className="mt-1 truncate text-sm font-semibold text-ink">{value}</dd>
     </div>
   );

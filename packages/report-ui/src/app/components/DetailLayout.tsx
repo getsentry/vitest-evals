@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function DetailContent({ children }: { children: ReactNode }) {
   return (
-    <div className="grid h-full min-h-0 content-start gap-px overflow-auto bg-line-subtle">
+    <div className="grid h-full min-h-0 content-start overflow-auto bg-panel">
       {children}
     </div>
   );
@@ -18,7 +18,7 @@ export function DetailSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 bg-panel p-4">
+    <section className="min-w-0 border-b border-line-subtle bg-panel p-5 last:border-b-0">
       <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
         <h3 className="truncate text-sm font-semibold">{title}</h3>
         {action}

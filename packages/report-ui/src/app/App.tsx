@@ -87,13 +87,13 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
 
   return (
     <main className="min-h-screen bg-canvas text-ink">
-      <div className="mx-auto w-full max-w-[1800px] px-3 py-5 md:px-5">
+      <div className="mx-auto w-full max-w-[1800px] px-4 py-6 md:px-6">
         <ReportHeader
           caseCount={summary.caseCount}
           runCount={summary.runCount}
         />
         <section
-          className="overflow-hidden rounded-md border border-line bg-panel shadow-[0_1px_0_rgba(23,32,28,0.03)]"
+          className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
           aria-label="Report workspace"
         >
           <SummaryBar summary={summary} />

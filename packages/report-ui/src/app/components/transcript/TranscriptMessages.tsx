@@ -21,10 +21,8 @@ export function TranscriptMessages({
   events: TranscriptEvent[];
 }) {
   return (
-    <div className="min-w-0 overflow-hidden rounded-md border border-line bg-panel-subtle p-3 text-ink">
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-        <TranscriptEventList events={events} />
-      </div>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 text-ink">
+      <TranscriptEventList events={events} />
     </div>
   );
 }
@@ -265,7 +263,7 @@ function transcriptRoleClass(role: TranscriptMessage["role"]): string {
 
 function transcriptRoleLabelClass(role: TranscriptMessage["role"]): string {
   return cx(
-    "inline-block max-w-full break-all text-[0.98rem] font-extrabold leading-tight",
+    "inline-block max-w-full break-all text-[0.68rem] font-semibold uppercase leading-tight",
     role === "assistant" && "text-trace",
     role === "user" && "text-ink",
     role === "system" && "text-warn",
