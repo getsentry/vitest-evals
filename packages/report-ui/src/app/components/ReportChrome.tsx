@@ -58,12 +58,7 @@ export function SummaryBar({
       aria-label="Report summary"
     >
       <div className="grid gap-5 xl:grid-cols-[minmax(240px,0.82fr)_minmax(360px,1.28fr)_minmax(420px,1fr)] xl:items-center">
-        <div
-          className={cx(
-            "min-w-0 border-l-4 py-1 pl-4",
-            summary.failed > 0 ? "border-l-fail-line" : "border-l-pass-line",
-          )}
-        >
+        <div className="min-w-0 py-1">
           <span className="text-[0.68rem] font-semibold uppercase text-muted-strong">
             Verdict
           </span>

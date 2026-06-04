@@ -71,7 +71,7 @@ export function CaseDrawer({
         open
       >
         <header className="border-b border-line-subtle bg-panel">
-          <div className="grid min-w-0 gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-5 py-4 lg:items-start">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <StatusMark showLabel={false} status={testCase.status} />
@@ -85,9 +85,15 @@ export function CaseDrawer({
               <p className="mt-2 truncate text-sm leading-snug text-muted">
                 {testCase.displayFile}
               </p>
+              <div className="mt-3 flex items-baseline gap-2 sm:hidden">
+                <span className="text-[0.68rem] font-semibold uppercase text-muted">
+                  Score
+                </span>
+                <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+              </div>
             </div>
-            <div className="flex min-w-0 shrink-0 items-start justify-between gap-4 lg:justify-end">
-              <div className="text-right">
+            <div className="flex min-w-0 shrink-0 items-start justify-end gap-4">
+              <div className="hidden min-w-16 text-right sm:block">
                 <span className="block text-[0.68rem] font-semibold uppercase text-muted">
                   Score
                 </span>
