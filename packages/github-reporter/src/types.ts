@@ -1,63 +1,17 @@
-/** Status values emitted by Vitest JSON reports. */
-export type VitestJsonStatus =
-  | "passed"
-  | "failed"
-  | "skipped"
-  | "pending"
-  | "todo"
-  | "disabled";
+import type {
+  EvalScore,
+  UsageSummary as HarnessUsageSummary,
+  VitestJsonLocation,
+  VitestJsonReport,
+  VitestJsonStatus,
+} from "@vitest-evals/core";
 
-/** Source location attached to a Vitest assertion. */
-export type VitestJsonLocation = {
-  line: number;
-  column: number;
-};
-
-/** Assertion record read from Vitest's JSON reporter output. */
-export type VitestJsonAssertion = {
-  ancestorTitles: string[];
-  fullName: string;
-  status: VitestJsonStatus;
-  title: string;
-  meta?: unknown;
-  duration?: number | null;
-  failureMessages?: string[] | null;
-  location?: VitestJsonLocation | null;
-  tags?: string[];
-};
-
-/** Test-file record read from Vitest's JSON reporter output. */
-export type VitestJsonFile = {
-  message: string;
-  name: string;
-  status: "failed" | "passed";
-  startTime: number;
-  endTime: number;
-  assertionResults: VitestJsonAssertion[];
-};
-
-/** Top-level Vitest JSON reporter payload. */
-export type VitestJsonReport = {
-  numFailedTests: number;
-  numPassedTests: number;
-  numPendingTests: number;
-  numTodoTests: number;
-  numTotalTests: number;
-  startTime: number;
-  success: boolean;
-  testResults: VitestJsonFile[];
-};
-
-/** Score record stored by `vitest-evals` on Vitest task metadata. */
-export type EvalScore = {
-  name?: string;
-  score?: number | null;
-  metadata?: {
-    rationale?: unknown;
-    output?: unknown;
-    [key: string]: unknown;
-  };
-};
+export type {
+  EvalScore,
+  VitestJsonLocation,
+  VitestJsonReport,
+  VitestJsonStatus,
+} from "@vitest-evals/core";
 
 /** Normalized eval case consumed by GitHub reporter renderers. */
 export type EvalCase = {
@@ -70,6 +24,7 @@ export type EvalCase = {
   durationMs?: number;
   location?: VitestJsonLocation;
   failureMessages: string[];
+  toolCalls: ToolCallSummary[];
   eval?: {
     avgScore?: number;
     thresholdFailed?: boolean;
@@ -79,7 +34,7 @@ export type EvalCase = {
   harness?: {
     name?: string;
     output?: unknown;
-    usage?: UsageSummary;
+    usage?: HarnessUsageSummary;
     timingMs?: number;
     toolCalls: ToolCallSummary[];
     errors: unknown[];
@@ -117,7 +72,7 @@ export type EvalReport = {
   failures: EvalCase[];
 };
 
-/** Aggregated usage values collected from eval metadata. */
+/** Aggregated stable usage values collected from eval metadata. */
 export type UsageSummary = {
   inputTokens?: number;
   outputTokens?: number;

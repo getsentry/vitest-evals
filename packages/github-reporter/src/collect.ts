@@ -1,3 +1,9 @@
+import {
+  collectReportWorkspace,
+  type HarnessRun,
+  type ReportCase,
+  type ToolCallRecord,
+} from "@vitest-evals/core";
 import type {
   CollectOptions,
   EvalCase,
@@ -6,60 +12,30 @@ import type {
   EvalScore,
   ToolCallSummary,
   UsageSummary,
-  VitestJsonAssertion,
-  VitestJsonFile,
   VitestJsonReport,
 } from "./types";
-import {
-  compactLine,
-  isRecord,
-  normalizePathForGitHub,
-  stringifyValue,
-} from "./utils";
-
-type EvalMeta = {
-  scores?: EvalScore[];
-  avgScore?: number;
-  output?: unknown;
-  thresholdFailed?: boolean;
-};
-
-type HarnessMeta = {
-  name?: string;
-  run?: {
-    output?: unknown;
-    usage?: UsageSummary;
-    timings?: {
-      totalMs?: number;
-    };
-    session?: {
-      messages?: Array<{
-        toolCalls?: unknown[];
-      }>;
-    };
-    errors?: unknown[];
-  };
-};
-
-type HarnessRunMeta = NonNullable<HarnessMeta["run"]>;
+import { compactLine, stringifyValue } from "./utils";
 
 /** Converts a Vitest JSON report into the compact eval report model. */
 export function collectEvalReport(
   input: VitestJsonReport,
   options: CollectOptions = {},
 ): EvalReport {
-  const cases = input.testResults.flatMap((file) =>
-    file.assertionResults.flatMap((assertion) => {
-      const evalCase = collectEvalCase(file, assertion, options);
-      return evalCase ? [evalCase] : [];
-    }),
+  const workspace = collectReportWorkspace(
+    {
+      report: input,
+    },
+    {
+      workspace: options.workspace,
+    },
   );
+  const cases = workspace.cases.map(collectEvalCase);
   const failures = cases.filter((testCase) => testCase.status === "failed");
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
   const usage = sumUsage(cases);
-  const durationMs = resolveRunDuration(input);
+  const durationMs = workspace.runs[0]?.durationMs;
 
   return {
     status: input.success && failures.length === 0 ? "passed" : "failed",
@@ -90,45 +66,32 @@ export function collectEvalReport(
   };
 }
 
-function collectEvalCase(
-  file: VitestJsonFile,
-  assertion: VitestJsonAssertion,
-  options: CollectOptions,
-): EvalCase | null {
-  const meta = isRecord(assertion.meta) ? assertion.meta : {};
-  const evalMeta = getEvalMeta(meta.eval);
-  const harnessMeta = getHarnessMeta(meta.harness);
-
-  if (!evalMeta && !harnessMeta) {
-    return null;
-  }
-
-  const displayFile = normalizePathForGitHub(file.name, options.workspace);
-  const scores = evalMeta?.scores ?? [];
-  const harnessRun = harnessMeta?.run;
-  const toolCalls = collectToolCalls(harnessRun?.session);
+function collectEvalCase(reportCase: ReportCase): EvalCase {
+  const scores = (reportCase.eval?.scores ?? []).map(normalizeScore);
+  const harnessRun = reportCase.harness?.run;
+  const toolCalls = collectToolCalls(reportCase);
   const evalCase: EvalCase = {
-    id: `${file.name}:${assertion.location?.line ?? 0}:${assertion.fullName}`,
-    file: file.name,
-    displayFile,
-    title: assertion.title,
-    displayName: formatDisplayName(assertion),
-    status: assertion.status,
-    durationMs:
-      typeof assertion.duration === "number" ? assertion.duration : undefined,
-    location: assertion.location ?? undefined,
-    failureMessages: assertion.failureMessages ?? [],
-    eval: evalMeta
+    id: reportCase.id,
+    file: reportCase.file,
+    displayFile: reportCase.displayFile,
+    title: reportCase.title,
+    displayName: reportCase.displayName,
+    status: reportCase.status,
+    durationMs: numberField(reportCase.durationMs),
+    location: reportCase.location,
+    failureMessages: reportCase.failureMessages,
+    toolCalls,
+    eval: reportCase.eval
       ? {
-          avgScore: evalMeta.avgScore,
-          thresholdFailed: evalMeta.thresholdFailed,
-          output: evalMeta.output,
+          avgScore: numberField(reportCase.eval.avgScore),
+          thresholdFailed: reportCase.eval.thresholdFailed,
+          output: reportCase.eval.output,
           scores,
         }
       : undefined,
-    harness: harnessMeta
+    harness: reportCase.harness
       ? {
-          name: harnessMeta.name,
+          name: reportCase.harness.name,
           output: harnessRun?.output,
           usage: harnessRun?.usage,
           timingMs: harnessRun?.timings?.totalMs,
@@ -142,73 +105,10 @@ function collectEvalCase(
   return evalCase;
 }
 
-function getEvalMeta(value: unknown): EvalMeta | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
+function normalizeScore(score: EvalScore): EvalScore {
   return {
-    scores: Array.isArray(value.scores)
-      ? value.scores.filter(isRecord).map(normalizeScore)
-      : undefined,
-    avgScore: numberField(value.avgScore),
-    output: value.output,
-    thresholdFailed:
-      typeof value.thresholdFailed === "boolean"
-        ? value.thresholdFailed
-        : undefined,
-  };
-}
-
-function normalizeScore(score: Record<string, unknown>): EvalScore {
-  const metadata = isRecord(score.metadata) ? score.metadata : undefined;
-  return {
-    name: typeof score.name === "string" ? score.name : undefined,
+    ...score,
     score: numberField(score.score) ?? null,
-    metadata,
-  };
-}
-
-function getHarnessMeta(value: unknown): HarnessMeta | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const run = isRecord(value.run) ? value.run : undefined;
-  const usage = isRecord(run?.usage) ? getUsage(run.usage) : undefined;
-  const timings = isRecord(run?.timings) ? run.timings : undefined;
-
-  return {
-    name: typeof value.name === "string" ? value.name : undefined,
-    run: run
-      ? {
-          output: run.output,
-          usage,
-          timings: {
-            totalMs:
-              typeof timings?.totalMs === "number"
-                ? timings.totalMs
-                : undefined,
-          },
-          session: isRecord(run.session)
-            ? {
-                messages: Array.isArray(run.session.messages)
-                  ? (run.session.messages as Array<{ toolCalls?: unknown[] }>)
-                  : undefined,
-              }
-            : undefined,
-          errors: Array.isArray(run.errors) ? run.errors : undefined,
-        }
-      : undefined,
-  };
-}
-
-function getUsage(value: Record<string, unknown>): UsageSummary {
-  return {
-    inputTokens: numberField(value.inputTokens),
-    outputTokens: numberField(value.outputTokens),
-    reasoningTokens: numberField(value.reasoningTokens),
-    totalTokens: numberField(value.totalTokens),
-    toolCalls: numberField(value.toolCalls),
   };
 }
 
@@ -220,7 +120,16 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function collectToolCalls(session: HarnessRunMeta["session"] | undefined) {
+function collectToolCalls(reportCase: ReportCase) {
+  const harnessCalls = collectSessionToolCalls(
+    reportCase.harness?.run?.session,
+  );
+  return harnessCalls.length > 0
+    ? harnessCalls
+    : (reportCase.eval?.toolCalls ?? []).map(toToolCallSummary);
+}
+
+function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
   const messages = session?.messages ?? [];
   const toolCalls: ToolCallSummary[] = [];
 
@@ -230,24 +139,30 @@ function collectToolCalls(session: HarnessRunMeta["session"] | undefined) {
     }
 
     for (const call of message.toolCalls) {
-      if (!isRecord(call) || typeof call.name !== "string") {
-        continue;
-      }
-
-      toolCalls.push({
-        name: call.name,
-        error: getToolCallError(call.error),
-        durationMs: numberField(call.durationMs),
-      });
+      toolCalls.push(toToolCallSummary(call));
     }
   }
 
   return toolCalls;
 }
 
+function toToolCallSummary(call: ToolCallRecord): ToolCallSummary {
+  return {
+    name: call.name,
+    error: getToolCallError(call.error),
+    durationMs: numberField(call.durationMs),
+  };
+}
+
 function getToolCallError(value: unknown) {
-  if (isRecord(value) && typeof value.message === "string") {
-    return value.message;
+  const error = value as { message?: unknown };
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
   }
   if (value !== undefined) {
     return stringifyValue(value, 240);
@@ -291,12 +206,6 @@ function stringifyReason(value: unknown) {
   return typeof value === "string" ? value : stringifyValue(value, 4000);
 }
 
-function formatDisplayName(assertion: VitestJsonAssertion) {
-  return [...assertion.ancestorTitles, assertion.title]
-    .filter((part) => part.length > 0)
-    .join(" > ");
-}
-
 function sumUsage(cases: EvalCase[]) {
   const usage: Required<UsageSummary> = {
     inputTokens: 0,
@@ -316,22 +225,17 @@ function sumUsage(cases: EvalCase[]) {
       (caseUsage?.inputTokens ?? 0) +
         (caseUsage?.outputTokens ?? 0) +
         (caseUsage?.reasoningTokens ?? 0);
-    usage.toolCalls +=
-      caseUsage?.toolCalls ?? testCase.harness?.toolCalls.length ?? 0;
+    usage.toolCalls += toolCallCount(testCase);
   }
 
   return usage;
 }
 
-function resolveRunDuration(input: VitestJsonReport) {
-  const startTimes = input.testResults
-    .map((file) => file.startTime)
-    .filter((time) => Number.isFinite(time));
-  const endTimes = input.testResults
-    .map((file) => file.endTime)
-    .filter((time) => Number.isFinite(time));
-  if (startTimes.length === 0 || endTimes.length === 0) {
-    return undefined;
+function toolCallCount(testCase: EvalCase) {
+  const usageToolCalls = testCase.harness?.usage?.toolCalls;
+  if (usageToolCalls !== undefined) {
+    return Math.max(usageToolCalls, testCase.toolCalls.length);
   }
-  return Math.max(...endTimes) - Math.min(...startTimes);
+
+  return testCase.toolCalls.length;
 }

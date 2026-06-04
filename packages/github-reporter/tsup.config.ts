@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["vitest"],
+  external: ["@vitest-evals/core", "@vitest-evals/core/node", "vitest"],
 });

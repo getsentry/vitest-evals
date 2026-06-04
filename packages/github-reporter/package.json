@@ -20,9 +20,7 @@
   "bin": {
     "vitest-evals-github-report": "./dist/cli.js"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "publishConfig": {
     "access": "public"
   },
@@ -37,6 +35,9 @@
   "scripts": {
     "build": "tsup --config ./tsup.config.ts",
     "build:action": "tsup --config ./tsup.action.config.ts"
+  },
+  "dependencies": {
+    "@vitest-evals/core": "workspace:*"
   },
   "peerDependencies": {
     "vitest": ">=4 <5"

@@ -1,10 +1,16 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "apps/**/*.ts",
+    "vitest.config.ts"
+  ],
   "exclude": [
     "**/dist/**",
     "**/coverage/**",
     "node_modules",
+    "packages/report-ui/vite.config.ts",
     "packages/docs/src/content.config.ts"
   ]
 }

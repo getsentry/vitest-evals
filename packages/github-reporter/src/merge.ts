@@ -60,6 +60,12 @@ function mergeUsage(usages: Array<Required<UsageSummary>>) {
 }
 
 function mergeDuration(reports: EvalReport[]) {
+  const durations = reports
+    .map((report) => report.durationMs)
+    .filter(
+      (durationMs): durationMs is number =>
+        typeof durationMs === "number" && Number.isFinite(durationMs),
+    );
   const intervals = reports
     .map((report) => {
       if (
@@ -80,19 +86,12 @@ function mergeDuration(reports: EvalReport[]) {
       Boolean(interval),
     );
 
-  if (intervals.length > 0) {
+  if (intervals.length > 0 && intervals.length === durations.length) {
     return (
       Math.max(...intervals.map((interval) => interval.end)) -
       Math.min(...intervals.map((interval) => interval.start))
     );
   }
-
-  const durations = reports
-    .map((report) => report.durationMs)
-    .filter(
-      (durationMs): durationMs is number =>
-        typeof durationMs === "number" && Number.isFinite(durationMs),
-    );
 
   return durations.length > 0
     ? durations.reduce((total, durationMs) => total + durationMs, 0)

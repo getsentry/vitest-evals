@@ -6,6 +6,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "vitest-evals": ["packages/vitest-evals/src/index.ts"],
@@ -17,7 +18,10 @@
       "@vitest-evals/harness-pi-ai": ["packages/harness-pi-ai/src/index.ts"],
       "@vitest-evals/github-reporter": [
         "packages/github-reporter/src/index.ts"
-      ]
+      ],
+      "@vitest-evals/core": ["packages/core/src/index.ts"],
+      "@vitest-evals/core/node": ["packages/core/src/node.ts"],
+      "@vitest-evals/report-ui": ["packages/report-ui/src/index.ts"]
     }
   }
 }

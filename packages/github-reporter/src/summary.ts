@@ -283,8 +283,8 @@ function renderFailureBlock(
     );
   }
 
-  if (testCase.harness?.toolCalls.length) {
-    const toolCalls = testCase.harness.toolCalls.slice(0, maxToolCalls);
+  if (testCase.toolCalls.length) {
+    const toolCalls = testCase.toolCalls.slice(0, maxToolCalls);
     lines.push(
       ...renderAsciiTable(
         ["Tool", "Status", "Duration"],
@@ -297,9 +297,9 @@ function renderFailureBlock(
         ]),
       ),
     );
-    if (testCase.harness.toolCalls.length > maxToolCalls) {
+    if (testCase.toolCalls.length > maxToolCalls) {
       lines.push(
-        `${testCase.harness.toolCalls.length - maxToolCalls} more tool calls omitted`,
+        `${testCase.toolCalls.length - maxToolCalls} more tool calls omitted`,
       );
     }
     lines.push("");
@@ -358,7 +358,10 @@ function formatCaseUsage(testCase: EvalCase) {
     (usage?.inputTokens ?? 0) +
       (usage?.outputTokens ?? 0) +
       (usage?.reasoningTokens ?? 0);
-  const toolCalls = usage?.toolCalls ?? testCase.harness?.toolCalls.length ?? 0;
+  const toolCalls =
+    usage?.toolCalls !== undefined
+      ? Math.max(usage.toolCalls, testCase.toolCalls.length)
+      : testCase.toolCalls.length;
 
   if (totalTokens > 0) {
     parts.push(`${formatNumber(totalTokens)} tokens`);
