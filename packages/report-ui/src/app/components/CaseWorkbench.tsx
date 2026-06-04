@@ -30,7 +30,7 @@ const CASE_COLUMNS: CaseColumn[] = [
   {
     id: "status",
     header: "Status",
-    className: "w-[88px]",
+    className: "w-[96px]",
   },
   {
     id: "case",
@@ -79,7 +79,7 @@ export function CaseWorkbench({
   return (
     <section className="min-h-[620px] min-w-0 bg-panel">
       <SectionHeader
-        title="Eval cases"
+        title="Case ledger"
         detail={`${cases.length} of ${totalCases} case(s)`}
       />
       <CaseFilterControls
@@ -106,7 +106,7 @@ function CaseFilterControls({
   onFiltersChange: (filters: CaseFilters) => void;
 }) {
   return (
-    <div className="grid gap-3 border-b border-line-subtle p-3 md:grid-cols-[minmax(220px,1fr)_160px_220px]">
+    <div className="grid gap-2 border-b border-line-subtle bg-panel-subtle px-3 py-2.5 md:grid-cols-[minmax(220px,1fr)_150px_220px]">
       <Field label="Search" htmlFor="case-search">
         <Input
           id="case-search"
@@ -169,9 +169,9 @@ function CaseTable({
   }
 
   return (
-    <div className="max-h-[calc(100vh-330px)] min-h-[430px] overflow-auto">
+    <div className="max-h-[calc(100vh-340px)] min-h-[430px] overflow-auto">
       <table className="w-full min-w-[680px] table-fixed border-collapse text-sm">
-        <thead className="sticky top-0 z-10 bg-panel-subtle text-left text-xs font-semibold uppercase text-muted-strong">
+        <thead className="sticky top-0 z-10 bg-canvas text-left text-[0.68rem] font-semibold uppercase text-muted-strong">
           <tr>
             {CASE_COLUMNS.map((column) => (
               <th
@@ -213,14 +213,14 @@ function CaseRow({
   return (
     <tr
       className={cx(
-        "border-b border-line-subtle hover:bg-selected",
+        "border-b border-line-subtle bg-panel hover:bg-panel-subtle",
         selected && "bg-selected",
       )}
     >
       <td
         className={cx(
-          "min-w-0 border-l-2 px-3 py-3 align-middle",
-          selected ? "border-l-selected-line" : "border-l-transparent",
+          "min-w-0 border-l-4 px-3 py-3 align-middle",
+          caseRailClass(testCase.status, selected),
         )}
       >
         <StatusMark status={testCase.status} />
@@ -240,18 +240,28 @@ function CaseRow({
           </span>
         </button>
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle text-sm">
+      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums">
         <ScoreValue score={testCase.eval?.avgScore} />
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle text-sm text-ink">
+      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatDuration(testCase.durationMs)}
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle text-sm text-ink">
+      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatNumber(caseTotalTokens(testCase))}
       </td>
-      <td className="min-w-0 px-3 py-3 text-right align-middle text-sm text-ink">
+      <td className="min-w-0 px-3 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
         {formatNumber(caseToolCallCount(testCase))}
       </td>
     </tr>
   );
+}
+
+function caseRailClass(status: ReportCase["status"], selected: boolean) {
+  if (selected) {
+    return "border-l-selected-line";
+  }
+  if (status === "failed") {
+    return "border-l-fail-line";
+  }
+  return "border-l-transparent";
 }

@@ -70,33 +70,37 @@ export function CaseDrawer({
         aria-labelledby="case-detail-title"
         open
       >
-        <header className="flex min-w-0 items-start justify-between gap-4 border-b border-line-subtle p-4">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <StatusMark status={testCase.status} />
-              <h2
-                className="truncate text-lg font-semibold text-ink"
-                id="case-detail-title"
+        <header className="border-b border-line-subtle bg-panel-subtle">
+          <div className="flex min-w-0 items-start justify-between gap-4 px-4 py-3">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <StatusMark status={testCase.status} />
+                <h2
+                  className="truncate text-lg font-semibold text-ink"
+                  id="case-detail-title"
+                >
+                  {testCase.displayName}
+                </h2>
+              </div>
+              <p className="mt-2 truncate text-sm text-muted">
+                {testCase.displayFile}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-start gap-4">
+              <div className="border-l border-line-subtle pl-4 text-right">
+                <span className="block text-[0.68rem] font-semibold uppercase text-muted">
+                  Score
+                </span>
+                <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+              </div>
+              <button
+                className="h-8 border-b-2 border-transparent px-2 text-sm font-semibold text-muted-strong outline-none hover:border-line hover:text-ink focus:border-selected-line"
+                type="button"
+                onClick={onClose}
               >
-                {testCase.displayName}
-              </h2>
+                Close
+              </button>
             </div>
-            <p className="mt-2 truncate text-sm text-muted">
-              {testCase.displayFile}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-start gap-4">
-            <div className="text-right">
-              <span className="block text-xs text-muted">Score</span>
-              <ScoreValue score={testCase.eval?.avgScore} size="lg" />
-            </div>
-            <button
-              className="h-8 border-b-2 border-transparent px-2 text-sm font-semibold text-muted-strong outline-none hover:border-line hover:text-ink focus:border-selected-line"
-              type="button"
-              onClick={onClose}
-            >
-              Close
-            </button>
           </div>
         </header>
 
