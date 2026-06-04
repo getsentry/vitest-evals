@@ -56,14 +56,45 @@ function parseRegexLiteral(value, targetDescription) {
     throw new Error(`${targetDescription} must define includeNames.`);
   }
 
-  const match = value.match(/^\/((?:\\.|[^/])*)\/([a-z]*)$/i);
-  if (!match) {
+  if (!value.startsWith("/")) {
     throw new Error(
       `${targetDescription} includeNames must be a JavaScript regex literal.`,
     );
   }
 
-  return new RegExp(match[1], match[2]);
+  let escaped = false;
+  for (let index = 1; index < value.length; index += 1) {
+    const character = value[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (character !== "/") {
+      continue;
+    }
+
+    const pattern = value.slice(1, index);
+    const flags = value.slice(index + 1);
+
+    if (!/^[dgimsuvy]*$/.test(flags)) {
+      throw new Error(
+        `${targetDescription} includeNames has invalid regex flags.`,
+      );
+    }
+
+    return new RegExp(pattern, flags);
+  }
+
+  throw new Error(
+    `${targetDescription} includeNames must be a JavaScript regex literal.`,
+  );
 }
 
 function collectCraftPackages(root) {
@@ -341,7 +372,13 @@ export function checkReleaseConfig(root = process.cwd()) {
   };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+export function isCliEntrypoint(argv = process.argv) {
+  return Boolean(
+    argv[1] && path.resolve(argv[1]) === fileURLToPath(import.meta.url),
+  );
+}
+
+if (isCliEntrypoint()) {
   try {
     const result = checkReleaseConfig();
     console.log(

@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { checkReleaseConfig } from "./check-release-config.mjs";
+import {
+  checkReleaseConfig,
+  isCliEntrypoint,
+} from "./check-release-config.mjs";
 
 function writeFixtureFile(root, relativePath, contents) {
   const absolutePath = path.join(root, relativePath);
@@ -208,5 +211,30 @@ describe("release config check", () => {
     expect(() => checkReleaseConfig(root)).toThrow(
       /includeNames does not match vitest-evals-harness-extra-1\.2\.3\.tgz/,
     );
+  });
+
+  test("accepts escaped slashes in Craft includeNames regex literals", () => {
+    const root = writeReleaseFixture({
+      craftPackages: [
+        "vitest-evals",
+        {
+          name: "@vitest-evals/harness-extra",
+          includeNames: "/^vitest-evals-harness-extra-\\d.*\\.tgz(?:\\/)?$/",
+        },
+      ],
+      packPackages: ["vitest-evals", "@vitest-evals/harness-extra"],
+      publishablePackages: ["vitest-evals", "@vitest-evals/harness-extra"],
+    });
+
+    expect(checkReleaseConfig(root)).toMatchObject({
+      packageCount: 2,
+      sourceCount: 3,
+    });
+  });
+
+  test("detects relative CLI invocation", () => {
+    expect(
+      isCliEntrypoint(["node", "./scripts/check-release-config.mjs"]),
+    ).toBe(true);
   });
 });
