@@ -153,6 +153,11 @@ then moves `vX.Y.Z` and the stable `vX` tag to the bundled action commit. The
 Craft GitHub target creates the release but is filtered away from package
 artifacts so it does not upload npm package contents as release assets.
 
+Release config validation treats every non-private `packages/*/package.json` as
+publishable. `pnpm release:check` verifies that `.craft.yml`, the post-merge
+pack step, Craft artifact selectors, package version bumping, and the bundled
+action tag workflow all cover that manifest-derived package set.
+
 ## Example
 
 The `apps/demo-pi` app shows the intended explicit-run flow:
