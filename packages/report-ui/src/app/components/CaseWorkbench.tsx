@@ -216,15 +216,10 @@ function CaseRow({
   onSelectCase: (testCase: ReportCase) => void;
 }) {
   return (
-    <tr
-      className={cx(
-        "cursor-pointer border-b border-line-subtle",
-        selected ? "bg-selected" : "bg-panel",
-      )}
-    >
+    <tr className="group cursor-pointer border-b border-line-subtle">
       <td
         className={cx(
-          "min-w-0 border-l-4 px-4 py-3 align-middle",
+          "min-w-0 border-l-4 bg-panel px-4 py-3 align-middle group-hover:bg-panel-subtle",
           caseRailClass(testCase.status, selected),
         )}
       >
@@ -232,7 +227,7 @@ function CaseRow({
       </td>
       <td className="min-w-0 p-0 align-middle">
         <button
-          className="block w-full min-w-0 cursor-pointer px-4 py-3 text-left outline-none hover:bg-panel-subtle focus-visible:bg-selected focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
+          className="block w-full min-w-0 cursor-pointer bg-panel px-4 py-3 text-left outline-none group-hover:bg-panel-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
           type="button"
           aria-pressed={selected}
           onClick={() => onSelectCase(testCase)}
@@ -245,16 +240,16 @@ function CaseRow({
           </span>
         </button>
       </td>
-      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums">
+      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums group-hover:bg-panel-subtle">
         <ScoreValue score={testCase.eval?.avgScore} />
       </td>
-      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
         {formatDuration(testCase.durationMs)}
       </td>
-      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
         {formatNumber(caseTotalTokens(testCase))}
       </td>
-      <td className="min-w-0 px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink">
+      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
         {formatNumber(caseToolCallCount(testCase))}
       </td>
     </tr>
