@@ -218,7 +218,7 @@ function CaseRow({
   return (
     <tr
       className={cx(
-        "border-b border-line-subtle",
+        "cursor-pointer border-b border-line-subtle",
         selected ? "bg-selected" : "bg-panel",
       )}
     >
@@ -232,7 +232,7 @@ function CaseRow({
       </td>
       <td className="min-w-0 p-0 align-middle">
         <button
-          className="block w-full min-w-0 px-4 py-3 text-left outline-none hover:bg-panel-subtle focus-visible:bg-selected focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
+          className="block w-full min-w-0 cursor-pointer px-4 py-3 text-left outline-none hover:bg-panel-subtle focus-visible:bg-selected focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
           type="button"
           aria-pressed={selected}
           onClick={() => onSelectCase(testCase)}
