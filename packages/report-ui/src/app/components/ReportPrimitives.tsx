@@ -18,9 +18,11 @@ export function JsonBlock({ value }: { value: unknown }) {
 
 export function FactsGrid({
   compact,
+  columns = 4,
   children,
 }: {
   compact?: boolean;
+  columns?: 2 | 4;
   children: ReactNode;
 }) {
   return (
@@ -29,7 +31,10 @@ export function FactsGrid({
         "grid",
         compact
           ? "gap-x-6 gap-y-3 rounded-md border border-line-subtle bg-panel-subtle p-4 sm:grid-cols-2 2xl:grid-cols-4"
-          : "gap-x-8 gap-y-3 border-b border-line-subtle bg-panel px-5 py-3 sm:grid-cols-2 lg:grid-cols-4",
+          : cx(
+              "gap-x-8 gap-y-3 border-b border-line-subtle bg-panel px-5 py-3 sm:grid-cols-2",
+              columns === 4 ? "lg:grid-cols-4" : "",
+            ),
       )}
     >
       {children}

@@ -122,7 +122,7 @@ function CaseFilterControls({
           onChange={(event) =>
             onFiltersChange({ ...filters, query: event.target.value })
           }
-          placeholder="Case, file, judge, harness"
+          placeholder="Case, file, judge"
         />
       </Field>
       <Field label="Status" htmlFor="case-status">

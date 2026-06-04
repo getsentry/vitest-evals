@@ -112,11 +112,9 @@ export function CaseDrawer({
           </div>
         </header>
 
-        <FactsGrid>
+        <FactsGrid columns={2}>
           <Fact label="Run" value={run?.source ?? testCase.runId} />
           <Fact label="Duration" value={formatDuration(testCase.durationMs)} />
-          <Fact label="Harness" value={testCase.harness?.name ?? "n/a"} />
-          <Fact label="Location" value={formatLocation(testCase)} />
         </FactsGrid>
 
         <nav
@@ -146,11 +144,4 @@ export function CaseDrawer({
       </dialog>
     </>
   );
-}
-
-function formatLocation(testCase: ReportCase) {
-  if (!testCase.location) {
-    return "n/a";
-  }
-  return `${testCase.location.line}:${testCase.location.column}`;
 }
