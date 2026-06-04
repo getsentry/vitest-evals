@@ -52,13 +52,14 @@ function TranscriptToolView({ call }: { call: ToolCall }) {
     { label: "error", value: call.error },
   ]);
   const duration = formatDuration(call.durationMs);
+  const failed = call.status === "error" || Boolean(call.error);
   const meta = [
     duration !== "n/a" ? duration : undefined,
-    call.error ? "error" : undefined,
+    failed ? "error" : undefined,
     call.callId ? `id ${call.callId}` : undefined,
   ].filter(isString);
   const mobileSummaryMeta =
-    duration !== "n/a" ? duration : call.error ? "error" : undefined;
+    duration !== "n/a" ? duration : failed ? "error" : undefined;
 
   return (
     <ToolFrame
@@ -67,7 +68,7 @@ function TranscriptToolView({ call }: { call: ToolCall }) {
       mobileSummaryMeta={mobileSummaryMeta}
       signature={
         <>
-          <ToolStatus failed={Boolean(call.error)} />
+          <ToolStatus failed={failed} />
           <strong className="min-w-0 break-words font-bold text-ink">
             {call.name}
           </strong>

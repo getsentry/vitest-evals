@@ -218,14 +218,22 @@ describe("filterReportCases", () => {
     ).toEqual([workspace.cases[0]]);
   });
 
-  test("searches harness and judge names", () => {
+  test("searches visible judge names but not hidden harness names", () => {
+    expect(
+      filterReportCases(workspace.cases, {
+        status: "all",
+        runId: "all",
+        query: "StructuredOutputJudge",
+      }),
+    ).toEqual(workspace.cases);
+
     expect(
       filterReportCases(workspace.cases, {
         status: "all",
         runId: "all",
         query: "pi-ai",
       }),
-    ).toEqual([workspace.cases[0]]);
+    ).toEqual([]);
   });
 });
 
@@ -255,14 +263,6 @@ describe("case helpers", () => {
           arguments: { invoiceId: "inv_123" },
           kind: "tool",
           name: "lookupInvoice",
-        },
-      ],
-      operations: [
-        { name: "run", label: "Run" },
-        {
-          name: "lookupInvoice",
-          label: "Tool",
-          arguments: { invoiceId: "inv_123" },
         },
       ],
     });

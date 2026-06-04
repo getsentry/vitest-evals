@@ -53,6 +53,7 @@ export default defineConfig({
               ],
             },
             { label: "Tool Replay", link: "/docs/tool-replay" },
+            { label: "Local Report UI", link: "/docs/report-ui" },
             { label: "GitHub Reporting", link: "/docs/github" },
           ],
         },

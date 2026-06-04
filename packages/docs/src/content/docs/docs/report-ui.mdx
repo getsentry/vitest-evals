@@ -1,0 +1,45 @@
+---
+title: Local Report UI
+description: Inspect Vitest JSON eval artifacts in a local React report viewer.
+editUrl: false
+---
+
+The local report UI reads Vitest JSON artifacts and serves a local viewer for
+drilling into runs, cases, scores, harness sessions, tool calls, and trace spans.
+
+## Emit JSON
+
+Run evals with the `vitest-evals` reporter plus Vitest's JSON reporter. The JSON
+artifact preserves the eval metadata used by the local UI and GitHub reporter.
+
+```bash title="run evals"
+pnpm exec vitest run --config vitest.evals.config.ts \
+  --reporter=vitest-evals/reporter \
+  --reporter=json \
+  --outputFile.json=vitest-results.json
+```
+
+## Serve Reports
+
+Use `vitest-evals serve` with one JSON file, a quoted glob, or a directory of
+JSON artifacts.
+
+```bash title="inspect reports"
+pnpm exec vitest-evals serve vitest-results.json
+pnpm exec vitest-evals serve "eval-results/*.json"
+pnpm exec vitest-evals serve eval-results/
+```
+
+The command prints the local URL and keeps the server alive until interrupted.
+Use `--host`, `--port`, or `--workspace` when the defaults do not match the
+environment where the artifacts were produced.
+
+## What to Inspect
+
+Use the report UI when a summary is not enough. It is built for comparing runs,
+finding failed eval cases, reading judge scores, inspecting harness output, and
+following trace-backed transcripts with tool call arguments, results, errors,
+and related span details.
+
+The same JSON artifacts can also be uploaded to the GitHub reporter, so local
+investigation and CI reporting stay on one durable report format.

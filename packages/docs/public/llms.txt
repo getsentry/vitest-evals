@@ -551,6 +551,22 @@ The reporter surfaces:
 - replay metadata
 - non-eval failures without pretending the run passed
 
+## Local report UI
+
+Use `vitest-evals serve` to inspect one or more Vitest JSON artifacts locally:
+
+```sh
+pnpm exec vitest-evals serve vitest-results.json
+pnpm exec vitest-evals serve "eval-results/*.json"
+pnpm exec vitest-evals serve eval-results/
+```
+
+The command accepts JSON files, simple globs, and directories. It opens a local
+React report viewer for run summaries, eval cases, scores, harness sessions,
+tool calls, trace-backed transcripts, span details, and raw case metadata.
+
+Use the same JSON artifacts for local investigation and GitHub reporting.
+
 ## GitHub Actions reporting
 
 Use the action, not a raw CLI command, in workflow docs:

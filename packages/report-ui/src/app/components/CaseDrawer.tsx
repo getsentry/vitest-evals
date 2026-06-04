@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
 import { formatDuration } from "../model";
 import type { DetailTab } from "../types";
@@ -29,26 +29,47 @@ export function CaseDrawer({
   onClose: () => void;
   onTabChange: (tab: DetailTab) => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
+    const dialog = dialogRef.current;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
+    if (dialog && !dialog.open) {
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
       }
-    };
+    }
 
-    window.addEventListener("keydown", onKeyDown);
+    const focusFrame = window.requestAnimationFrame(() => {
+      dialog
+        ?.querySelector<HTMLElement>("[data-dialog-initial-focus]")
+        ?.focus({ preventScroll: true });
+    });
+
     return () => {
+      window.cancelAnimationFrame(focusFrame);
+      if (dialog?.open) {
+        if (typeof dialog.close === "function") {
+          dialog.close();
+        } else {
+          dialog.removeAttribute("open");
+        }
+      }
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus({ preventScroll: true });
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open || !testCase) {
     return null;
@@ -58,18 +79,24 @@ export function CaseDrawer({
   const harnessRun = testCase.harness?.run;
 
   return (
-    <>
+    <dialog
+      className="fixed inset-0 z-50 m-0 h-screen max-h-none w-screen max-w-none overflow-hidden border-0 bg-transparent p-0 text-ink backdrop:bg-transparent"
+      aria-labelledby="case-detail-title"
+      aria-modal="true"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      ref={dialogRef}
+    >
       <button
-        className="fixed inset-0 z-40 bg-ink/20"
+        className="absolute inset-0 z-0 bg-ink/20"
         type="button"
         aria-label="Close case details"
+        tabIndex={-1}
         onClick={onClose}
       />
-      <dialog
-        className="fixed inset-y-0 left-auto right-0 z-50 m-0 flex h-screen max-h-none w-full max-w-none flex-col overflow-hidden border-0 border-l border-line bg-panel p-0 text-ink shadow-2xl backdrop:bg-transparent sm:w-[96vw] xl:w-[84vw] 2xl:w-[80vw]"
-        aria-labelledby="case-detail-title"
-        open
-      >
+      <section className="absolute inset-y-0 right-0 z-10 flex h-screen w-full max-w-none flex-col overflow-hidden border-l border-line bg-panel shadow-2xl sm:w-[96vw] xl:w-[84vw] 2xl:w-[80vw]">
         <header className="border-b border-line-subtle bg-panel">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-5 py-4 lg:items-start">
             <div className="min-w-0">
@@ -103,6 +130,7 @@ export function CaseDrawer({
                 className="relative grid size-8 place-items-center border border-transparent text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
                 type="button"
                 aria-label="Close case details"
+                data-dialog-initial-focus
                 onClick={onClose}
               >
                 <span
@@ -147,7 +175,7 @@ export function CaseDrawer({
           ) : null}
           {detailTab === "raw" ? <RawTab testCase={testCase} /> : null}
         </div>
-      </dialog>
-    </>
+      </section>
+    </dialog>
   );
 }

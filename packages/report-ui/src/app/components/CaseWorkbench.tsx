@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
 import {
   caseToolCallCount,
@@ -215,22 +216,29 @@ function CaseRow({
   testCase: ReportCase;
   onSelectCase: (testCase: ReportCase) => void;
 }) {
+  const selectCase = () => onSelectCase(testCase);
+
   return (
     <tr className="group cursor-pointer border-b border-line-subtle">
-      <td
-        className={cx(
-          "min-w-0 border-l-4 bg-panel px-4 py-3 align-middle group-hover:bg-panel-subtle",
-          caseRailClass(testCase.status, selected),
-        )}
-      >
-        <StatusMark status={testCase.status} />
+      <td className="min-w-0 p-0 align-middle">
+        <CaseCellButton
+          className={cx(
+            "border-l-4 text-left",
+            caseRailClass(testCase.status, selected),
+          )}
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+        >
+          <StatusMark status={testCase.status} />
+        </CaseCellButton>
       </td>
       <td className="min-w-0 p-0 align-middle">
-        <button
-          className="block w-full min-w-0 cursor-pointer bg-panel px-4 py-3 text-left outline-none group-hover:bg-panel-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line"
-          type="button"
-          aria-pressed={selected}
-          onClick={() => onSelectCase(testCase)}
+        <CaseCellButton
+          className="text-left"
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+          selected={selected}
+          tabIndex={0}
         >
           <span className="block truncate font-medium text-ink">
             {testCase.displayName}
@@ -238,21 +246,77 @@ function CaseRow({
           <span className="mt-1 block truncate text-xs text-muted">
             {testCase.displayFile}
           </span>
-        </button>
+        </CaseCellButton>
       </td>
-      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums group-hover:bg-panel-subtle">
-        <ScoreValue score={testCase.eval?.avgScore} />
+      <td className="min-w-0 p-0 align-middle">
+        <CaseCellButton
+          className="text-right font-mono text-[0.86rem] tabular-nums"
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+        >
+          <ScoreValue score={testCase.eval?.avgScore} />
+        </CaseCellButton>
       </td>
-      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
-        {formatDuration(testCase.durationMs)}
+      <td className="min-w-0 p-0 align-middle">
+        <CaseCellButton
+          className="text-right font-mono text-[0.86rem] tabular-nums text-ink"
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+        >
+          {formatDuration(testCase.durationMs)}
+        </CaseCellButton>
       </td>
-      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
-        {formatNumber(caseTotalTokens(testCase))}
+      <td className="min-w-0 p-0 align-middle">
+        <CaseCellButton
+          className="text-right font-mono text-[0.86rem] tabular-nums text-ink"
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+        >
+          {formatNumber(caseTotalTokens(testCase))}
+        </CaseCellButton>
       </td>
-      <td className="min-w-0 bg-panel px-4 py-3 text-right align-middle font-mono text-[0.86rem] tabular-nums text-ink group-hover:bg-panel-subtle">
-        {formatNumber(caseToolCallCount(testCase))}
+      <td className="min-w-0 p-0 align-middle">
+        <CaseCellButton
+          className="text-right font-mono text-[0.86rem] tabular-nums text-ink"
+          label={`Open ${testCase.displayName}`}
+          onClick={selectCase}
+        >
+          {formatNumber(caseToolCallCount(testCase))}
+        </CaseCellButton>
       </td>
     </tr>
+  );
+}
+
+function CaseCellButton({
+  children,
+  className,
+  label,
+  selected,
+  tabIndex = -1,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  label: string;
+  selected?: boolean;
+  tabIndex?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={cx(
+        "block h-full w-full min-w-0 cursor-pointer bg-panel px-4 py-3 outline-none group-hover:bg-panel-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line",
+        className,
+      )}
+      type="button"
+      aria-label={label}
+      aria-pressed={selected}
+      tabIndex={tabIndex}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

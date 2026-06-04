@@ -94,7 +94,6 @@ type TraceMessage = {
 
 export type Transcript = {
   events: TranscriptEvent[];
-  operations: TranscriptOperation[];
 };
 
 /** Builds dashboard-level summary values from a collected report workspace. */
@@ -209,7 +208,6 @@ export function buildSpanTree(spans: NormalizedSpan[]) {
 export function buildTranscript(run: HarnessRun): Transcript {
   return {
     events: transcriptEvents(run),
-    operations: transcriptOperations(run),
   };
 }
 
@@ -494,10 +492,6 @@ function sameTraceMessage(
   );
 }
 
-function transcriptOperations(run: HarnessRun) {
-  return sortedRunSpans(run).map(transcriptOperation);
-}
-
 function transcriptOperation(
   span: NormalizedSpan,
   index: number,
@@ -635,7 +629,6 @@ function searchableCaseText(testCase: ReportCase) {
     testCase.fullName,
     testCase.displayFile,
     testCase.source,
-    testCase.harness?.name,
     ...(testCase.eval?.scores ?? []).map((score) => score.name ?? ""),
   ]
     .filter(Boolean)
