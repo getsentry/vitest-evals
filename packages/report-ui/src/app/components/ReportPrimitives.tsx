@@ -48,9 +48,18 @@ export function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function StatusMark({ status }: { status: ReportCase["status"] }) {
+export function StatusMark({
+  showLabel = true,
+  status,
+}: {
+  showLabel?: boolean;
+  status: ReportCase["status"];
+}) {
   return (
-    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-muted-strong">
+    <span
+      aria-label={showLabel ? undefined : status}
+      className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-muted-strong"
+    >
       <span
         className={cx(
           "h-2.5 w-2.5 shrink-0 rounded-[2px]",
@@ -58,7 +67,7 @@ export function StatusMark({ status }: { status: ReportCase["status"] }) {
         )}
         aria-hidden="true"
       />
-      <span>{status}</span>
+      {showLabel ? <span>{status}</span> : null}
     </span>
   );
 }

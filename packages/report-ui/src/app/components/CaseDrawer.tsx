@@ -74,7 +74,7 @@ export function CaseDrawer({
           <div className="grid min-w-0 gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <StatusMark status={testCase.status} />
+                <StatusMark showLabel={false} status={testCase.status} />
                 <h2
                   className="truncate text-xl font-semibold leading-tight text-ink"
                   id="case-detail-title"
