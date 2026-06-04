@@ -137,10 +137,11 @@ export function resolveSelectedCaseId(
   selectedCaseId: string | undefined,
   filteredCases: ReportWorkspace["cases"],
 ) {
-  if (
-    selectedCaseId &&
-    filteredCases.some((testCase) => testCase.id === selectedCaseId)
-  ) {
+  if (selectedCaseId === undefined) {
+    return undefined;
+  }
+
+  if (filteredCases.some((testCase) => testCase.id === selectedCaseId)) {
     return selectedCaseId;
   }
   return filteredCases[0]?.id;

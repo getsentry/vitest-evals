@@ -297,6 +297,63 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
+  test("preserves harness metadata when optional run arrays are partially invalid", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "partial",
+          run: {
+            session: {
+              messages: [{ role: "user", content: "hello" }],
+            },
+            usage: {
+              totalTokens: 42,
+            },
+            traces: [
+              {
+                spans: [
+                  {
+                    name: 123,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({
+      harness: {
+        name: "partial",
+        run: {
+          session: {
+            messages: [{ role: "user", content: "hello" }],
+          },
+          traces: [{ spans: [] }],
+          usage: {
+            totalTokens: 42,
+          },
+        },
+      },
+    });
+  });
+
+  test("preserves harness name when run metadata cannot be parsed", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "partial",
+          run: {
+            session: "invalid",
+          },
+        },
+      }),
+    ).toEqual({
+      harness: {
+        name: "partial",
+      },
+    });
+  });
+
   test("preserves known metadata when persisted blocks include unknown keys", () => {
     const meta = readEvalTaskMeta({
       eval: {
@@ -495,6 +552,18 @@ describe("collectReportWorkspace", () => {
       evalPassed: 0,
       evalFailed: 0,
     });
+  });
+
+  test("treats raw Vitest JSON as raw even with a top-level report field", () => {
+    const json = {
+      ...structuredClone(sampleJson),
+      report: "passthrough metadata",
+    };
+
+    const workspace = collectReportWorkspace(json);
+
+    expect(workspace.cases).toHaveLength(1);
+    expect(workspace.runs[0]?.id).toBe("run-1");
   });
 });
 

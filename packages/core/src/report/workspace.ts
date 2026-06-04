@@ -172,6 +172,12 @@ export function collectReportWorkspace(
 }
 
 function normalizeWorkspaceInput(input: ReportWorkspaceInput) {
+  if (isVitestJsonReportLike(input)) {
+    return {
+      report: parseVitestJsonReport(input),
+    };
+  }
+
   if (isRecord(input) && "report" in input) {
     return {
       report: parseVitestJsonReport(input.report),
@@ -182,6 +188,10 @@ function normalizeWorkspaceInput(input: ReportWorkspaceInput) {
   return {
     report: parseVitestJsonReport(input),
   };
+}
+
+function isVitestJsonReportLike(input: unknown) {
+  return isRecord(input) && Array.isArray(input.testResults);
 }
 
 function createCaseId(

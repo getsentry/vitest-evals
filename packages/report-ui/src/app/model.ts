@@ -311,7 +311,7 @@ function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
     ];
   });
 
-  if (intervals.length > 0 && intervals.length === durations.length) {
+  if (intervals.length > 0) {
     const start = Math.min(...intervals.map((interval) => interval.start));
     const end = Math.max(...intervals.map((interval) => interval.end));
     return Math.max(0, end - start);
@@ -531,7 +531,10 @@ function transcriptOperation(
 }
 
 function sortedRunSpans(run: HarnessRun) {
-  return (run.traces ?? []).flatMap((trace) => trace.spans).sort(compareSpans);
+  const spans = (run.traces ?? []).flatMap((trace) => trace.spans);
+  return spans.every((span) => hasTimestamp(span.startedAt))
+    ? [...spans].sort(compareSpans)
+    : spans;
 }
 
 function operationKind(span: NormalizedSpan): TranscriptOperation["kind"] {
@@ -650,4 +653,8 @@ function timestampMs(value: string | undefined) {
   }
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function hasTimestamp(value: string | undefined) {
+  return value !== undefined && Number.isFinite(Date.parse(value));
 }

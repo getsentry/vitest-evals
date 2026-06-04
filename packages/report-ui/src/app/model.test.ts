@@ -166,6 +166,29 @@ describe("summarizeWorkspace", () => {
     ).toBe(5000);
   });
 
+  test("uses known wall-clock intervals when some runs lack start times", () => {
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        runs: [
+          {
+            ...workspace.runs[0]!,
+            durationMs: 5000,
+            id: "shard-a.json",
+            source: "shard-a.json",
+            startedAt: 1000,
+          },
+          {
+            ...workspace.runs[0]!,
+            durationMs: 3000,
+            id: "shard-b.json",
+            source: "shard-b.json",
+          },
+        ],
+      }).durationMs,
+    ).toBe(5000);
+  });
+
   test("falls back to summed durations for runs without start times", () => {
     expect(
       summarizeWorkspace({
@@ -341,6 +364,57 @@ describe("case helpers", () => {
       ["assistant", "Continue?"],
       ["user", "yes"],
       ["assistant", "Done"],
+    ]);
+  });
+
+  test("preserves trace span order when spans do not have timestamps", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: { messages: [] },
+      usage: {},
+      traces: [
+        {
+          spans: [
+            {
+              durationMs: 120,
+              id: "model-1",
+              kind: "model",
+              name: "model",
+              attributes: {
+                "gen_ai.input.messages": [
+                  { role: "user", content: "Refund invoice inv_123" },
+                ],
+                "gen_ai.output.messages": [
+                  { role: "assistant", content: "Checking the invoice." },
+                ],
+              },
+            },
+            {
+              durationMs: 4,
+              id: "tool-1",
+              kind: "tool",
+              name: "lookupInvoice",
+              attributes: {
+                "gen_ai.tool.name": "lookupInvoice",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      transcript.events.map((event) =>
+        event.kind === "message"
+          ? [event.kind, event.role, event.content]
+          : event.kind === "tool"
+            ? [event.kind, event.name]
+            : [event.kind, event.operation.name],
+      ),
+    ).toEqual([
+      ["message", "user", "Refund invoice inv_123"],
+      ["message", "assistant", "Checking the invoice."],
+      ["tool", "lookupInvoice"],
     ]);
   });
 

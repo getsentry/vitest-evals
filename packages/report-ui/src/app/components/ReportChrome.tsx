@@ -6,7 +6,11 @@ import {
   type summarizeWorkspace,
 } from "../model";
 import { cx, toneTextClass, type Tone } from "../ui";
-import { passRate, statusFillClass } from "./ReportPrimitives";
+import {
+  executedCaseCount,
+  passRate,
+  statusFillClass,
+} from "./ReportPrimitives";
 
 export function ReportHeader({
   caseCount,
@@ -266,11 +270,12 @@ function OutcomeStat({
 }
 
 function passRateTone(summary: ReturnType<typeof summarizeWorkspace>): Tone {
-  if (summary.caseCount === 0) {
+  const executedCases = executedCaseCount(summary);
+  if (executedCases === 0) {
     return "empty";
   }
 
-  const rate = summary.passed / summary.caseCount;
+  const rate = summary.passed / executedCases;
   if (rate >= 0.9) {
     return "good";
   }

@@ -63,31 +63,31 @@ export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
 const LenientToolCallRecordSchema = ToolCallRecordSchema.strip();
 const LenientMessageSchema = NormalizedMessageSchema.extend({
-  toolCalls: z.array(LenientToolCallRecordSchema).optional(),
+  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
 }).strip();
 const LenientSessionSchema = NormalizedSessionSchema.extend({
-  messages: z.array(LenientMessageSchema).default([]),
+  messages: z.array(LenientMessageSchema).default([]).catch([]),
 }).strip();
 const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
 const LenientSpanSchema = NormalizedSpanSchema.extend({
-  events: z.array(LenientSpanEventSchema).optional(),
+  events: z.array(LenientSpanEventSchema).optional().catch(undefined),
 }).strip();
 const LenientTraceSchema = NormalizedTraceSchema.extend({
-  spans: z.array(LenientSpanSchema).default([]),
+  spans: z.array(LenientSpanSchema).default([]).catch([]),
 }).strip();
 const LenientHarnessRunSchema = HarnessRunSchema.extend({
   session: LenientSessionSchema,
   usage: UsageSummarySchema.strip().default({}),
   timings: TimingSummarySchema.strip().optional(),
-  traces: z.array(LenientTraceSchema).optional(),
+  traces: z.array(LenientTraceSchema).optional().catch(undefined),
 }).strip();
 const LenientHarnessMetaSchema = HarnessMetaSchema.extend({
-  run: LenientHarnessRunSchema.optional(),
+  run: LenientHarnessRunSchema.optional().catch(undefined),
 }).strip();
 const LenientEvalScoreSchema = EvalScoreSchema.strip();
 const LenientEvalMetaSchema = EvalMetaSchema.extend({
-  scores: z.array(LenientEvalScoreSchema).optional(),
-  toolCalls: z.array(LenientToolCallRecordSchema).optional(),
+  scores: z.array(LenientEvalScoreSchema).optional().catch(undefined),
+  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
 }).strip();
 
 /** Reads eval metadata from an arbitrary Vitest assertion meta value. */

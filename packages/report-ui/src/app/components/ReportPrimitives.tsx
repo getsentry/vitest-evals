@@ -99,10 +99,17 @@ export function ScoreValue({
 }
 
 export function passRate(summary: ReturnType<typeof summarizeWorkspace>) {
-  if (summary.caseCount === 0) {
+  const executedCases = executedCaseCount(summary);
+  if (executedCases === 0) {
     return "n/a";
   }
-  return `${Math.round((summary.passed / summary.caseCount) * 100)}%`;
+  return `${Math.round((summary.passed / executedCases) * 100)}%`;
+}
+
+export function executedCaseCount(
+  summary: ReturnType<typeof summarizeWorkspace>,
+) {
+  return summary.passed + summary.failed;
 }
 
 export function statusTone(status: ReportCase["status"]): Tone {

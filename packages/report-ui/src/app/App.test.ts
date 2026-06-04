@@ -7,6 +7,7 @@ import {
   summarizeVisibleWorkspace,
   visibleWorkspaceRuns,
 } from "./App";
+import { passRate } from "./components/ReportPrimitives";
 
 const cases: ReportWorkspace["cases"] = [
   {
@@ -53,6 +54,10 @@ describe("case selection", () => {
   test("preserves a selected case that remains visible", () => {
     expect(resolveSelectedCase("failed-case", cases)).toEqual(cases[0]);
     expect(resolveSelectedCaseId("failed-case", cases)).toBe("failed-case");
+  });
+
+  test("preserves an empty selection when filters change", () => {
+    expect(resolveSelectedCaseId(undefined, cases)).toBeUndefined();
   });
 });
 
@@ -184,6 +189,36 @@ describe("visible summary", () => {
         [],
       ).runCount,
     ).toBe(1);
+  });
+
+  test("calculates pass rate from executed cases", () => {
+    expect(
+      passRate({
+        averageScore: undefined,
+        caseCount: 2,
+        durationMs: undefined,
+        failed: 0,
+        passed: 1,
+        runCount: 1,
+        skipped: 1,
+        totalTokens: 0,
+        toolCallCount: 0,
+      }),
+    ).toBe("100%");
+
+    expect(
+      passRate({
+        averageScore: undefined,
+        caseCount: 1,
+        durationMs: undefined,
+        failed: 0,
+        passed: 0,
+        runCount: 1,
+        skipped: 1,
+        totalTokens: 0,
+        toolCallCount: 0,
+      }),
+    ).toBe("n/a");
   });
 });
 
