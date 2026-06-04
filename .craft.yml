@@ -3,6 +3,14 @@ changelogPolicy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
 targets:
   - name: npm
+    id: "@vitest-evals/core"
+    access: public
+    includeNames: /^vitest-evals-core-\d.*\.tgz$/
+  - name: npm
+    id: "@vitest-evals/report-ui"
+    access: public
+    includeNames: /^vitest-evals-report-ui-\d.*\.tgz$/
+  - name: npm
     id: "vitest-evals"
     includeNames: /^vitest-evals-\d.*\.tgz$/
   - name: npm
