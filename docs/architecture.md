@@ -25,8 +25,11 @@ packages/
       harness.ts
       index.ts
       reporter.ts
+      replay.ts
       judges/
       legacy/
+  http/
+  http-vercel-sandbox/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
@@ -66,6 +69,37 @@ fields while still allowing provider-specific attributes.
 tool counts, retries, provider, and model. Provider-specific cost estimates are
 not normalized because pricing semantics vary by runtime and can be stale; if a
 harness needs to retain them, store them under `usage.metadata`.
+
+### `packages/http`
+
+Defines the engine-neutral HTTP interceptor package:
+
+- `HttpInterceptRequest`
+- `HttpInterceptor`
+- `createHttpInterceptor(...)`
+- `executeHttpWithReplay(...)`
+- `createHttpReplayInterceptor(...)`
+
+Engines such as Docker egress proxies, MSW, Playwright routing, or fetch shims
+own the transport-specific work of constructing a Fetch `Request` for the
+intended upstream URL. The package owns the fixture chain, deterministic
+unhandled responses, and replay-backed request/response cassette behavior.
+
+HTTP replay uses the same `VITEST_EVALS_REPLAY_MODE` and
+`VITEST_EVALS_REPLAY_DIR` settings as tool replay, but it records serialized
+HTTP request/response pairs instead of local tool inputs and outputs.
+
+### `packages/http-vercel-sandbox`
+
+Adapts Vercel Sandbox forwarded HTTP requests into `@vitest-evals/http`:
+
+- validates forwarded host, scheme, port, and path headers
+- strips Vercel proxy-only and hop-by-hop headers from the upstream request
+- applies app-owned credential/header transforms
+- routes traffic through interceptors before optional live fetch fallback
+
+It intentionally does not own Vercel OIDC verification, requester
+authorization, credential issuance, or sandbox network policy.
 
 ### `packages/vitest-evals/src/index.ts`
 

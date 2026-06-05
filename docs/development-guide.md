@@ -32,6 +32,7 @@ The repository is now harness-first:
 When changing behavior, decide first which surface you are touching:
 
 - root harness/judge API
+- HTTP interception/replay packages
 - reporter output
 - GitHub JSON post-processing output
 - a first-party harness package
@@ -58,6 +59,18 @@ Owns:
 - judge helpers and matcher APIs
 - reporter integration
 - legacy compatibility exports
+
+### `packages/http`
+
+Owns engine-neutral HTTP interception and request/response replay. It depends
+on the core replay primitive but stays outside the root package so engine
+adapters can evolve independently.
+
+### `packages/http-vercel-sandbox`
+
+Owns Vercel Sandbox forwarded-request adaptation for `@vitest-evals/http`.
+Keep Vercel-specific forwarded header parsing here, not in core and not in the
+engine-neutral HTTP package.
 
 ### `packages/harness-ai-sdk`
 

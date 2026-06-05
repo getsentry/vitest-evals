@@ -14,6 +14,10 @@
       "@vitest-evals/harness-openai-agents": [
         "packages/harness-openai-agents/src/index.ts"
       ],
+      "@vitest-evals/http": ["packages/http/src/index.ts"],
+      "@vitest-evals/http-vercel-sandbox": [
+        "packages/http-vercel-sandbox/src/index.ts"
+      ],
       "@vitest-evals/harness-pi-ai": ["packages/harness-pi-ai/src/index.ts"],
       "@vitest-evals/github-reporter": [
         "packages/github-reporter/src/index.ts"

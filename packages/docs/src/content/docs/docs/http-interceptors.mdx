@@ -1,0 +1,199 @@
+---
+title: HTTP Interceptors
+description: Intercept, mock, record, or replay outbound HTTP through any engine that can expose Fetch requests.
+editUrl: false
+---
+
+HTTP interceptors are the request-level sibling of tool replay. Use them when
+an eval exercises a full application or sandbox where outbound service calls do
+not pass through a local tool wrapper.
+
+The primitive is engine-neutral: Vercel Sandbox forwarding, a Docker egress
+proxy, MSW, Playwright routing, or a fetch shim can all adapt outbound traffic
+into the same `HttpInterceptRequest` shape.
+
+## Interceptor Shape
+
+An interceptor receives the upstream `Request`, the original `URL`, and optional
+provider/engine labels. Return a `Response` to handle the request, or
+`undefined` to let the next interceptor or live transport decide.
+
+```ts title="evals/interceptHttp.ts"
+import {
+  createHttpFixtureInterceptor,
+  createHttpInterceptor,
+  httpFixture,
+  unhandledHttpResponse,
+  type HttpInterceptRequest,
+} from "@vitest-evals/http";
+
+async function githubFixture(
+  input: HttpInterceptRequest,
+): Promise<Response | undefined> {
+  if (
+    input.provider !== "github" ||
+    input.upstreamUrl.hostname !== "api.github.com"
+  ) {
+    return undefined;
+  }
+
+  if (input.request.method === "GET" && input.upstreamUrl.pathname === "/user") {
+    return Response.json({ login: "eval-user" });
+  }
+
+  return new Response("missing GitHub fixture\n", { status: 501 });
+}
+
+export const interceptHttp = createHttpInterceptor([githubFixture], {
+  unhandled: unhandledHttpResponse,
+});
+```
+
+The composer clones the request before each interceptor so one fixture can
+inspect a body without consuming it for the next fixture.
+
+Use `createHttpFixtureInterceptor()` when direct fixture injection should be
+declarative:
+
+```ts title="evals/interceptHttp.ts"
+const staticFixtures = createHttpFixtureInterceptor([
+  httpFixture.get("/health", Response.json({ ok: true })),
+  httpFixture.post(
+    {
+      hostname: "api.github.com",
+      pathname: "/graphql",
+    },
+    async (input) =>
+      Response.json({
+        data: {
+          request: await input.request.json(),
+          viewer: { login: "eval-user" },
+        },
+      }),
+  ),
+]);
+```
+
+## Replay HTTP
+
+Use `createHttpReplayInterceptor()` when the request should be recorded on a
+cache miss and replayed on later runs. It uses the same
+`VITEST_EVALS_REPLAY_MODE` and `VITEST_EVALS_REPLAY_DIR` settings as tool
+replay.
+
+```ts title="evals/interceptHttp.ts"
+import {
+  createHttpInterceptor,
+  createHttpReplayInterceptor,
+  httpFixture,
+} from "@vitest-evals/http";
+
+export const interceptHttp = createHttpInterceptor([
+  staticFixtures,
+  githubFixture,
+  createHttpReplayInterceptor({
+    name: "sandbox-egress",
+    replay: {
+      version: "v1",
+      key: (request) => ({
+        method: request.method,
+        url: request.url,
+        body: request.body ?? null,
+      }),
+    },
+  }),
+]);
+```
+
+Direct fixtures should usually come before replay so hand-authored responses
+win and the remaining traffic records or replays. By default, HTTP replay keys
+on method, URL, and body. Recordings include
+request and response headers and bodies, with common sensitive headers such as
+`authorization`, `cookie`, and `set-cookie` redacted. Use `sanitize` for body
+redaction or fixture-specific response trimming. Use `redactHeaders` when a
+contract test needs a narrower header redaction list, or `redactHeaders: false`
+when the cassette is already fully sanitized elsewhere.
+
+## Vercel Sandbox
+
+Use `@vitest-evals/http-vercel-sandbox` when Vercel Sandbox forwards egress
+traffic back to your app. The adapter parses Vercel's forwarded headers,
+reconstructs the intended upstream `Request`, strips proxy-only headers, and
+then calls the generic HTTP interceptor chain.
+
+```ts title="api/internal/sandbox-egress.ts"
+import {
+  createHttpInterceptor,
+  createHttpReplayInterceptor,
+} from "@vitest-evals/http";
+import { proxyVercelSandboxHttp } from "@vitest-evals/http-vercel-sandbox";
+
+const interceptHttp = createHttpInterceptor([
+  createHttpReplayInterceptor({
+    name: "sandbox-egress",
+    replay: {
+      version: "v1",
+    },
+  }),
+]);
+
+export async function ALL(request: Request): Promise<Response> {
+  await verifyVercelOidc(request);
+
+  return await proxyVercelSandboxHttp(request, {
+    fixtures: [
+      httpFixture.get("/health", Response.json({ ok: true })),
+    ],
+    interceptHttp,
+    provider: ({ upstreamUrl }) => providerForHost(upstreamUrl.hostname),
+    headers: ({ provider, upstreamUrl }) =>
+      credentialHeadersFor(provider, upstreamUrl),
+  });
+}
+```
+
+Your app still owns OIDC verification, requester authorization, credential
+issuance, and sandbox network policy. The package only adapts Vercel's
+forwarded request format into `@vitest-evals/http`.
+
+## Other Engine Adapters
+
+Engine adapters should keep their own transport responsibilities. They should
+only call the interceptor after they have reconstructed the upstream request
+the app intended to make.
+
+```ts title="sandbox-egress.ts"
+import { interceptHttp } from "./evals/interceptHttp";
+
+export async function handleSandboxEgress(proxyRequest: Request) {
+  const upstreamUrl = forwardedUrlFromEngine(proxyRequest);
+  const provider = providerForHost(upstreamUrl.hostname);
+  const body =
+    proxyRequest.body &&
+    proxyRequest.method !== "GET" &&
+    proxyRequest.method !== "HEAD"
+      ? await proxyRequest.arrayBuffer()
+      : undefined;
+  const request = new Request(upstreamUrl, {
+    method: proxyRequest.method,
+    headers: credentialHeadersFor(provider, upstreamUrl),
+    ...(body ? { body } : {}),
+  });
+
+  const intercepted = await interceptHttp({
+    engine: "vercel-sandbox",
+    provider,
+    request,
+    upstreamUrl,
+  });
+  if (intercepted) {
+    return intercepted;
+  }
+
+  return fetch(request);
+}
+```
+
+That keeps Vercel-specific forwarded headers, Docker proxy routing, browser
+route APIs, credential injection, and live network policy outside
+`vitest-evals`, while still sharing fixture and replay behavior across engines.

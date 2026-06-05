@@ -184,6 +184,13 @@ Replay opt-in belongs on the harness, via `toolReplay`, while replay mode and
 recording directory can live in Vitest environment config. Tool definitions
 should stay free of VCR policy.
 
+For full application or sandbox flows where outbound HTTP does not pass through
+local tool wrappers, use `@vitest-evals/http`. Vercel Sandbox egress has a
+separate adapter package, `@vitest-evals/http-vercel-sandbox`, while Docker
+proxies, MSW, Playwright routes, or fetch shims can use the same request
+fixture and replay behavior without putting engine-specific proxy code in the
+core package.
+
 For the Pi-specific harness, output/session/usage normalization should usually
 be inferred automatically. Treat low-level normalization callbacks as an escape
 hatch, not part of the primary authoring path.

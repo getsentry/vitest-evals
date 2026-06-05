@@ -53,6 +53,7 @@ export default defineConfig({
               ],
             },
             { label: "Tool Replay", link: "/docs/tool-replay" },
+            { label: "HTTP Interceptors", link: "/docs/http-interceptors" },
             { label: "GitHub Reporting", link: "/docs/github" },
           ],
         },

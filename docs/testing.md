@@ -53,6 +53,15 @@ Cover:
 - matcher behavior for `toSatisfyJudge(...)`
 - any task metadata the reporter depends on
 
+### HTTP Interceptor Package Changes
+
+Cover:
+
+- interceptor chaining and pass-through behavior
+- request/response serialization and redaction
+- replay modes, cache keys, and recording metadata
+- engine adapter assumptions such as cloned request bodies
+
 ### Reporter Changes
 
 Cover:

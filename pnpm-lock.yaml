@@ -172,6 +172,18 @@ importers:
         specifier: workspace:*
         version: link:../vitest-evals
 
+  packages/http:
+    devDependencies:
+      vitest-evals:
+        specifier: workspace:*
+        version: link:../vitest-evals
+
+  packages/http-vercel-sandbox:
+    devDependencies:
+      '@vitest-evals/http':
+        specifier: workspace:*
+        version: link:../http
+
   packages/vitest-evals:
     dependencies:
       ai:

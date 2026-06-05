@@ -58,12 +58,14 @@ export async function executeWithReplay<
   context,
   execute,
   replay,
+  metadata,
 }: {
   toolName: string;
   args: TArgs;
   context: TContext;
   execute: (args: TArgs, context: TContext) => MaybePromise<TResult>;
   replay: boolean | ToolReplayConfig<TArgs, TResult, TContext> | undefined;
+  metadata?: Record<string, JsonValue | undefined>;
 }) {
   const replayConfig = normalizeReplayConfig(replay);
   const replayMode = resolveReplayMode();
@@ -138,6 +140,7 @@ export async function executeWithReplay<
         cacheKey,
         version: replayConfig.version,
         mode: replayMode,
+        ...(metadata ?? {}),
       },
     });
 
@@ -161,6 +164,7 @@ export async function executeWithReplay<
         cacheKey,
         version: replayConfig.version,
         mode: replayMode,
+        ...(metadata ?? {}),
       },
     });
 

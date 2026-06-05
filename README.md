@@ -4,6 +4,9 @@ Monorepo for the explicit-run `vitest-evals` shape:
 
 - `packages/vitest-evals`: core suite API, judges, normalized harness/session
   types, and reporter
+- `packages/http`: engine-neutral HTTP interception and replay helpers
+- `packages/http-vercel-sandbox`: Vercel Sandbox forwarded-request adapter for
+  `@vitest-evals/http`
 - `packages/harness-ai-sdk`: `ai-sdk`-focused harness adapter
 - `packages/harness-openai-agents`: `@openai/agents`-focused harness adapter
 - `packages/harness-pi-ai`: `pi-ai`-focused harness adapter with tool replay
@@ -33,6 +36,8 @@ Monorepo for the explicit-run `vitest-evals` shape:
 ```text
 packages/
   vitest-evals/
+  http/
+  http-vercel-sandbox/
   harness-ai-sdk/
   harness-openai-agents/
   harness-pi-ai/
@@ -250,6 +255,13 @@ export default defineConfig({
 otherwise. `record` always calls live and overwrites recordings — use it to
 refresh fixtures intentionally. Recordings are stored under
 `.vitest-evals/recordings/<tool-name>/`.
+
+For applications that make outbound service calls outside local tool wrappers,
+`@vitest-evals/http` exposes an engine-neutral HTTP interceptor primitive.
+Vercel Sandbox support lives in `@vitest-evals/http-vercel-sandbox`, while
+Docker proxies, MSW servers, Playwright routes, or fetch shims can adapt
+traffic into `{ request, upstreamUrl, provider, engine }` and share fixture
+chaining plus replay-aware recording.
 
 `pnpm evals` fans out to each workspace package or app that exposes an `evals`
 script. The shared eval CLI defaults replay to `auto` and writes recordings
