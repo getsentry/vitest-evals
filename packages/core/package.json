@@ -1,6 +1,6 @@
 {
   "name": "@vitest-evals/core",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Shared primitives, schemas, and report collection helpers for vitest-evals.",
   "repository": {
     "type": "git",
@@ -17,7 +17,9 @@
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
