@@ -5,51 +5,79 @@ import {
   type TranscriptToolEvent,
   formatJson,
 } from "../../model";
-import { cx } from "../../ui";
+import { cx, EmptyState } from "../../ui";
 import { TranscriptCodeBlock } from "./TranscriptCodeBlock";
 import {
   TranscriptHeadingMeta,
   TranscriptHeadingRow,
 } from "./TranscriptHeadingRow";
+import {
+  eventMatchesSearch,
+  HighlightText,
+  TranscriptSearchProvider,
+  useTranscriptSearch,
+} from "./transcriptSearch";
 import { TranscriptToolRun } from "./TranscriptToolView";
 
 export function TranscriptMessages({
   events,
+  search,
 }: {
   events: TranscriptEvent[];
+  search: string;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 text-ink">
-      <TranscriptEventList events={events} />
-    </div>
+    <TranscriptSearchProvider query={search}>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 text-ink">
+        <TranscriptEventList events={events} />
+      </div>
+    </TranscriptSearchProvider>
   );
 }
 
 function TranscriptEventList({ events }: { events: TranscriptEvent[] }) {
+  const search = useTranscriptSearch();
   const rows: ReactNode[] = [];
 
   for (let index = 0; index < events.length; ) {
     const event = events[index]!;
 
     if (event.kind === "tool") {
+      // Collect the full original tool run group.
       const tools: TranscriptToolEvent[] = [];
       const startIndex = index;
       while (events[index]?.kind === "tool") {
         tools.push(events[index] as TranscriptToolEvent);
         index += 1;
       }
-      rows.push(
-        <TranscriptToolRun
-          calls={tools}
-          key={`tool-run:${startIndex}`}
-          keyPrefix={`trace-tool-run:${startIndex}`}
-        />,
-      );
+
+      // When searching, only show tools that match — preserving original group boundaries.
+      const visibleTools = search.active
+        ? tools.filter((tool) =>
+            eventMatchesSearch(tool, search.normalizedQuery),
+          )
+        : tools;
+
+      if (visibleTools.length > 0) {
+        rows.push(
+          <TranscriptToolRun
+            calls={visibleTools}
+            key={`tool-run:${startIndex}`}
+            keyPrefix={`trace-tool-run:${startIndex}`}
+          />,
+        );
+      }
       continue;
     }
 
-    rows.push(<TranscriptMessageEvent key={event.id} message={event} />);
+    if (!search.active || eventMatchesSearch(event, search.normalizedQuery)) {
+      rows.push(<TranscriptMessageEvent key={event.id} message={event} />);
+    }
     index += 1;
+  }
+
+  if (search.active && rows.length === 0) {
+    return <EmptyState>No events match your search.</EmptyState>;
   }
 
   return <>{rows}</>;
@@ -85,6 +113,22 @@ function TranscriptMessageShell({
 
 function SystemMessageView({ message }: { message: TranscriptMessage }) {
   const [open, setOpen] = useState(false);
+  const { active: searchActive } = useTranscriptSearch();
+
+  // Force-expand so highlighted matches are visible during search.
+  if (searchActive) {
+    return (
+      <article className={transcriptMessageClass("system")}>
+        <div className="block min-h-6">
+          <TranscriptMessageHeader
+            messageRole="system"
+            meta={[formatContentSize(message.content)]}
+          />
+        </div>
+        <MessageBody value={message.content} />
+      </article>
+    );
+  }
 
   return (
     <details
@@ -148,7 +192,7 @@ function MessageBody({ value }: { value: unknown }) {
   if (typeof value === "string") {
     return (
       <p className="max-w-[86ch] whitespace-pre-wrap text-[0.92rem] leading-relaxed">
-        {value}
+        <HighlightText text={value} />
       </p>
     );
   }
