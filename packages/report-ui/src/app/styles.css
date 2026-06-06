@@ -24,6 +24,7 @@
   --color-fail-line: #d43f34;
   --color-trace: #2f5f8f;
   --color-trace-soft: #e7eff6;
+  --color-search-mark: #fef9c3;
 }
 
 @layer base {
