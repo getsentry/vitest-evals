@@ -491,7 +491,7 @@ export function createHarness<
  *   usage: { provider: "openai", model: "gpt-4o-mini" },
  * });
  *
- * expect(toolCalls(run.session)).toHaveLength(1);
+ * expect(toolCalls(run)).toHaveLength(1);
  * ```
  */
 export function normalizeHarnessRun<

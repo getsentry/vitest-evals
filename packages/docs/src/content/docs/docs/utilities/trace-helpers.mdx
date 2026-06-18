@@ -4,10 +4,10 @@ description: Read normalized operation spans from a harness run.
 editUrl: false
 ---
 
-Trace helpers read `result.traces`, the normalized operation spans attached to a
-harness run. First-party harnesses attach native run, model, and tool spans when
-they observe them. Custom harnesses created with `createHarness()` get fallback
-run and tool spans unless they return their own traces.
+Trace helpers read a harness run. First-party harnesses attach native run,
+model, and tool spans when they observe them. Custom harnesses created with
+`createHarness()` get fallback run and tool spans unless they return their own
+traces.
 
 ## Span Checks
 
@@ -28,7 +28,8 @@ expect(spansByKind(result, "tool").map((span) => span.name)).toContain(
 expect(failedSpans(result)).toHaveLength(0);
 ```
 
-Use `spans(result)` when you need the full flattened span list.
+Use `spans(result)` when you need the full flattened span list. The helpers also
+accept a normalized trace array when that is the only value available.
 
 ```ts title="evals/refund.eval.ts"
 import { spans } from "vitest-evals";
@@ -40,6 +41,6 @@ expect(spans(result).some((span) => span.status === "error")).toBe(false);
 
 | Helper | Use |
 | --- | --- |
-| [`spans`](/api/functions/spans/) | Flatten every span from a harness run. |
+| [`spans`](/api/functions/spans/) | Flatten every span from a run. |
 | [`spansByKind`](/api/functions/spansbykind/) | Filter spans by `run`, `model`, `tool`, or another span kind. |
 | [`failedSpans`](/api/functions/failedspans/) | Read spans with error status or normalized errors. |

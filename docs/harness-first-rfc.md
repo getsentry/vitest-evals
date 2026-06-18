@@ -142,7 +142,7 @@ describeEval(
       const result = await run("Refund invoice inv_123");
 
       expect(result.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(result.session)).toContainEqual(
+      expect(toolCalls(result)).toContainEqual(
         expect.objectContaining({ name: "lookupInvoice" }),
       );
     });

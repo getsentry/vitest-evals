@@ -50,7 +50,7 @@ describeEval("refund agent", { harness }, (it) => {
     expect(result.output).toMatchObject({
       status: "approved",
     });
-    expect(toolCalls(result.session).map((call) => call.name)).toContain(
+    expect(toolCalls(result).map((call) => call.name)).toContain(
       "lookupInvoice",
     );
   });

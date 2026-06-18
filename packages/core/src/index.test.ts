@@ -572,22 +572,23 @@ describe("normalized run helpers", () => {
     const workspace = collectReportWorkspace(sampleJson);
     const run = workspace.cases[0]!.harness!.run!;
 
+    expect(toolCalls(run).map((call) => call.name)).toEqual(["lookupInvoice"]);
     expect(toolCalls(run.session).map((call) => call.name)).toEqual([
       "lookupInvoice",
     ]);
-    expect(
-      assistantMessages(run.session).map((message) => message.role),
-    ).toEqual(["assistant"]);
-    expect(userMessages(run.session).map((message) => message.role)).toEqual([
-      "user",
+    expect(assistantMessages(run).map((message) => message.role)).toEqual([
+      "assistant",
     ]);
-    expect(systemMessages(run.session)).toEqual([]);
-    expect(toolMessages(run.session)).toEqual([]);
-    expect(messagesByRole(run.session, "assistant")).toEqual(
-      assistantMessages(run.session),
-    );
-    expect(latestAssistantMessageContent(run.session)).toBe("denied");
+    expect(userMessages(run).map((message) => message.role)).toEqual(["user"]);
+    expect(systemMessages(run)).toEqual([]);
+    expect(toolMessages(run)).toEqual([]);
+    expect(messagesByRole(run, "assistant")).toEqual(assistantMessages(run));
+    expect(latestAssistantMessageContent(run)).toBe("denied");
     expect(spans(run).map((span) => span.id)).toEqual([
+      "trace_1:run",
+      "trace_1:tool:1",
+    ]);
+    expect(spans(run.traces).map((span) => span.id)).toEqual([
       "trace_1:run",
       "trace_1:tool:1",
     ]);
@@ -598,6 +599,10 @@ describe("normalized run helpers", () => {
     expect(spansByKind(run, "tool").map((span) => span.name)).toEqual([
       "lookupInvoice",
     ]);
+    expect(spansByKind(run.traces, "tool").map((span) => span.name)).toEqual([
+      "lookupInvoice",
+    ]);
     expect(failedSpans(run)).toEqual([]);
+    expect(failedSpans(run.traces)).toEqual([]);
   });
 });

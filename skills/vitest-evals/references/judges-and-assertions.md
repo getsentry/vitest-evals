@@ -10,7 +10,7 @@ Every judge receives:
 |-------|---------|
 | `input` | Original typed eval input. |
 | `output` | Typed app output returned by the harness. |
-| `toolCalls` | Flattened calls from `run.session`. |
+| `toolCalls` | Flattened calls from the run. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
 | `harness` | Suite harness for intentional second runs. |

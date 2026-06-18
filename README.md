@@ -203,7 +203,7 @@ describeEval(
       expect(result.output).toMatchObject({
         status: expected.expectedStatus,
       });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+      expect(toolCalls(result).map((call) => call.name)).toEqual(
         expected.expectedTools,
       );
       await expect(result).toSatisfyJudge(factualityJudge, {

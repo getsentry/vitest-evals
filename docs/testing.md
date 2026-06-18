@@ -116,7 +116,7 @@ describeEval(
       const result = await run("Refund invoice inv_123");
 
       expect(result.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+      expect(toolCalls(result).map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",
       ]);

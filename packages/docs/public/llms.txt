@@ -203,10 +203,10 @@ Import from `vitest-evals` for new suites.
 - `ToolCallJudge(config?)`: deterministic tool-call judge.
 - `StructuredOutputJudge(config?)`: deterministic structured-output judge.
 - `formatScores(...)`: format judge results for assertions and reporters.
-- `toolCalls(session)`: flatten tool calls from a normalized session.
-- `assistantMessages(session)`, `userMessages(session)`, `systemMessages(session)`,
-  `toolMessages(session)`, `messagesByRole(session, role)`: filter normalized
-  messages.
+- `toolCalls(result)`: flatten tool calls from a normalized run.
+- `assistantMessages(result)`, `userMessages(result)`, `systemMessages(result)`,
+  `toolMessages(result)`, `messagesByRole(result, role)`: filter normalized
+  messages from a run.
 - `createHarness(...)`, `normalizeHarnessRun(...)`: custom harness helpers.
 
 Important root types include:

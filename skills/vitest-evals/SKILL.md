@@ -32,8 +32,8 @@ Use the harness-backed API as the only authoring model.
 - Bind exactly one `harness` to a suite.
 - Call `run(input)` where the test should execute the system.
 - Assert on `result.output` for app-facing behavior.
-- Use `result.session` and helpers such as `toolCalls(session)` for trace assertions.
-- Use `spans(result)`, `spansByKind(result, kind)`, and `failedSpans(result)` for trace assertions.
+- Use `toolCalls(result)` and message helpers for normalized session assertions.
+- Use `spans(result)`, `spansByKind(result, kind)`, and `failedSpans(result)` for span assertions.
 - Keep `HarnessRun`, `NormalizedSession`, usage, artifacts, and tool records JSON-serializable.
 - Keep judge model calls on judges. Use `createJudge("Name", assess)` for
   custom judges; use the provider-helper overload only when multiple judges

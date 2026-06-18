@@ -51,7 +51,8 @@ from `packages/core`:
 - `ToolCallRecord`
 - `UsageSummary`
 - `NormalizedTrace` and `NormalizedSpan`
-- helper accessors such as `toolCalls(session)` and `assistantMessages(session)`
+- helper accessors such as `toolCalls(result)`, `assistantMessages(result)`,
+  and `spansByKind(result, "tool")`
 
 The normalized session model lives in `packages/core` and is intentionally
 JSON-serializable so it can be persisted, attached to errors, and emitted by
