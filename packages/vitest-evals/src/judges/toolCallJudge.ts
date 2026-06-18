@@ -4,7 +4,6 @@ import {
   type ToolCallScorerConfig,
   type ToolCallScorerOptions,
 } from "../internal/toolCallScorer";
-import type { HarnessMetadata } from "../harness";
 
 /**
  * Expected tool-call shape accepted by `ToolCallJudge()`.
@@ -35,11 +34,10 @@ export type ToolCallJudgeExpectedTool =
  * });
  * ```
  */
-export interface ToolCallJudgeConfig extends ToolCallScorerConfig {}
-
-type ToolCallJudgeMetadata = HarnessMetadata & {
+export interface ToolCallJudgeConfig extends ToolCallScorerConfig {
+  /** Expected tool calls used by this judge instance. */
   expectedTools?: ToolCallJudgeExpectedTool[];
-};
+}
 
 /**
  * Matcher context accepted by `ToolCallJudge()`.
@@ -52,7 +50,7 @@ type ToolCallJudgeMetadata = HarnessMetadata & {
  * ```
  */
 export interface ToolCallJudgeOptions
-  extends JudgeContext<any, any, HarnessMetadata, any>,
+  extends JudgeContext<any, any, any>,
     Omit<
       ToolCallScorerOptions,
       "input" | "output" | "toolCalls" | "expectedTools"
@@ -69,14 +67,15 @@ export interface ToolCallJudgeOptions
  * ```ts
  * describeEval("refund agent", {
  *   harness: refundHarness,
- *   judges: [ToolCallJudge({ ordered: true })],
+ *   judges: [
+ *     ToolCallJudge({
+ *       ordered: true,
+ *       expectedTools: ["lookupInvoice", "createRefund"],
+ *     }),
+ *   ],
  * }, (it) => {
  *   it("creates a refund after lookup", async ({ run }) => {
- *     await run("Refund invoice inv_123", {
- *       metadata: {
- *         expectedTools: ["lookupInvoice", "createRefund"],
- *       },
- *     });
+ *     await run("Refund invoice inv_123");
  *   });
  * });
  * ```
@@ -84,18 +83,17 @@ export interface ToolCallJudgeOptions
 export function ToolCallJudge(
   config: ToolCallJudgeConfig = {},
 ): Judge<ToolCallJudgeOptions> {
-  const scorer = ToolCallScorer(config);
+  const { expectedTools, ...scorerConfig } = config;
+  const scorer = ToolCallScorer(scorerConfig);
   return {
     name: "ToolCallJudge",
     assess: (opts: ToolCallJudgeOptions) => {
-      const metadata = opts.metadata as ToolCallJudgeMetadata;
-
       return scorer({
         ...opts,
         input: formatJudgeValue(opts.input),
         output: formatJudgeValue(opts.output),
         expectedTools: normalizeExpectedTools(
-          opts.expectedTools ?? metadata.expectedTools,
+          opts.expectedTools ?? expectedTools,
         ),
       });
     },

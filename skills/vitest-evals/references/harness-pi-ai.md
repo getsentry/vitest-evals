@@ -22,7 +22,7 @@ const harness = piAiHarness({
 
 `agent` can be an existing agent instance or a per-run factory. Factories
 receive `{ input, context }` when per-run instructions, native tool closures,
-metadata, or seeded artifacts are needed before instrumentation.
+or seeded artifacts are needed before instrumentation.
 
 If the agent needs a custom entrypoint:
 

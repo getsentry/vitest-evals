@@ -21,8 +21,6 @@ describeEval(
   {
     skipIf: () => !process.env.OPENAI_API_KEY,
     harness: refundHarness,
-    judges: [ToolCallJudge(), factualityJudge],
-    judgeThreshold: 0.6,
   },
   (it) => {
     it.for<RefundCase>([
@@ -42,17 +40,21 @@ describeEval(
         expectedStatus: "denied",
         expectedTools: ["lookupInvoice"],
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      const result = await run(input, {
-        metadata,
-      });
+    ])("$name", async ({ input, ...expected }, { run }) => {
+      const result = await run(input);
 
-      await assertRefundCase(result, metadata);
+      await assertRefundCase(result, expected);
       await expect(result).toSatisfyJudge(outputJudge, {
-        metadata,
         expected: {
-          status: metadata.expectedStatus,
+          status: expected.expectedStatus,
         },
+      });
+      await expect(result).toSatisfyJudge(ToolCallJudge(), {
+        expectedTools: expected.expectedTools,
+      });
+      await expect(result).toSatisfyJudge(factualityJudge, {
+        expected: expected.expected,
+        threshold: 0.6,
       });
     });
   },

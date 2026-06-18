@@ -11,9 +11,6 @@ import {
 import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
-type DemoMetadata = {
-  scenario?: string;
-};
 type Classification = {
   label: "bourbon" | "scotch";
 };
@@ -23,7 +20,7 @@ type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
   ? true
   : false;
 type Expect<T extends true> = T;
-type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput, any>
+type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   ? TOutput
   : never;
 
@@ -155,7 +152,7 @@ type _OpenAiDecisionFieldOutput = Expect<
 type DemoAgent = {
   name: string;
   model: string;
-  tools?: OpenAiAgentsTool<string, DemoMetadata>[];
+  tools?: OpenAiAgentsTool<string>[];
 };
 
 let replayDir: string | undefined;
@@ -168,11 +165,8 @@ afterEach(() => {
   }
 });
 
-function createHarnessContext<TMetadata extends Record<string, unknown>>(
-  metadata: TMetadata,
-) {
+function createHarnessContext(_metadata?: unknown) {
   const context = {
-    metadata,
     artifacts: {} as Record<string, JsonValue>,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
       context.artifacts[name] = value;
@@ -265,9 +259,7 @@ describeEval(
       runner: {
         run: vi.fn(async (_agent: DemoAgent, _input: string, options) => {
           expect(options?.context).toMatchObject({
-            metadata: {
-              scenario: "peated",
-            },
+            artifacts: {},
           });
           expect(options?.stream).toBe(false);
           return {
@@ -280,11 +272,7 @@ describeEval(
   },
   (it) => {
     it("normalizes native run results", async ({ run }) => {
-      const result = await run("Classify bottle bt_123", {
-        metadata: {
-          scenario: "peated",
-        },
-      });
+      const result = await run("Classify bottle bt_123");
 
       expect(result.output).toEqual({
         status: "classified",
@@ -524,8 +512,8 @@ test("supports custom app output mapping", async () => {
     run: async ({ context, runOptions }) => {
       context.setArtifact("entrypoint", "custom");
       expect(runOptions.context).toMatchObject({
-        metadata: {
-          scenario: "domain",
+        artifacts: {
+          entrypoint: "custom",
         },
       });
 
@@ -573,17 +561,17 @@ test("passes run input and context to agent factory before tool instrumentation"
   vi.stubEnv("VITEST_EVALS_REPLAY_MODE", "auto");
   vi.stubEnv("VITEST_EVALS_REPLAY_DIR", replayDir);
 
-  let createdTool: OpenAiAgentsTool<string, DemoMetadata> | undefined;
+  let createdTool: OpenAiAgentsTool<string> | undefined;
   const agentFactory = vi.fn(
     ({
       input,
       context,
     }: {
       input: string;
-      context: HarnessContext<DemoMetadata>;
+      context: HarnessContext;
     }) => {
       context.setArtifact("preparedInput", input);
-      const scenario = context.metadata.scenario ?? "unknown";
+      const scenario = "refund";
       const lookupBottle = {
         type: "function",
         name: "lookupBottle",
@@ -599,7 +587,7 @@ test("passes run input and context to agent factory before tool instrumentation"
             scenario,
           };
         }),
-      } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+      } satisfies OpenAiAgentsTool<string>;
 
       createdTool = lookupBottle;
       return {
@@ -647,8 +635,8 @@ test("passes run input and context to agent factory before tool instrumentation"
     expect.objectContaining({
       input: "Classify bottle bt_123",
       context: expect.objectContaining({
-        metadata: {
-          scenario: "peated",
+        artifacts: {
+          preparedInput: "Classify bottle bt_123",
         },
       }),
     }),
@@ -659,7 +647,7 @@ test("passes run input and context to agent factory before tool instrumentation"
   expect(result.output).toEqual({
     bottleId: "bt_123",
     preparedInput: "Classify bottle bt_123",
-    scenario: "peated",
+    scenario: "refund",
   });
   expect(toolCalls(result.session)).toMatchObject([
     {
@@ -668,7 +656,7 @@ test("passes run input and context to agent factory before tool instrumentation"
       result: {
         bottleId: "bt_123",
         preparedInput: "Classify bottle bt_123",
-        scenario: "peated",
+        scenario: "refund",
       },
       metadata: {
         replay: {
@@ -755,7 +743,7 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
     type: "function",
     name: "lookupBottle",
     invoke,
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const originalInvoke = lookupBottle.invoke;
   const agent = {
     name: "classifier",
@@ -874,7 +862,7 @@ test("prefers captured local tool results over model-visible output wrappers", a
       bottleId: "bt_123",
       family: "bourbon",
     })),
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const harness = openaiAgentsHarness({
     agent: {
       name: "classifier",
@@ -958,7 +946,7 @@ test("preserves explicit null captured local tool results", async () => {
     type: "function",
     name: "lookupBottle",
     invoke: vi.fn(async () => null),
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const harness = openaiAgentsHarness({
     agent: {
       name: "classifier",
@@ -1026,7 +1014,7 @@ test("errors when replay is configured for unknown OpenAI Agents tools", async (
     type: "function",
     name: "lookupBottle",
     invoke: vi.fn(),
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const runner = {
     run: vi.fn(),
   };
@@ -1055,7 +1043,7 @@ test("errors when replay is configured for OpenAI Agents tools without invoke", 
   const hostedTool = {
     type: "web_search_preview",
     name: "web_search_preview",
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const runner = {
     run: vi.fn(),
   };
@@ -1115,10 +1103,7 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
         expect(runAgent).not.toBe(agent);
         expect(runAgent.tools[0]).not.toBe(originalTool);
 
-        const runtimeTool = runAgent.tools[0] as OpenAiAgentsTool<
-          string,
-          DemoMetadata
-        >;
+        const runtimeTool = runAgent.tools[0] as OpenAiAgentsTool<string>;
         const evidence = await runtimeTool.invoke?.(
           runOptions?.context,
           JSON.stringify({
@@ -1164,7 +1149,7 @@ test("accepts agent and runner as factories", async () => {
       context,
     }: {
       input: string;
-      context: HarnessContext<DemoMetadata>;
+      context: HarnessContext;
     }) => {
       context.setArtifact("preparedInput", input);
       return {
@@ -1176,8 +1161,8 @@ test("accepts agent and runner as factories", async () => {
   const runnerRun = vi.fn(
     async (_agent: DemoAgent, _input: string, runOptions) => {
       expect(runOptions?.context).toMatchObject({
-        metadata: {
-          scenario: "peated",
+        artifacts: {
+          preparedInput: "Classify bottle bt_123",
         },
       });
       return runResult;
@@ -1236,7 +1221,7 @@ test("keeps tool capture isolated across overlapping runs", async () => {
     type: "function",
     name: "lookupBottle",
     invoke,
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const originalInvoke = lookupBottle.invoke;
   const agent = {
     name: "classifier",
@@ -1246,11 +1231,8 @@ test("keeps tool capture isolated across overlapping runs", async () => {
   const harness = openaiAgentsHarness({
     agent,
     runner: {
-      run: async (runAgent: DemoAgent, _input: string, runOptions) => {
-        const runtimeContext = runOptions?.context as
-          | { metadata: DemoMetadata }
-          | undefined;
-        const scenario = runtimeContext?.metadata.scenario ?? "unknown";
+      run: async (runAgent: DemoAgent, input: string, runOptions) => {
+        const scenario = input.includes("first") ? "first" : "second";
         await new Promise((resolve) => setTimeout(resolve, 1));
         const evidence = await runAgent.tools?.[0].invoke?.(
           runOptions?.context,
@@ -1368,7 +1350,7 @@ test("attaches partial tool calls when Runner.run errors", async () => {
       bottleId: "bt_missing",
       family: "unknown",
     }),
-  } satisfies OpenAiAgentsTool<string, DemoMetadata>;
+  } satisfies OpenAiAgentsTool<string>;
   const harness = openaiAgentsHarness({
     agent: {
       name: "classifier",

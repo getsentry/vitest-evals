@@ -94,7 +94,7 @@ export type EnsureRunTraceOptions = {
 type OutputField<TOutput extends JsonValue | undefined> =
   undefined extends TOutput ? { output?: TOutput } : { output: TOutput };
 
-/** Per-run metadata shape accepted by harnesses and eval tests. */
+/** Generic JSON-like metadata record used by normalized artifacts and reports. */
 export type HarnessMetadata = Record<string, unknown>;
 
 /**
@@ -117,11 +117,7 @@ export type HarnessMetadata = Record<string, unknown>;
  * };
  * ```
  */
-export type HarnessContext<
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-> = {
-  /** Per-run metadata passed through `run(input, { metadata })`. */
-  metadata: Readonly<TMetadata>;
+export type HarnessContext = {
   /** Abort signal from Vitest when available. */
   signal?: AbortSignal;
   /** Mutable JSON-safe artifact bag shared with the harness. */
@@ -146,15 +142,11 @@ export type HarnessContext<
 export type Harness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   /** Stable harness name used in reports. */
   name: string;
   /** Executes the system under test and returns a normalized run. */
-  run: (
-    input: TInput,
-    context: HarnessContext<TMetadata>,
-  ) => Promise<HarnessRun<TOutput>>;
+  run: (input: TInput, context: HarnessContext) => Promise<HarnessRun<TOutput>>;
 };
 
 /** Value or promise accepted by lightweight harness callbacks. */
@@ -241,17 +233,15 @@ export type HarnessResultLike<
 > = HarnessRun<TOutput> | SimpleHarnessResult<TOutput>;
 
 /** Arguments passed to the `createHarness(...)` convenience callback. */
-export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
+export type CreateHarnessRunArgs<TInput> = {
   /** Original input passed to `run(input)`. */
   input: TInput;
-  /** Read-only metadata passed to `run(input, { metadata })`. */
-  metadata: Readonly<TMetadata>;
   /** Abort signal from Vitest when available. */
   signal?: AbortSignal;
   /** Mutable run artifact bag. */
-  artifacts: HarnessContext<TMetadata>["artifacts"];
+  artifacts: HarnessContext["artifacts"];
   /** Stores one JSON-safe artifact on the current run. */
-  setArtifact: HarnessContext<TMetadata>["setArtifact"];
+  setArtifact: HarnessContext["setArtifact"];
 };
 
 /**
@@ -270,13 +260,12 @@ export type CreateHarnessRunArgs<TInput, TMetadata extends HarnessMetadata> = {
 export type CreateHarnessOptions<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
 > = {
   /** Stable harness name used in reports. */
   name: string;
   /** Executes application code and returns either a lightweight result or full `HarnessRun`. */
   run: (
-    args: CreateHarnessRunArgs<TInput, TMetadata>,
+    args: CreateHarnessRunArgs<TInput>,
   ) => MaybePromise<HarnessResultLike<TOutput>>;
 };
 
@@ -407,15 +396,14 @@ export function normalizeContent(value: unknown): JsonValue {
  *
  * export const refundHarness = createHarness<
  *   string,
- *   { status: "approved" | "denied" },
- *   { expected: { status: "approved" | "denied" } }
+ *   { status: "approved" | "denied" }
  * >({
  *   name: "refund-agent",
- *   run: async ({ input, metadata, setArtifact }) => {
- *     const result = await runRefundFlow(input, metadata);
+ *   run: async ({ input, setArtifact }) => {
+ *     const result = await runRefundFlow(input);
  *     const output = { status: result.status };
  *
- *     setArtifact("case", { expected: metadata.expected.status });
+ *     setArtifact("case", { invoiceId: result.invoiceId });
  *
  *     return {
  *       output,
@@ -429,18 +417,12 @@ export function normalizeContent(value: unknown): JsonValue {
 export function createHarness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
->(
-  options: CreateHarnessOptions<TInput, TOutput, TMetadata>,
-): Harness<TInput, TOutput, TMetadata>;
+>(options: CreateHarnessOptions<TInput, TOutput>): Harness<TInput, TOutput>;
 export function createHarness<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
->(
-  options: CreateHarnessOptions<TInput, TOutput, TMetadata>,
-): Harness<TInput, TOutput, TMetadata> {
-  const harness: Harness<TInput, TOutput, TMetadata> = {
+>(options: CreateHarnessOptions<TInput, TOutput>): Harness<TInput, TOutput> {
+  const harness: Harness<TInput, TOutput> = {
     name: options.name,
     run: async (input, context) => {
       const startedAt = new Date();
@@ -448,7 +430,6 @@ export function createHarness<
       try {
         const result = await options.run({
           input,
-          metadata: context.metadata,
           signal: context.signal,
           artifacts: context.artifacts,
           setArtifact: context.setArtifact,
@@ -515,12 +496,11 @@ export function createHarness<
  */
 export function normalizeHarnessRun<
   TInput = unknown,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 >(
   input: TInput,
   result: HarnessResultLike<TOutput>,
-  context?: HarnessContext<TMetadata>,
+  context?: HarnessContext,
 ): HarnessRun<TOutput> {
   if (isHarnessRun(result)) {
     if (

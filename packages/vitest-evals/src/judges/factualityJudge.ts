@@ -1,8 +1,4 @@
-import {
-  type Harness,
-  type HarnessMetadata,
-  latestAssistantMessageContent,
-} from "../harness";
+import { type Harness, latestAssistantMessageContent } from "../harness";
 import type { JsonValue } from "../harness";
 import { createRunJudge } from "./judgeHarness";
 import type { JudgeHarness } from "./judgeHarness";
@@ -119,9 +115,7 @@ export type FactualityJudgeConfig = {
   name?: string;
   /** Default judge-side harness used when matcher options do not provide one. */
   judgeHarness?: JudgeHarness;
-};
-
-type FactualityJudgeMetadata = HarnessMetadata & {
+  /** Expert answer or reference facts used by this judge instance. */
   expected?: FactualityJudgeExpected;
 };
 
@@ -147,23 +141,20 @@ type FactualityJudgeMetadata = HarnessMetadata & {
  */
 export type FactualityJudgeOptions<
   TInput = any,
-  TOutput extends JsonValue | undefined = JsonValue | undefined,
-  TMetadata extends HarnessMetadata = HarnessMetadata,
-  THarness extends Harness<TInput, TOutput, TMetadata> | undefined =
-    | Harness<TInput, TOutput, TMetadata>
-    | undefined,
-> = JudgeContext<TInput, TOutput, TMetadata, THarness> & {
-  /** Expert answer or reference facts. Defaults to `metadata.expected`. */
+  TOutput extends JsonValue | undefined = any,
+  THarness extends Harness<TInput, TOutput> | undefined = any,
+> = JudgeContext<TInput, TOutput, THarness> & {
+  /** Expert answer or reference facts. Overrides the judge config default. */
   expected?: FactualityJudgeExpected;
 };
 
 /**
  * Creates a factuality judge over normalized harness output.
  *
- * `FactualityJudge()` compares `input`, `output`, and `expected` from the
- * current `JudgeContext`, so the same judge can run against any application
- * harness. Configure the LLM used for grading with `judgeHarness` on the
- * judge, suite, or matcher options.
+ * `FactualityJudge()` compares `input`, `output`, and an expert answer. Bind a
+ * suite-wide expert answer on the judge config, or pass a case-specific
+ * `expected` value to `toSatisfyJudge(...)`. Configure the LLM used for grading
+ * with `judgeHarness` on the judge, suite, or matcher options.
  *
  * @param config - Optional judge name and reusable judge harness default.
  *
@@ -178,18 +169,17 @@ export type FactualityJudgeOptions<
  *   model: anthropic("claude-sonnet-4-5"),
  *   temperature: 0,
  * });
- * const factualityJudge = FactualityJudge({ judgeHarness });
+ * const factualityJudge = FactualityJudge({
+ *   judgeHarness,
+ *   expected: "Paris is the capital of France.",
+ * });
  *
  * describeEval("qa agent", {
  *   harness: qaHarness,
  *   judges: [factualityJudge],
  * }, (it) => {
  *   it("answers a geography question", async ({ run }) => {
- *     await run("What is the capital of France?", {
- *       metadata: {
- *         expected: "Paris is the capital of France.",
- *       },
- *     });
+ *     await run("What is the capital of France?");
  *   });
  * });
  * ```
@@ -202,24 +192,29 @@ export function FactualityJudge(
   return {
     name: config.name ?? "FactualityJudge",
     judgeHarness,
-    assess: (opts) => assessFactuality(opts, judgeHarness),
+    assess: (opts) =>
+      assessFactuality(opts, {
+        expected: config.expected,
+        judgeHarness,
+      }),
   };
 }
 
 async function assessFactuality(
   opts: FactualityJudgeOptions,
-  configuredJudgeHarness: JudgeHarness | undefined,
+  config: {
+    expected: FactualityJudgeExpected | undefined;
+    judgeHarness: JudgeHarness | undefined;
+  },
 ) {
-  const metadata = opts.metadata as FactualityJudgeMetadata;
-  const expected =
-    opts.expected === undefined ? metadata.expected : opts.expected;
+  const expected = opts.expected ?? config.expected;
 
   if (isMissingExpectedAnswer(expected)) {
     return {
       score: 0,
       metadata: {
         rationale:
-          "FactualityJudge requires a non-empty expert answer in `expected` or `metadata.expected`.",
+          "FactualityJudge requires a non-empty expert answer in `expected` or FactualityJudge(...) config.",
       },
     };
   }
@@ -227,7 +222,7 @@ async function assessFactuality(
   const runJudge =
     opts.runJudge ??
     createRunJudge(
-      configuredJudgeHarness,
+      config.judgeHarness,
       (opts as { signal?: AbortSignal }).signal,
     );
 

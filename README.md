@@ -197,17 +197,19 @@ describeEval(
         expectedStatus: "approved",
         expectedTools: ["lookupInvoice", "createRefund"],
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      const result = await run(input, {
-        metadata,
-      });
+    ])("$name", async ({ input, ...expected }, { run }) => {
+      const result = await run(input);
 
       expect(result.output).toMatchObject({
-        status: metadata.expectedStatus,
+        status: expected.expectedStatus,
       });
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        metadata.expectedTools,
+        expected.expectedTools,
       );
+      await expect(result).toSatisfyJudge(factualityJudge, {
+        expected: expected.expected,
+        threshold: 0.6,
+      });
     });
   },
 );
@@ -221,13 +223,12 @@ Harness-backed suites stay close to plain Vitest:
 - judges layer in through `expect(...).toSatisfyJudge(...)`
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
-  normalized run/session, tool calls, and metadata; `output` is only optional
+  normalized run/session, and tool calls; `output` is only optional
   when the harness output type includes `undefined`
 - judges own their prompt, rubric, and parsing; LLM-backed judges use
   `ctx.runJudge(...)` from a configured `judgeHarness`
-- scenario-specific judge criteria can live in `input`; use `metadata` for
-  per-run expectations or harness configuration that are not part of the
-  scenario payload
+- pass scenario-specific judge criteria explicitly to matcher options, or bind
+  suite-wide criteria on the judge instance
 - reporter output, replay, usage, tool calls, and spans come from the
   normalized run. First-party harnesses attach native run, model, and tool
   spans automatically; `createHarness(...)` attaches fallback run and tool spans

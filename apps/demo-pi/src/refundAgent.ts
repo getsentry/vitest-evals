@@ -27,14 +27,14 @@ export type RefundDecision =
       reason: string;
     };
 
-export type RefundEvalMetadata = {
+export type RefundCaseCriteria = {
   name?: string;
-  expected?: unknown;
+  expected?: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };
 
-export type RefundCase = RefundEvalMetadata & {
+export type RefundCase = RefundCaseCriteria & {
   input: string;
 };
 
@@ -114,13 +114,9 @@ const refundAgentTools = {
     description: CREATE_REFUND_DESCRIPTION,
     execute: createRefund,
   },
-} satisfies PiAiToolset<string, RefundEvalMetadata>;
+} satisfies PiAiToolset<string>;
 
-type RefundAgentRuntime = PiAiRuntime<
-  typeof refundAgentTools,
-  string,
-  RefundEvalMetadata
->;
+type RefundAgentRuntime = PiAiRuntime<typeof refundAgentTools, string>;
 type RefundAgentRuntimeTools = RefundAgentRuntime["tools"];
 
 const fallbackRuntimeTools: RefundAgentRuntimeTools = {

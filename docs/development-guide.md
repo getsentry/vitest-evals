@@ -152,11 +152,18 @@ real package surfaces.
 Root-level evaluation logic should usually be implemented as a named judge:
 
 ```ts
-import { createJudge, type JudgeOptions } from "vitest-evals";
+import { createJudge, type JudgeOptions, type JsonValue } from "vitest-evals";
 
 export const DomainJudge = createJudge(
   "DomainJudge",
-  async ({ toolCalls, expectedTool }: JudgeOptions<{ expectedTool: string }>) => ({
+  async ({
+    toolCalls,
+    expectedTool,
+  }: JudgeOptions<
+    unknown,
+    JsonValue | undefined,
+    { expectedTool: string }
+  >) => ({
     score: toolCalls.some((call) => call.name === expectedTool) ? 1 : 0,
     metadata: {
       rationale: `Expected tool ${expectedTool}`,

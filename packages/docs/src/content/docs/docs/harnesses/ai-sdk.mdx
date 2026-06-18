@@ -59,23 +59,19 @@ Use `output` for the value your evals care about. Messages, tool calls, usage,
 native trace spans, and errors remain available on the normalized harness run
 for judges, replay, and reports.
 
-## Eval
+## Writing Evals
 
 Call `run(input)` once, then judge that same normalized result. The judge is
 deliberately simple so the harness story stays clear.
 
 ```ts title="evals/capital.eval.ts"
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {

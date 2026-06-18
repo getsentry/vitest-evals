@@ -17,6 +17,7 @@ describeEval("capital questions", {
   judges: [
     ToolCallJudge({
       ordered: true,
+      expectedTools: ["lookupCapital"],
     }),
   ],
 });
@@ -24,11 +25,14 @@ describeEval("capital questions", {
 
 ## Arguments
 
-Use matcher options when a tool argument is the important assertion.
+Use matcher options when a case-specific tool argument is the important
+assertion.
 
 ```ts title="evals/capital.eval.ts"
-ToolCallJudge({
-  tools: [
+const result = await run("What is the capital of France?");
+
+await expect(result).toSatisfyJudge(ToolCallJudge({ ordered: true }), {
+  expectedTools: [
     {
       name: "lookupCapital",
       arguments: {
@@ -41,13 +45,12 @@ ToolCallJudge({
 
 ## Expected Tools
 
-Pass expected tool names through metadata on each run.
+Put suite-wide expected tool names on the judge instance.
 
 ```ts title="evals/capital.eval.ts"
-const result = await run("What is the capital of France?", {
-  metadata: {
-    expectedTools: ["lookupCapital"],
-  },
+describeEval("capital questions", {
+  harness: qaHarness,
+  judges: [ToolCallJudge({ expectedTools: ["lookupCapital"] })],
 });
 ```
 

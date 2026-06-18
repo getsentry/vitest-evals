@@ -4,7 +4,6 @@ import {
   type StructuredOutputScorerConfig,
   type StructuredOutputScorerOptions,
 } from "../internal/structuredOutputScorer";
-import type { HarnessMetadata } from "../harness";
 
 /**
  * Expected structured fields accepted by `StructuredOutputJudge()`.
@@ -19,10 +18,6 @@ import type { HarnessMetadata } from "../harness";
  */
 export type StructuredOutputJudgeExpected = Record<string, unknown>;
 
-type StructuredOutputJudgeMetadata = HarnessMetadata & {
-  expected?: StructuredOutputJudgeExpected;
-};
-
 /**
  * Matcher context accepted by `StructuredOutputJudge()`.
  *
@@ -34,7 +29,7 @@ type StructuredOutputJudgeMetadata = HarnessMetadata & {
  * ```
  */
 export interface StructuredOutputJudgeOptions
-  extends JudgeContext<any, any, HarnessMetadata, any>,
+  extends JudgeContext<any, any, any>,
     Omit<StructuredOutputScorerOptions, "input" | "output" | "toolCalls"> {
   expected?: StructuredOutputJudgeExpected;
 }
@@ -51,7 +46,10 @@ export interface StructuredOutputJudgeOptions
  * ```
  */
 export interface StructuredOutputJudgeConfig
-  extends StructuredOutputScorerConfig {}
+  extends StructuredOutputScorerConfig {
+  /** Expected structured fields used by this judge instance. */
+  expected?: StructuredOutputJudgeExpected;
+}
 
 /**
  * Creates a deterministic judge that compares structured output fields.
@@ -62,14 +60,10 @@ export interface StructuredOutputJudgeConfig
  * ```ts
  * describeEval("refund agent", {
  *   harness: refundHarness,
- *   judges: [StructuredOutputJudge()],
+ *   judges: [StructuredOutputJudge({ expected: { status: "approved" } })],
  * }, (it) => {
  *   it("returns the expected decision", async ({ run }) => {
- *     await run("Refund invoice inv_123", {
- *       metadata: {
- *         expected: { status: "approved" },
- *       },
- *     });
+ *     await run("Refund invoice inv_123");
  *   });
  * });
  * ```
@@ -77,25 +71,22 @@ export interface StructuredOutputJudgeConfig
 export function StructuredOutputJudge(
   config: StructuredOutputJudgeConfig = {},
 ): Judge<StructuredOutputJudgeOptions> {
-  const scorer = StructuredOutputScorer(config);
+  const { expected, ...scorerConfig } = config;
+  const scorer = StructuredOutputScorer(scorerConfig);
   return {
     name: "StructuredOutputJudge",
     assess: (opts: StructuredOutputJudgeOptions) => {
-      const metadata = opts.metadata as StructuredOutputJudgeMetadata;
-
       return scorer({
         ...opts,
         input: formatStructuredOutput(opts.input),
-        expected: opts.expected ?? metadata.expected,
+        expected: opts.expected ?? expected,
         output: formatStructuredOutput(opts.output),
       });
     },
   };
 }
 
-function formatStructuredOutput(
-  output: StructuredOutputJudgeOptions["run"]["output"],
-) {
+function formatStructuredOutput(output: unknown) {
   if (typeof output === "string") {
     return output;
   }

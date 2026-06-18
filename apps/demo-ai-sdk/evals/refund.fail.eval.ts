@@ -10,17 +10,11 @@ describeEval(
   {
     skipIf: skipUnlessRunningFailureExamples,
     harness: refundHarness,
-    judges: [StructuredOutputJudge()],
+    judges: [StructuredOutputJudge({ expected: { status: "approved" } })],
   },
   (it) => {
     it("judge expects approval for a denied invoice", async ({ run }) => {
-      await run("Refund invoice inv_404", {
-        metadata: {
-          expected: {
-            status: "approved",
-          },
-        },
-      });
+      await run("Refund invoice inv_404");
     });
   },
 );

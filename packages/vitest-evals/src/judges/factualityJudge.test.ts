@@ -11,7 +11,7 @@ import {
   type RunJudge,
 } from "../index";
 
-const factualityHarness = createHarness<string, string, { expected?: string }>({
+const factualityHarness = createHarness<string, string>({
   name: "qa-harness",
   run: async () => ({
     output: "Paris is the capital of France.",
@@ -79,18 +79,14 @@ describeEval(
   {
     harness: factualityHarness,
     judgeHarness: automaticJudgeHarness,
-    judges: [FactualityJudge()],
+    judges: [FactualityJudge({ expected: "Paris is the capital of France." })],
   },
   (it) => {
-    it("uses metadata expected values with any harness output", async ({
+    it("uses configured expected values with any harness output", async ({
       run,
       task,
     }) => {
-      await run("What is the capital of France?", {
-        metadata: {
-          expected: "Paris is the capital of France.",
-        },
-      });
+      await run("What is the capital of France?");
 
       expect(automaticJudgeHarnessRun).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -125,17 +121,18 @@ describeEval(
   "factuality judge configured harness",
   {
     harness: factualityHarness,
-    judges: [FactualityJudge({ judgeHarness: configuredJudgeHarness })],
+    judges: [
+      FactualityJudge({
+        expected: "Paris is the capital of France.",
+        judgeHarness: configuredJudgeHarness,
+      }),
+    ],
   },
   (it) => {
     it("uses a judge-level judge harness for automatic assertions", async ({
       run,
     }) => {
-      await run("What is the capital of France?", {
-        metadata: {
-          expected: "Paris is the capital of France.",
-        },
-      });
+      await run("What is the capital of France?");
 
       expect(configuredJudgeHarnessRun).toHaveBeenCalledTimes(1);
     });
@@ -147,17 +144,18 @@ describeEval(
   {
     harness: factualityHarness,
     judgeHarness: suiteDefaultJudgeHarness,
-    judges: [FactualityJudge({ judgeHarness: judgeOverrideHarness })],
+    judges: [
+      FactualityJudge({
+        expected: "Paris is the capital of France.",
+        judgeHarness: judgeOverrideHarness,
+      }),
+    ],
   },
   (it) => {
     it("uses a judge-level judge harness before the suite default", async ({
       run,
     }) => {
-      await run("What is the capital of France?", {
-        metadata: {
-          expected: "Paris is the capital of France.",
-        },
-      });
+      await run("What is the capital of France?");
 
       expect(judgeOverrideHarnessRun).toHaveBeenCalledTimes(1);
       expect(suiteDefaultJudgeHarnessRun).not.toHaveBeenCalled();
@@ -170,7 +168,10 @@ describeEval(
   {
     harness: factualityHarness,
     judges: [
-      FactualityJudge({ judgeHarness: inferredSuiteJudgeHarness }),
+      FactualityJudge({
+        expected: "Paris is the capital of France.",
+        judgeHarness: inferredSuiteJudgeHarness,
+      }),
       createJudge("NoInferredAutomaticJudgeHarness", (ctx) => {
         leakedAutomaticJudgeRunJudge(ctx.runJudge);
 
@@ -189,11 +190,7 @@ describeEval(
       run,
       task,
     }) => {
-      const result = await run("What is the capital of France?", {
-        metadata: {
-          expected: "Paris is the capital of France.",
-        },
-      });
+      const result = await run("What is the capital of France?");
 
       await expect(result).toSatisfyJudge(FactualityJudge(), {
         expected: "Paris is the capital of France.",
@@ -320,7 +317,6 @@ test("FactualityJudge requires a judge harness when expected values are present"
       input: "What is the capital of France?",
       output: run.output,
       expected: "Paris is the capital of France.",
-      metadata: {},
       run,
       session: run.session,
       toolCalls: [],
@@ -342,7 +338,6 @@ test("FactualityJudge uses a configured judge harness when assess is called dire
     input: "What is the capital of France?",
     output: run.output,
     expected: "Paris is the capital of France.",
-    metadata: {},
     run,
     session: run.session,
     toolCalls: [],
@@ -363,27 +358,23 @@ test("FactualityJudge can be shared across different app harnesses and judge har
     rationale: "The submitted answer is a supported superset.",
   }));
   const factualityJudge = FactualityJudge();
-  const objectHarness = createHarness<
-    { question: string },
-    { answer: string },
-    { expected?: string }
-  >({
-    name: "object-qa-harness",
-    run: async () => ({
-      output: {
-        answer: "Paris",
-      },
-    }),
-  });
+  const objectHarness = createHarness<{ question: string }, { answer: string }>(
+    {
+      name: "object-qa-harness",
+      run: async () => ({
+        output: {
+          answer: "Paris",
+        },
+      }),
+    },
+  );
   const textRun = createRun("Paris is the capital of France.");
   const objectRun = createRun({ answer: "Paris" });
 
   const textResult = await factualityJudge.assess({
     input: "What is the capital of France?",
     output: textRun.output,
-    metadata: {
-      expected: "Paris is the capital of France.",
-    },
+    expected: "Paris is the capital of France.",
     run: textRun,
     session: textRun.session,
     toolCalls: [],
@@ -395,9 +386,7 @@ test("FactualityJudge can be shared across different app harnesses and judge har
       question: "What is the capital of France?",
     },
     output: objectRun.output,
-    metadata: {
-      expected: "Paris is the capital of France.",
-    },
+    expected: "Paris is the capital of France.",
     run: objectRun,
     session: objectRun.session,
     toolCalls: [],
@@ -422,7 +411,6 @@ test("FactualityJudge parses JSON text returned by the judge harness", async () 
     input: "What is the capital of France?",
     output: run.output,
     expected: "Paris is the capital of France.",
-    metadata: {},
     run,
     session: run.session,
     toolCalls: [],
@@ -470,7 +458,6 @@ test("FactualityJudge skips blank assistant transcript output", async () => {
     input: "What is the capital of France?",
     output: run.output,
     expected: "Paris is the capital of France.",
-    metadata: {},
     run,
     session: run.session,
     toolCalls: [],
@@ -495,7 +482,6 @@ test("FactualityJudge fails closed when no expected value is provided", async ()
   const result = await FactualityJudge().assess({
     input: "What is the capital of France?",
     output: run.output,
-    metadata: {},
     run,
     session: run.session,
     toolCalls: [],
@@ -506,7 +492,7 @@ test("FactualityJudge fails closed when no expected value is provided", async ()
     score: 0,
     metadata: {
       rationale:
-        "FactualityJudge requires a non-empty expert answer in `expected` or `metadata.expected`.",
+        "FactualityJudge requires a non-empty expert answer in `expected` or FactualityJudge(...) config.",
     },
   });
 });
@@ -517,9 +503,7 @@ test("FactualityJudge fails closed when expected is null", async () => {
   const result = await FactualityJudge().assess({
     input: "What is the capital of France?",
     output: run.output,
-    metadata: {
-      expected: null,
-    },
+    expected: null,
     run,
     session: run.session,
     toolCalls: [],
@@ -530,7 +514,7 @@ test("FactualityJudge fails closed when expected is null", async () => {
     score: 0,
     metadata: {
       rationale:
-        "FactualityJudge requires a non-empty expert answer in `expected` or `metadata.expected`.",
+        "FactualityJudge requires a non-empty expert answer in `expected` or FactualityJudge(...) config.",
     },
   });
 });
@@ -538,15 +522,11 @@ test("FactualityJudge fails closed when expected is null", async () => {
 test("FactualityJudge treats explicit null expected as missing", async () => {
   const runJudge = vi.fn();
   const run = createRun("Paris");
-  const metadata = {
-    expected: "Paris is the capital of France.",
-  };
 
   const result = await FactualityJudge().assess({
     input: "What is the capital of France?",
     output: run.output,
     expected: null,
-    metadata,
     run,
     session: run.session,
     toolCalls: [],
@@ -558,7 +538,7 @@ test("FactualityJudge treats explicit null expected as missing", async () => {
     score: 0,
     metadata: {
       rationale:
-        "FactualityJudge requires a non-empty expert answer in `expected` or `metadata.expected`.",
+        "FactualityJudge requires a non-empty expert answer in `expected` or FactualityJudge(...) config.",
     },
   });
   expect(runJudge).not.toHaveBeenCalled();
@@ -572,7 +552,6 @@ test("FactualityJudge fails closed when expected is blank", async () => {
     input: "What is the capital of France?",
     output: run.output,
     expected: "   ",
-    metadata: {},
     run,
     session: run.session,
     toolCalls: [],
@@ -584,7 +563,7 @@ test("FactualityJudge fails closed when expected is blank", async () => {
     score: 0,
     metadata: {
       rationale:
-        "FactualityJudge requires a non-empty expert answer in `expected` or `metadata.expected`.",
+        "FactualityJudge requires a non-empty expert answer in `expected` or FactualityJudge(...) config.",
     },
   });
   expect(runJudge).not.toHaveBeenCalled();

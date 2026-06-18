@@ -21,7 +21,7 @@
 | `packages/vitest-evals/README.md` | high | high | install, core model, custom harnesses, judge matcher behavior | Use the core, custom harness, and matcher sections only. |
 | `packages/vitest-evals/src/index.ts` | high | high | `describeEval`, `run(...)`, automatic judges, matcher context behavior | Runtime API source of truth. |
 | `packages/vitest-evals/src/harness.ts` | high | high | `Harness`, `HarnessRun`, normalization helpers, session helpers | Runtime type source of truth. |
-| `packages/vitest-evals/src/judges/*` | high | high | judge context, built-in judge options, metadata behavior | Keep examples judge-first. |
+| `packages/vitest-evals/src/judges/*` | high | high | judge context, built-in judge options, judge result metadata behavior | Keep examples judge-first. |
 | `packages/vitest-evals/src/replay.ts` | high | high | replay modes, env vars, recording shape, cache key behavior | Use for shared replay guidance. |
 | `packages/harness-ai-sdk/README.md` and `src/index.ts` | high | high | AI SDK harness options, output selection, replay constraints | Keep option names exact. |
 | `packages/harness-ai-sdk/src/index.test.ts` | high | high | edge cases for agent/run entrypoints, partial runs, output and tool normalization, replay errors | Use as failure/workaround evidence. |
@@ -38,7 +38,7 @@
 | Put skill under `skills/vitest-evals` | adopted | User requested this path; no existing repo skill tree conflicted. |
 | Use reference-backed layout | adopted | First-party harnesses have distinct options and failure modes. |
 | Add one reference per supported harness path | adopted | Supported paths are custom `Harness`, AI SDK harness, and Pi AI harness. |
-| Add shared judge and replay references | adopted | Both first-party harnesses feed the same judge and reporter APIs; replay is implemented centrally. |
+| Add shared judge, utilities, and replay references | adopted | First-party harnesses feed the same judge, helper, and reporter APIs; replay is implemented centrally. |
 | Omit install scripts | deferred | A self-contained skill directory is enough now; no repo skill catalog or installer exists. |
 | Avoid alternate suite API guidance | adopted | User asked for the skill to stay purely harness-backed. |
 
@@ -46,10 +46,10 @@
 
 | Dimension | Status | Coverage |
 |-----------|--------|----------|
-| API surface and behavior contracts | covered | `describeEval`, `run`, `Harness`, `HarnessRun`, `JudgeContext`, first-party harness options, replay. |
+| API surface and behavior contracts | covered | `describeEval`, `run`, `Harness`, `HarnessRun`, `JudgeContext`, first-party harness options, utilities, replay. |
 | Config/runtime options | covered | suite options, harness options, replay env vars, package peer ranges. |
-| Downstream use cases | covered | new eval suite, table-driven cases, custom app harness, AI SDK `generateText`, AI SDK agent entrypoint, Pi agent default run, Pi custom run, native Pi tools, LLM-backed judge, deterministic tool/output judge, replayed tools. |
-| Issues and workarounds | covered | troubleshooting reference includes missing harness, duplicate executions, missing tool traces, non-JSON data, replay misses, provider-executed tools, async iterable replay outputs, hidden Pi tools, reset behavior, blank judge output, stale metadata, missing provider keys. |
+| Downstream use cases | covered | new eval suite, table-driven cases, custom app harness, AI SDK `generateText`, AI SDK agent entrypoint, Pi agent default run, Pi custom run, native Pi tools, LLM-backed judge, deterministic tool/output judge, session helpers, trace helpers, replayed tools. |
+| Issues and workarounds | covered | troubleshooting reference includes missing harness, duplicate executions, missing tool traces, non-JSON data, replay misses, provider-executed tools, async iterable replay outputs, hidden Pi tools, reset behavior, blank judge output, and missing provider keys. |
 | Version variance | partial | Peer ranges are captured from package manifests; future package releases should refresh option tables before release-sensitive edits. |
 | Reference discoverability | covered | Every runtime reference is directly routed from `SKILL.md`. |
 

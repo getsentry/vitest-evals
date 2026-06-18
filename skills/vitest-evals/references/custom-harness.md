@@ -13,12 +13,11 @@ import {
   type HarnessRun,
 } from "vitest-evals/harness";
 
-const appHarness: Harness<AppInput, AppOutput, AppMetadata> = {
+const appHarness: Harness<AppInput, AppOutput> = {
   name: "app",
   run: async (input, context): Promise<HarnessRun<AppOutput>> => {
     const appResult = await runApp(input, {
       signal: context.signal,
-      metadata: context.metadata,
     });
 
     const output = toJsonValue(appResult.decision);
@@ -56,7 +55,7 @@ const appHarness: Harness<AppInput, AppOutput, AppMetadata> = {
 ## Implementation Rules
 
 - Run the app through its normal entrypoint.
-- Inject `context.signal`, `context.metadata`, and test doubles where the app supports them.
+- Inject `context.signal` and test doubles where the app supports them.
 - Use `context.setArtifact(name, value)` for JSON-safe diagnostics that should appear on the run.
 - Convert unknown values with `toJsonValue(...)`, `normalizeContent(...)`, or `normalizeMetadata(...)`.
 - Attach a partial run to thrown errors with `attachHarnessRunToError(...)` when meaningful trace data exists.

@@ -12,9 +12,6 @@ import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
-type DemoMetadata = {
-  scenario?: string;
-};
 type RefundDecision = {
   status: "approved" | "denied";
 };
@@ -24,7 +21,7 @@ type Equal<TActual, TExpected> = (<T>() => T extends TActual ? 1 : 2) extends <
   ? true
   : false;
 type Expect<T extends true> = T;
-type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput, any>
+type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   ? TOutput
   : never;
 
@@ -123,11 +120,8 @@ afterEach(() => {
   }
 });
 
-function createHarnessContext<TMetadata extends Record<string, unknown>>(
-  metadata: TMetadata,
-) {
+function createHarnessContext(_metadata?: unknown) {
   return {
-    metadata,
     artifacts: {},
     setArtifact: vi.fn(),
   };
@@ -474,7 +468,7 @@ test("default agent run receives wrapped runtime tools", async () => {
         tools: {
           lookupInvoice: {
             execute: NonNullable<
-              AiSdkToolset<string, DemoMetadata>["lookupInvoice"]["execute"]
+              AiSdkToolset<string>["lookupInvoice"]["execute"]
             >;
           };
         };
@@ -562,7 +556,7 @@ test("default agent run receives wrapped runtime tools", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
   });
 
   const result = await harness.run(
@@ -725,7 +719,7 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -817,7 +811,6 @@ test("attaches a failed run when agent setup fails", async () => {
     },
   });
   const context = {
-    metadata: {},
     artifacts: {} as Record<string, JsonValue>,
     setArtifact: vi.fn((name: string, value: JsonValue) => {
       context.artifacts[name] = value;
@@ -868,7 +861,7 @@ test("omits empty runtime tool error content when custom run errors", async () =
           throw new Error("");
         },
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -933,7 +926,7 @@ test("preserves explicit null runtime tool results", async () => {
         }),
         execute: async () => null,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -1118,7 +1111,7 @@ test("keeps runtime-only tool calls when SDK steps are also present", async () =
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -1246,10 +1239,9 @@ test("passes run input and context to agent factories", async () => {
       context,
     }: {
       input: string;
-      context: HarnessContext<DemoMetadata>;
+      context: HarnessContext;
     }) => {
       context.setArtifact("preparedInput", input);
-      const scenario = context.metadata.scenario ?? "unknown";
 
       return {
         run: async (runInput: string) => ({
@@ -1257,7 +1249,6 @@ test("passes run input and context to agent factories", async () => {
             status: "approved",
             input: runInput,
             preparedInput: input,
-            scenario,
           },
         }),
       };
@@ -1266,9 +1257,7 @@ test("passes run input and context to agent factories", async () => {
   const harness = aiSdkHarness({
     agent: agentFactory,
   });
-  const context = createHarnessContext({
-    scenario: "refund",
-  });
+  const context = createHarnessContext();
 
   const result = await harness.run("Refund invoice inv_123", context);
 
@@ -1276,9 +1265,7 @@ test("passes run input and context to agent factories", async () => {
     expect.objectContaining({
       input: "Refund invoice inv_123",
       context: expect.objectContaining({
-        metadata: {
-          scenario: "refund",
-        },
+        artifacts: expect.any(Object),
       }),
     }),
   );
@@ -1290,7 +1277,6 @@ test("passes run input and context to agent factories", async () => {
     status: "approved",
     input: "Refund invoice inv_123",
     preparedInput: "Refund invoice inv_123",
-    scenario: "refund",
   });
 });
 
@@ -1300,10 +1286,10 @@ test("normalizes domain results that resemble harness runs", async () => {
       context,
       result,
     }: {
-      context: { metadata: DemoMetadata };
+      context: HarnessContext;
       result: { object: { status: string } };
     }) => {
-      expect(context.metadata.scenario).toBe("refund");
+      expect(context.artifacts).toEqual({});
       return result.object;
     },
   );
@@ -1322,7 +1308,7 @@ test("normalizes domain results that resemble harness runs", async () => {
 
   const run = await harness.run(
     "Refund invoice inv_123",
-    createHarnessContext({ scenario: "refund" }),
+    createHarnessContext(),
   );
 
   expect(run.output).toEqual({
@@ -1751,7 +1737,7 @@ test("records and replays opt-in tools in auto mode", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       const lookupInvoice = runtime.tools.lookupInvoice;
       const toolInput = {
@@ -1896,7 +1882,7 @@ test("does not opt into replay from tool definitions", async () => {
         }),
         execute,
       },
-    } as unknown as AiSdkToolset<string, DemoMetadata>,
+    } as unknown as AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {
@@ -1943,7 +1929,7 @@ test("rejects async iterable replay outputs after awaiting execute", async () =>
         }),
         execute: vi.fn(async () => streamOutput()),
       },
-    } as unknown as AiSdkToolset<string, DemoMetadata>,
+    } as unknown as AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.streamRefund.execute?.(
         {
@@ -1990,7 +1976,7 @@ test("errors when strict mode is missing a recording", async () => {
         }),
         execute,
       },
-    } satisfies AiSdkToolset<string, DemoMetadata>,
+    } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
       await runtime.tools.lookupInvoice.execute?.(
         {

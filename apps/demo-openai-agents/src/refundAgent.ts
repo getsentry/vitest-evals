@@ -21,14 +21,14 @@ export type RefundDecision =
       reason: string;
     };
 
-export type RefundEvalMetadata = {
+export type RefundCaseCriteria = {
   name?: string;
-  expected?: unknown;
+  expected?: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };
 
-export type RefundCase = RefundEvalMetadata & {
+export type RefundCase = RefundCaseCriteria & {
   input: string;
 };
 

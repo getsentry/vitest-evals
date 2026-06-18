@@ -4,9 +4,7 @@ import { describeEval, StructuredOutputJudge } from "vitest-evals";
 import { createRefundAgent, type RefundCase } from "../src/refundAgent";
 
 type AssertionRefundCase = RefundCase;
-type ScoredRefundCase = RefundCase & {
-  expected: Record<string, unknown>;
-};
+type ScoredRefundCase = Omit<RefundCase, "expected">;
 
 const skipUnlessRunningFailureExamples = () =>
   !process.env.ANTHROPIC_API_KEY || process.env.VITEST_EVALS_FAIL_MODE !== "1";
@@ -23,7 +21,7 @@ describeEval(
   {
     skipIf: skipUnlessRunningFailureExamples,
     harness,
-    judges: [StructuredOutputJudge()],
+    judges: [StructuredOutputJudge({ expected: { status: "approved" } })],
   },
   (it) => {
     it.for<ScoredRefundCase>([
@@ -32,14 +30,9 @@ describeEval(
         input: "Refund invoice inv_404",
         expectedStatus: "denied",
         expectedTools: ["lookupInvoice"],
-        expected: {
-          status: "approved",
-        },
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      await run(input, {
-        metadata,
-      });
+    ])("$name", async ({ input }, { run }) => {
+      await run(input);
     });
   },
 );
@@ -58,10 +51,8 @@ describeEval(
         expectedStatus: "denied",
         expectedTools: ["lookupInvoice"],
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      const result = await run(input, {
-        metadata,
-      });
+    ])("$name", async ({ input }, { run }) => {
+      const result = await run(input);
 
       expect(result.output).toMatchObject({
         status: "denied",

@@ -50,23 +50,19 @@ export const qaHarness = runtimeHarness({
 });
 ```
 
-## Eval
+## Writing Evals
 
 Run the same simple question through the configured harness. The judge should
 score the normalized result from that run; it should not call the app again.
 
 ```ts title="evals/capital.eval.ts"
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {

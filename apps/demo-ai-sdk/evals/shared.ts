@@ -27,7 +27,7 @@ type RefundDecision =
 
 export type RefundCase = {
   input: string;
-  expected?: unknown;
+  expected?: string;
   expectedStatus: RefundDecision["status"];
   expectedTools: string[];
 };
@@ -109,7 +109,7 @@ const refundTools = {
     }),
     execute: createRefund,
   },
-} satisfies AiSdkToolset<string, RefundCase>;
+} satisfies AiSdkToolset<string>;
 
 export const refundHarness = aiSdkHarness({
   tools: refundTools,

@@ -2,7 +2,6 @@ import {
   createHarness,
   type Harness,
   type HarnessContext,
-  type HarnessMetadata,
   type HarnessResultLike,
   type HarnessRun,
   isHarnessRun,
@@ -58,16 +57,12 @@ export type JudgeHarnessOutput = JsonValue | undefined;
  * });
  * ```
  */
-export type JudgeHarness = Harness<
-  JudgeHarnessInput,
-  JudgeHarnessOutput,
-  HarnessMetadata
->;
+export type JudgeHarness = Harness<JudgeHarnessInput, JudgeHarnessOutput>;
 
 /** Runtime options supplied when a judge calls `runJudge(...)`. */
 export type RunJudgeOptions = {
-  /** Optional metadata forwarded to the judge harness run. */
-  metadata?: HarnessMetadata;
+  /** Abort signal from the current eval run when available. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -90,8 +85,6 @@ export type RunJudge = (
 export type CreateJudgeHarnessRunOptions = {
   /** Abort signal from the current eval run when available. */
   signal?: AbortSignal;
-  /** Metadata for this judge-harness run. */
-  metadata: Readonly<HarnessMetadata>;
 };
 
 /**
@@ -139,10 +132,8 @@ export function createJudgeHarness(
 ): JudgeHarness {
   return createHarness({
     name: options.name ?? "judge-harness",
-    run: async ({ input, signal, metadata }) => {
-      return normalizeJudgeHarnessResult(
-        await options.run(input, { signal, metadata }),
-      );
+    run: async ({ input, signal }) => {
+      return normalizeJudgeHarnessResult(await options.run(input, { signal }));
     },
   });
 }
@@ -152,16 +143,15 @@ export function createJudgeHarness(
  *
  * @param judgeHarness - Judge-side harness configured on the matcher, judge, or suite.
  * @param input - Provider-neutral judge prompt request.
- * @param options - Run-scoped metadata and abort signal.
+ * @param options - Run-scoped abort signal.
  */
 export async function runJudgeHarness(
   judgeHarness: JudgeHarness,
   input: JudgeHarnessInput,
-  options: RunJudgeOptions & { signal?: AbortSignal } = {},
+  options: RunJudgeOptions = {},
 ): Promise<JudgeHarnessOutput> {
   const artifacts: HarnessContext["artifacts"] = {};
   const run = await judgeHarness.run(input, {
-    metadata: options.metadata ?? {},
     signal: options.signal,
     artifacts,
     setArtifact: (name, value) => {
@@ -185,8 +175,7 @@ export function createRunJudge(
 
   return (input, options) =>
     runJudgeHarness(judgeHarness, input, {
-      metadata: options?.metadata,
-      signal,
+      signal: options?.signal ?? signal,
     });
 }
 

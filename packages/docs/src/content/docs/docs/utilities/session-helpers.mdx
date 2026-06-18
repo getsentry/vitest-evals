@@ -1,0 +1,76 @@
+---
+title: Session Helpers
+description: Read normalized messages and tool calls from a harness session.
+editUrl: false
+---
+
+Session helpers read `result.session`, the JSON-serializable transcript returned
+by every harness run. Use them in direct Vitest checks or inside custom judges
+through `ctx.session` and `ctx.toolCalls`.
+
+## Tool Calls
+
+Use `toolCalls(session)` for the flattened tool history.
+
+```ts title="evals/refund.eval.ts"
+import { expect } from "vitest";
+import { toolCalls } from "vitest-evals";
+
+const calls = toolCalls(result.session);
+
+expect(calls.map((call) => call.name)).toEqual([
+  "lookupInvoice",
+  "createRefund",
+]);
+expect(calls[0]).toMatchObject({
+  name: "lookupInvoice",
+  arguments: {
+    invoiceId: "inv_123",
+  },
+});
+```
+
+## Messages
+
+Use role helpers for common transcript checks.
+
+```ts title="evals/refund.eval.ts"
+import {
+  assistantMessages,
+  latestAssistantMessageContent,
+  messagesByRole,
+  toolMessages,
+  userMessages,
+} from "vitest-evals";
+
+expect(userMessages(result.session)[0]?.content).toBe("Refund invoice inv_123");
+expect(latestAssistantMessageContent(result.session)).toContain("approved");
+expect(assistantMessages(result.session).length).toBeGreaterThan(0);
+expect(toolMessages(result.session)).toHaveLength(1);
+expect(messagesByRole(result.session, "assistant")).toEqual(
+  assistantMessages(result.session),
+);
+```
+
+Read `result.session.messages` directly when order across roles matters.
+
+```ts title="evals/refund.eval.ts"
+expect(result.session.messages.map((message) => message.role)).toEqual([
+  "user",
+  "assistant",
+  "tool",
+  "assistant",
+]);
+```
+
+## API Links
+
+| Helper | Use |
+| --- | --- |
+| [`toolCalls`](/api/functions/toolcalls/) | Flatten tool calls from a session. |
+| [`assistantMessages`](/api/functions/assistantmessages/) | Read assistant transcript turns. |
+| [`userMessages`](/api/functions/usermessages/) | Read user transcript turns. |
+| [`systemMessages`](/api/functions/systemmessages/) | Read system transcript turns. |
+| [`toolMessages`](/api/functions/toolmessages/) | Read tool transcript turns. |
+| [`messagesByRole`](/api/functions/messagesbyrole/) | Read messages for any normalized role. |
+| [`latestAssistantMessageContent`](/api/functions/latestassistantmessagecontent/) | Read the latest non-empty assistant content. |

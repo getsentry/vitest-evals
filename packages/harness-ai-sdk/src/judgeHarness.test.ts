@@ -51,7 +51,6 @@ test("aiSdkJudgeHarness uses generateObject for JSON response formats", async ()
       },
     },
     {
-      metadata: {},
       signal,
       artifacts: {},
       setArtifact: () => {},
@@ -93,7 +92,6 @@ test("aiSdkJudgeHarness uses generateText without a JSON schema", async () => {
       },
     },
     {
-      metadata: {},
       artifacts: {},
       setArtifact: () => {},
     },

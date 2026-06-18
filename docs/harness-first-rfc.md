@@ -20,7 +20,7 @@ In the proposed model, the center of gravity becomes:
 
 - exactly one `harness` per suite
 - fixture-backed Vitest tests
-- explicit `run(input, { metadata? })`
+- explicit `run(input)`
 - normalized run/session artifacts
 - optional judges and explicit Vitest assertions
 
@@ -104,9 +104,8 @@ surface.
 
 1. `describeEval` selects one harness for the suite.
 2. Core overrides that harness onto a fixture-backed Vitest `it`.
-3. A test calls `run(input, { metadata? })`.
-4. Core creates a `HarnessContext` containing metadata, artifacts, and the test
-   signal.
+3. A test calls `run(input)`.
+4. Core creates a `HarnessContext` containing artifacts and the test signal.
 5. The harness creates or receives the existing agent/application instance.
 6. The harness runs the application with the provided input and injected test
    dependencies.
