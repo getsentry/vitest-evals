@@ -536,7 +536,7 @@ function formatJudgeOutputForMessage(output: JsonValue | undefined) {
  *     const result = await run("Refund invoice inv_123");
  *
  *     expect(result.output).toMatchObject({ status: "approved" });
- *     expect(toolCalls(result.session)).toHaveLength(2);
+ *     expect(toolCalls(result)).toHaveLength(2);
  *     await expect(result).toSatisfyJudge(FactualityJudge(), {
  *       expected: "Invoice inv_123 should be refunded.",
  *       threshold: 0.6,

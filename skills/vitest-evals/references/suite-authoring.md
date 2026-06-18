@@ -13,7 +13,7 @@ describeEval("refund agent", { harness }, (it) => {
     const result = await run("Refund invoice inv_123");
 
     expect(result.output).toMatchObject({ status: "approved" });
-    expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+    expect(toolCalls(result).map((call) => call.name)).toEqual([
       "lookupInvoice",
       "createRefund",
     ]);
@@ -28,7 +28,7 @@ describeEval("refund agent", { harness }, (it) => {
 | Use one `harness` per `describeEval(...)` suite. | Core stores one normalized run per explicit execution. |
 | Call `run(...)` inside the test body. | The test controls when the system under test executes. |
 | Assert domain behavior on `result.output`. | Harnesses preserve app-facing results separately from trace data. |
-| Assert trace behavior on `result.session`. | Reporter, replay, tools, and judges consume normalized sessions. |
+| Assert trace behavior with helpers such as `toolCalls(result)` and `spansByKind(result, "tool")`. | Reporter, replay, tools, spans, and judges consume normalized run data. |
 | Keep expected values in the Vitest row or matcher options. | Case criteria stays close to the assertion that uses it. |
 | Use `it.for(...)` for case tables. | Keep table-driven suites idiomatic Vitest. |
 

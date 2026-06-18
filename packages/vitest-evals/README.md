@@ -33,9 +33,11 @@ workflow.
 - `run(input)` executes the harness explicitly and returns a normalized
   `HarnessRun`
 - the returned `result.output` is the app-facing value you assert on directly
-- the returned `result.session` is the canonical JSON-serializable transcript for
-  reporting, replay, tool assertions, and judges
-- the returned `result.traces` contains JSON-serializable operation spans; the
+- helper assertions usually read the returned `result`, for example
+  `toolCalls(result)` or `spansByKind(result, "tool")`
+- `result.session` is the canonical JSON-serializable transcript for reporting,
+  replay, tool assertions, and judges
+- `result.traces` contains JSON-serializable operation spans; the
   first-party harnesses attach run, model, and tool spans automatically, while
   `createHarness(...)` attaches fallback run and tool spans for custom harnesses
   that do not return traces themselves. Span attributes include typed
@@ -91,7 +93,7 @@ describeEval(
       const result = await run("Refund invoice inv_123");
 
       expect(result.output).toMatchObject({ status: "approved" });
-      expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+      expect(toolCalls(result).map((call) => call.name)).toEqual([
         "lookupInvoice",
         "createRefund",
       ]);

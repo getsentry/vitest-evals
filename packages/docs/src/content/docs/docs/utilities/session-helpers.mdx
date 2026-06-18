@@ -1,22 +1,22 @@
 ---
 title: Session Helpers
-description: Read normalized messages and tool calls from a harness session.
+description: Read normalized messages and tool calls from a harness run.
 editUrl: false
 ---
 
-Session helpers read `result.session`, the JSON-serializable transcript returned
-by every harness run. Use them in direct Vitest checks or inside custom judges
-through `ctx.session` and `ctx.toolCalls`.
+Session helpers read a harness run. Use them in direct Vitest checks or inside
+custom judges through `ctx.session` and `ctx.toolCalls`.
 
 ## Tool Calls
 
-Use `toolCalls(session)` for the flattened tool history.
+Use `toolCalls(result)` for the flattened tool history. The helpers also accept
+a normalized session when that is the only value available.
 
 ```ts title="evals/refund.eval.ts"
 import { expect } from "vitest";
 import { toolCalls } from "vitest-evals";
 
-const calls = toolCalls(result.session);
+const calls = toolCalls(result);
 
 expect(calls.map((call) => call.name)).toEqual([
   "lookupInvoice",
@@ -43,12 +43,12 @@ import {
   userMessages,
 } from "vitest-evals";
 
-expect(userMessages(result.session)[0]?.content).toBe("Refund invoice inv_123");
-expect(latestAssistantMessageContent(result.session)).toContain("approved");
-expect(assistantMessages(result.session).length).toBeGreaterThan(0);
-expect(toolMessages(result.session)).toHaveLength(1);
-expect(messagesByRole(result.session, "assistant")).toEqual(
-  assistantMessages(result.session),
+expect(userMessages(result)[0]?.content).toBe("Refund invoice inv_123");
+expect(latestAssistantMessageContent(result)).toContain("approved");
+expect(assistantMessages(result).length).toBeGreaterThan(0);
+expect(toolMessages(result)).toHaveLength(1);
+expect(messagesByRole(result, "assistant")).toEqual(
+  assistantMessages(result),
 );
 ```
 
@@ -67,7 +67,7 @@ expect(result.session.messages.map((message) => message.role)).toEqual([
 
 | Helper | Use |
 | --- | --- |
-| [`toolCalls`](/api/functions/toolcalls/) | Flatten tool calls from a session. |
+| [`toolCalls`](/api/functions/toolcalls/) | Flatten tool calls from a run. |
 | [`assistantMessages`](/api/functions/assistantmessages/) | Read assistant transcript turns. |
 | [`userMessages`](/api/functions/usermessages/) | Read user transcript turns. |
 | [`systemMessages`](/api/functions/systemmessages/) | Read system transcript turns. |
