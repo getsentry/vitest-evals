@@ -19,16 +19,16 @@ describeEval("workflow", {
 });
 ```
 
-## Metadata
+## Options
 
-Show the per-run metadata the judge expects. Keep expected values near the case
+Show the matcher options or judge config the judge expects. Keep expected values near the case
 that owns them.
 
 ```ts title="evals/workflow.eval.ts"
-const result = await run("input", {
-  metadata: {
-    expected: { status: "approved" },
-  },
+const result = await run("input");
+
+await expect(result).toSatisfyJudge(RuntimeJudge(), {
+  expected: { status: "approved" },
 });
 ```
 

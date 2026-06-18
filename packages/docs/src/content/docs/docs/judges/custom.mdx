@@ -6,8 +6,9 @@ editUrl: false
 
 Use `createJudge()` when a rubric should be reused across suites. A custom
 judge receives the same normalized `JudgeContext` as built-ins: input, output,
-metadata, tool calls, session, run, app harness, and a curried `runJudge`
-function when the suite has a judge harness.
+tool calls, session, run, app harness, and a curried `runJudge` function when
+the suite has a judge harness. Add explicit judge parameters to your custom
+judge options when a matcher call needs case-specific criteria.
 
 ## Usage
 
@@ -15,11 +16,11 @@ Keep deterministic checks close to the normalized output. Return stable score
 units and JSON-safe metadata that explains the result.
 
 ```ts title="evals/judges/capitalJudge.ts"
-import { createJudge, type JudgeContext } from "vitest-evals";
+import { createJudge } from "vitest-evals";
 
-export const CapitalJudge = createJudge(
+export const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {

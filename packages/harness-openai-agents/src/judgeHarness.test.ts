@@ -37,7 +37,6 @@ test("openaiAgentsJudgeHarness runs judge prompts through OpenAI Agents", async 
       },
     },
     {
-      metadata: {},
       signal,
       artifacts: {},
       setArtifact: () => {},
@@ -84,7 +83,6 @@ test("openaiAgentsJudgeHarness preserves null judge output", async () => {
       prompt: "Return null.",
     },
     {
-      metadata: {},
       artifacts: {},
       setArtifact: () => {},
     },

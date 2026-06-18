@@ -64,7 +64,6 @@ test("piAiJudgeHarness runs judge prompts through Pi AI", async () => {
       },
     },
     {
-      metadata: {},
       signal,
       artifacts: {},
       setArtifact: () => {},

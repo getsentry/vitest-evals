@@ -116,13 +116,13 @@ export default defineConfig({
 ## Core mental model
 
 An eval suite has one harness. A harness is an adapter around the system under
-test. It receives input and metadata, runs the application, and returns a
-normalized `HarnessRun`.
+test. It receives input, runs the application, and returns a normalized
+`HarnessRun`.
 
-Each eval test receives a `run(input, options?)` fixture from `describeEval`.
+Each eval test receives a `run(input)` fixture from `describeEval`.
 Calling `run(...)` executes the harness and returns an `EvalHarnessRun`, which
 is a `HarnessRun` with type information tying it back to the suite input,
-output, metadata, and harness.
+output, and harness.
 
 Judges inspect the same run. They should not re-run the app unless they are
 explicitly written to do so. Built-in judges are deterministic contract checks.
@@ -133,16 +133,12 @@ rules.
 
 ```ts
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => ({
+  async ({ output }) => ({
     score: output.toLowerCase().includes("paris") ? 1 : 0,
   }),
 );
@@ -165,8 +161,8 @@ describeEval(
 
 ## Table-driven evals
 
-Use Vitest's normal table APIs. Keep user-facing input in `input`, and put test
-criteria in `metadata`.
+Use Vitest's normal table APIs. Keep user-facing input in `input`, and keep
+expected values in the row that owns them.
 
 ```ts
 describeEval(
@@ -187,10 +183,10 @@ describeEval(
         input: "What is the capital of Japan?",
         expectedAnswer: "Tokyo",
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      const result = await run(input, { metadata });
+    ])("$name", async ({ input, expectedAnswer }, { run }) => {
+      const result = await run(input);
 
-      expect(result.output).toContain(metadata.expectedAnswer);
+      expect(result.output).toContain(expectedAnswer);
     });
   },
 );
@@ -216,7 +212,6 @@ Import from `vitest-evals` for new suites.
 Important root types include:
 
 - `EvalRun`
-- `EvalRunOptions`
 - `EvalTestContext`
 - `EvalTestAPI`
 - `EvalHarnessRun`
@@ -250,18 +245,17 @@ Use these package subpaths when a module wants a narrower import surface.
 A harness owns execution and normalization. The root `Harness` interface is:
 
 ```ts
-type Harness<TInput, TOutput, TMetadata> = {
+type Harness<TInput, TOutput> = {
   name: string;
   run: (
     input: TInput,
-    context: HarnessContext<TMetadata>,
+    context: HarnessContext,
   ) => Promise<HarnessRun<TOutput>>;
 };
 ```
 
 The context includes:
 
-- `metadata`: per-run metadata from `run(input, { metadata })`
 - `signal`: optional abort signal
 - `artifacts`: mutable JSON-safe artifact record
 - `setArtifact(name, value)`: helper for storing JSON-safe artifacts
@@ -418,9 +412,9 @@ Key `toolReplay` by the Pi tool name.
 
 ### Custom harness
 
-Use `createHarness<Input, Output, Metadata>(...)` when the first-party adapters
-do not fit. This is appropriate for workflow engines, RAG pipelines, CLIs, or
-service functions that can return JSON-safe output, messages, tool calls, usage,
+Use `createHarness<Input, Output>(...)` when the first-party adapters do not
+fit. This is appropriate for workflow engines, RAG pipelines, CLIs, or service
+functions that can return JSON-safe output, messages, tool calls, usage,
 timings, artifacts, or errors without going through a supported SDK adapter.
 
 Return `output` for ordinary Vitest assertions and `toolCalls` for deterministic
@@ -455,11 +449,11 @@ The common judge context includes:
 Create a deterministic judge:
 
 ```ts
-import { createJudge, type JudgeContext } from "vitest-evals";
+import { createJudge } from "vitest-evals";
 
-export const CapitalJudge = createJudge(
+export const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => ({
+  async ({ output }) => ({
     score: output.toLowerCase().includes("paris") ? 1 : 0,
     metadata: {
       rationale: output.toLowerCase().includes("paris")
@@ -508,20 +502,17 @@ Built-ins are deterministic contract checks. For model-graded evals, put model
 selection, prompt text, rubrics, parsing, and thresholding inside a custom
 judge.
 
-## Metadata guidance
+## Case criteria guidance
 
-Use `metadata` for test criteria and run configuration, not for user-visible
-input. Good metadata examples:
+Put case criteria where the API that needs them can read them:
 
-- expected status
-- expected tool names
-- scenario labels
-- account or fixture identifiers
-- thresholds
-- flags that should not be embedded in the user prompt
+- Put scenario-owned criteria in `input` when the app should see them.
+- Put deterministic expected values in the Vitest case row for direct checks.
+- Pass per-case judge criteria through explicit matcher options.
+- Put suite-wide judge criteria on the judge instance.
 
-Harnesses and judges receive the same metadata object. Reporters keep resulting
-run data JSON-serializable.
+Use `metadata` only for normalized output/report diagnostics such as judge
+rationales, replay details, usage metadata, session metadata, or tool metadata.
 
 ## Reporter
 
@@ -692,7 +683,7 @@ tool calls, messages, usage, and partial output when execution fails.
 - Keep app output typed and narrow. Assert on `result.output` with ordinary
   Vitest matchers.
 - Keep normalized run data JSON-safe.
-- Use `metadata` for expected values and test criteria.
+- Keep expected values in case rows, explicit matcher options, or judge config.
 - Prefer deterministic judges for contracts such as tool calls and structured
   output.
 - Keep model-graded judge prompts and rubrics inside custom judges.

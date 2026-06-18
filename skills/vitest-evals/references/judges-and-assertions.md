@@ -10,7 +10,6 @@ Every judge receives:
 |-------|---------|
 | `input` | Original typed eval input. |
 | `output` | Typed app output returned by the harness. |
-| `metadata` | Readonly per-run metadata. |
 | `toolCalls` | Flattened calls from `run.session`. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
@@ -21,17 +20,20 @@ Every judge receives:
 ```ts
 import {
   createJudge,
-  type JudgeContext,
 } from "vitest-evals";
 
-const RefundRubricJudge = createJudge(
+const RefundRubricJudge = createJudge<
+  string,
+  RefundOutput,
+  { expectedStatus: string }
+>(
   "RefundRubricJudge",
-  async (ctx: JudgeContext<string, RefundOutput, CaseMeta>) => {
+  async (ctx) => {
     const verdict = await callJudgeModel({
       prompt: formatRubric({
         input: ctx.input,
         output: ctx.output,
-        expectedStatus: ctx.metadata.expectedStatus,
+        expectedStatus: ctx.expectedStatus,
       }),
     });
 
@@ -56,15 +58,16 @@ const RefundRubricJudge = createJudge(
 
 | Judge | Use |
 |-------|-----|
-| `FactualityJudge({ model })` | Model-grade normalized output against `metadata.expected` or explicit `expected`. |
-| `ToolCallJudge()` | Check expected tool names or arguments from `metadata.expectedTools` or explicit options. |
-| `StructuredOutputJudge()` | Check expected fields from `metadata.expected` or explicit options against `run.output`. |
+| `FactualityJudge({ judgeHarness, expected })` | Model-grade normalized output against suite-wide expected text. |
+| `ToolCallJudge({ expectedTools })` | Check suite-wide expected tool names or arguments. |
+| `StructuredOutputJudge({ expected })` | Check suite-wide expected fields against `run.output`. |
 
 ## Matcher Context Rules
 
 - `expect(result).toSatisfyJudge(...)` reuses the fixture-backed run context.
 - `expect(result.output).toSatisfyJudge(...)` can reuse the exact run when the output object came from that run.
-- Raw values outside an eval context need explicit `input`, `metadata`, `session`, `run`, or `harness` when the judge depends on them.
+- Raw values outside an eval context need explicit `input`, `session`, `run`,
+  `harness`, or custom judge params when the judge depends on them.
 - Normalized sessions infer output from the latest assistant message content.
 - Calling `ctx.harness.run(...)` inside a judge executes the app again; only do this when the judge intentionally needs a second run.
 

@@ -42,7 +42,7 @@ const harness = aiSdkHarness({
 | `name` | Optional reporter label; defaults to `ai-sdk`. |
 
 Agent factories receive `{ input, context }` before execution so apps can
-derive instructions, metadata, or seeded state without side-channel setup.
+derive instructions or seeded state without side-channel setup.
 
 When LLM-backed judges need shared provider setup, keep that helper in the
 judge module. Do not put judge-model calls on the app harness:

@@ -1,13 +1,12 @@
 ---
-title: Overview
-description: Choose a harness, configure Vitest, and follow the Paris eval story.
+title: Getting Started
+description: Get started with a harness-backed eval, direct checks, judges, and reporting.
 editUrl: false
 ---
 
 Start by choosing the harness that matches the runtime your app already uses.
-Every harness page follows the same small story: an app answers "What is the
-capital of France?", the harness normalizes that run, and a judge checks whether
-the output names Paris.
+The harness runs your app and returns normalized output, transcript, tool calls,
+traces, usage, and errors that Vitest assertions, judges, and reports can read.
 
 ## Choose a Harness
 
@@ -63,16 +62,97 @@ export default defineConfig({
 });
 ```
 
-## Follow the Story
+## Write the First Eval
 
-The harness pages intentionally use the same question, output, and judge. That
-keeps the documentation focused on the adapter boundary:
+Once the harness is configured, evals should look like ordinary Vitest tests:
+call `run(input)`, assert deterministic behavior directly, and add judges when
+you need a score or rationale in reports.
 
-| Step | What changes by runtime |
-| --- | --- |
-| App Shape | The production agent, workflow, or service function. |
-| Configure Harness | The adapter package and runtime options. |
-| Eval | The `run("What is the capital of France?")` call and `CapitalJudge`. |
+```ts title="evals/refund.eval.ts"
+import { openai } from "@ai-sdk/openai";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { expect } from "vitest";
+import {
+  describeEval,
+  FactualityJudge,
+  ToolCallJudge,
+  toolCalls,
+} from "vitest-evals";
+import { refundHarness } from "./refundHarness";
+
+const judgeHarness = aiSdkJudgeHarness({
+  model: openai("gpt-4.1-mini"),
+  temperature: 0,
+});
+const factualityJudge = FactualityJudge({ judgeHarness });
+
+describeEval("refund agent", { harness: refundHarness }, (it) => {
+  it("approves a refundable invoice", async ({ run }) => {
+    const result = await run("Refund invoice inv_123");
+
+    expect(result.output).toMatchObject({ status: "approved" });
+    expect(toolCalls(result.session).map((call) => call.name)).toEqual([
+      "lookupInvoice",
+      "createRefund",
+    ]);
+    await expect(result).toSatisfyJudge(ToolCallJudge({ ordered: true }), {
+      expectedTools: ["lookupInvoice", "createRefund"],
+    });
+    await expect(result).toSatisfyJudge(factualityJudge, {
+      expected:
+        "Invoice inv_123 should be approved and refunded for the full amount.",
+      threshold: 0.6,
+    });
+  });
+});
+```
+
+Use [Harnesses](/docs/harnesses/) for adapter setup. Use
+[Session Helpers](/docs/utilities/session-helpers/) for transcript and tool
+history helpers like `toolCalls(...)`. Use [Judges](/docs/judges/) when a check
+should produce a score, threshold, or rationale.
+
+Use Vitest's case APIs when several scenarios share the same shape. Keep
+expected values in the row and pass judge criteria explicitly where they are
+used.
+
+```ts title="evals/refund.eval.ts"
+it.for([
+  {
+    name: "approves refundable invoice",
+    input: "Refund invoice inv_123",
+    expectedStatus: "approved",
+    expectedTools: ["lookupInvoice", "createRefund"],
+    expectedFacts:
+      "Invoice inv_123 should be approved and refunded for the full amount.",
+  },
+  {
+    name: "denies non-refundable invoice",
+    input: "Refund invoice inv_404",
+    expectedStatus: "denied",
+    expectedTools: ["lookupInvoice"],
+    expectedFacts:
+      "Invoice inv_404 should be denied because it is not refundable.",
+  },
+])("$name", async ({ input, expectedFacts, expectedStatus, expectedTools }, { run }) => {
+  const result = await run(input);
+
+  expect(result.output).toMatchObject({ status: expectedStatus });
+  expect(toolCalls(result.session).map((call) => call.name)).toEqual(
+    expectedTools,
+  );
+  await expect(result).toSatisfyJudge(factualityJudge, {
+    expected: expectedFacts,
+    threshold: 0.6,
+  });
+});
+```
+
+Use [StructuredOutputJudge](/docs/judges/structured-output/),
+[ToolCallJudge](/docs/judges/tool-call/), and
+[FactualityJudge](/docs/judges/factuality/) for built-in scored checks. Use
+[Trace Helpers](/docs/utilities/trace-helpers/) when the behavior you care
+about is represented by model, tool, or run spans.
 
 ## Next
 
@@ -84,6 +164,10 @@ keeps the documentation focused on the adapter boundary:
   <a class="api-link-card" href="/docs/judges/">
     <strong>Judges</strong>
     <span>Use built-in judges, write custom judges, and set thresholds.</span>
+  </a>
+  <a class="api-link-card" href="/docs/utilities/">
+    <strong>Utilities</strong>
+    <span>Find helper APIs for session, tool-call, and trace checks.</span>
   </a>
   <a class="api-link-card" href="/docs/tool-replay/">
     <strong>Tool Replay</strong>

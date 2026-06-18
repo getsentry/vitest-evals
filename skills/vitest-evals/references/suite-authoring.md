@@ -10,12 +10,7 @@ import { describeEval, toolCalls } from "vitest-evals";
 
 describeEval("refund agent", { harness }, (it) => {
   it("approves a refundable invoice", async ({ run }) => {
-    const result = await run("Refund invoice inv_123", {
-      metadata: {
-        expectedStatus: "approved",
-        expectedTools: ["lookupInvoice", "createRefund"],
-      },
-    });
+    const result = await run("Refund invoice inv_123");
 
     expect(result.output).toMatchObject({ status: "approved" });
     expect(toolCalls(result.session).map((call) => call.name)).toEqual([
@@ -34,7 +29,7 @@ describeEval("refund agent", { harness }, (it) => {
 | Call `run(...)` inside the test body. | The test controls when the system under test executes. |
 | Assert domain behavior on `result.output`. | Harnesses preserve app-facing results separately from trace data. |
 | Assert trace behavior on `result.session`. | Reporter, replay, tools, and judges consume normalized sessions. |
-| Use `metadata` for per-run expectations or harness settings. | Judges receive it without polluting the scenario input. |
+| Keep expected values in the Vitest row or matcher options. | Case criteria stays close to the assertion that uses it. |
 | Use `it.for(...)` for case tables. | Keep table-driven suites idiomatic Vitest. |
 
 ## Core Options

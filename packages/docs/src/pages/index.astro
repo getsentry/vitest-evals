@@ -6,16 +6,12 @@ import { PACKAGE_VERSION, VITEST_EVALS_ACTION } from "../utils/version";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const evalExample = `import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => ({
+  async ({ output }) => ({
     score: output.toLowerCase().includes("paris") ? 1 : 0,
   }),
 );
@@ -52,8 +48,7 @@ const actionExample = `- name: Run evals
         score the normalized result with ordinary Vitest assertions and judges.
       </p>
       <div class="hero-actions">
-        <a href={`${base}/docs`} class="btn btn-primary">Documentation</a>
-        <a href={`${base}/docs/harnesses`} class="btn">Choose a Harness</a>
+        <a href={`${base}/docs`} class="btn btn-primary">Getting Started</a>
         <a href={`${base}/api`} class="btn">API Reference</a>
       </div>
     </div>
@@ -107,7 +102,7 @@ const actionExample = `- name: Run evals
         <h3>Judge the same run</h3>
         <p>
           Built-in and custom judges read output, session, tool calls, usage,
-          and metadata without re-running the app.
+          and run context without re-running the app.
         </p>
       </div>
     </div>

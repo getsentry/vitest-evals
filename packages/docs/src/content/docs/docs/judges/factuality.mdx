@@ -30,7 +30,10 @@ const judgeHarness = aiSdkJudgeHarness({
   model: openai("gpt-4.1-mini"),
   temperature: 0,
 });
-const factualityJudge = FactualityJudge({ judgeHarness });
+const factualityJudge = FactualityJudge({
+  expected: "Paris is the capital of France.",
+  judgeHarness,
+});
 
 describeEval("capital questions", {
   harness: qaHarness,
@@ -62,16 +65,19 @@ export const judgeHarness = piAiJudgeHarness({
 export const factualityJudge = FactualityJudge({ judgeHarness });
 ```
 
-## Expected Answer
+## Suite Expected Answer
 
-Put the expert answer in run metadata when every suite-level factuality judge
-should read it.
+Put a suite-wide expert answer on the judge instance.
 
 ```ts title="evals/capital.eval.ts"
-await run("What is the capital of France?", {
-  metadata: {
-    expected: "Paris is the capital of France.",
-  },
+describeEval("capital questions", {
+  harness: qaHarness,
+  judges: [
+    FactualityJudge({
+      expected: "Paris is the capital of France.",
+      judgeHarness,
+    }),
+  ],
 });
 ```
 

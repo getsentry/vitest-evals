@@ -5,7 +5,7 @@ editUrl: false
 ---
 
 `StructuredOutputJudge()` compares the harness output with expected values from
-metadata or matcher options. Use it for deterministic checks when the harness
+the judge config or matcher options. Use it for deterministic checks when the harness
 returns a parsed domain object instead of raw provider text.
 
 ## Usage
@@ -16,7 +16,9 @@ import { StructuredOutputJudge } from "vitest-evals";
 describeEval("capital questions", {
   harness: structuredQaHarness,
   judges: [
-    StructuredOutputJudge(),
+    StructuredOutputJudge({
+      expected: { answer: "Paris" },
+    }),
   ],
 });
 ```
@@ -28,13 +30,10 @@ record a score separately from the suite defaults.
 
 ```ts title="evals/capital.eval.ts"
 it("records a structured output score", async ({ run }) => {
-  const result = await run("What is the capital of France?", {
-    metadata: {
-      expected: { answer: "Paris", country: "France" },
-    },
-  });
+  const result = await run("What is the capital of France?");
 
-  await expect(result).toSatisfyJudge(StructuredOutputJudge, {
+  await expect(result).toSatisfyJudge(StructuredOutputJudge(), {
+    expected: { answer: "Paris", country: "France" },
     threshold: null,
   });
 });
@@ -42,18 +41,21 @@ it("records a structured output score", async ({ run }) => {
 
 `threshold: null` records the score without turning it into a failure.
 
-## Expected Output
+## Suite Expectations
 
-Put the expected value in run metadata.
+Put suite-wide expected fields on the judge instance.
 
 ```ts title="evals/capital.eval.ts"
-const result = await run("What is the capital of France?", {
-  metadata: {
-    expected: {
-      answer: "Paris",
-      country: "France",
-    },
-  },
+describeEval("capital questions", {
+  harness: structuredQaHarness,
+  judges: [
+    StructuredOutputJudge({
+      expected: {
+        answer: "Paris",
+        country: "France",
+      },
+    }),
+  ],
 });
 ```
 

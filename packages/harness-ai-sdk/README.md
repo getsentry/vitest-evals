@@ -19,7 +19,6 @@ import {
   createJudge,
   describeEval,
   toolCalls,
-  type JudgeContext,
 } from "vitest-evals";
 
 const tools = {
@@ -73,17 +72,15 @@ const harness = aiSdkHarness({
 ```
 
 If your app exposes an agent object instead, `agent` can be either that object
-or a per-run factory. Factories receive the eval input and harness context so
-input-dependent instructions, metadata, or seeded state do not require
-side-channel setup:
+or a per-run factory. Factories receive the eval input so input-dependent
+instructions or seeded state do not require side-channel setup:
 
 ```ts
 const harness = aiSdkHarness({
   tools,
-  agent: ({ input, context }) =>
+  agent: ({ input }) =>
     createRefundAgent({
       instructions: buildInstructions(input),
-      metadata: context.metadata,
     }),
 });
 ```

@@ -27,8 +27,6 @@ describeEval(
         lookupInvoice: true,
       },
     }),
-    judges: [ToolCallJudge(), factualityJudge],
-    judgeThreshold: 0.6,
   },
   (it) => {
     it.for<RefundCase>([
@@ -48,22 +46,26 @@ describeEval(
         expectedStatus: "denied",
         expectedTools: ["lookupInvoice"],
       },
-    ])("$name", async ({ input, ...metadata }, { run }) => {
-      const result = await run(input, {
-        metadata,
-      });
+    ])("$name", async ({ input, ...expected }, { run }) => {
+      const result = await run(input);
 
       expect(result.output).toMatchObject({
-        status: metadata.expectedStatus,
+        status: expected.expectedStatus,
       });
       await expect(result).toSatisfyJudge(outputJudge, {
-        metadata,
         expected: {
-          status: metadata.expectedStatus,
+          status: expected.expectedStatus,
         },
       });
+      await expect(result).toSatisfyJudge(ToolCallJudge(), {
+        expectedTools: expected.expectedTools,
+      });
+      await expect(result).toSatisfyJudge(factualityJudge, {
+        expected: expected.expected,
+        threshold: 0.6,
+      });
       expect(toolCalls(result.session).map((call) => call.name)).toEqual(
-        metadata.expectedTools,
+        expected.expectedTools,
       );
       expect(result.usage.provider).toBe("anthropic");
       expect(result.usage.model).toContain("claude");

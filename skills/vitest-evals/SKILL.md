@@ -22,6 +22,7 @@ Use the harness-backed API as the only authoring model.
 | Integrate AI SDK `generateText`, `generateObject`, tools, or an AI SDK-style agent | `references/harness-ai-sdk.md` |
 | Integrate a Pi AI or Pi Mono-style agent | `references/harness-pi-ai.md` |
 | Add custom judges, suite judges, built-in judges, or `toSatisfyJudge(...)` assertions | `references/judges-and-assertions.md` |
+| Assert on message, tool-call, or span history | `references/utilities.md` |
 | Configure tool recording or replay | `references/tool-replay.md` |
 | Diagnose failures, missing traces, odd output, or choose verification commands | `references/troubleshooting.md` |
 
@@ -29,14 +30,17 @@ Use the harness-backed API as the only authoring model.
 
 - Import `describeEval(...)`, judges, and helpers from `vitest-evals`.
 - Bind exactly one `harness` to a suite.
-- Call `run(input, { metadata? })` where the test should execute the system.
+- Call `run(input)` where the test should execute the system.
 - Assert on `result.output` for app-facing behavior.
 - Use `result.session` and helpers such as `toolCalls(session)` for trace assertions.
+- Use `spans(result)`, `spansByKind(result, kind)`, and `failedSpans(result)` for trace assertions.
 - Keep `HarnessRun`, `NormalizedSession`, usage, artifacts, and tool records JSON-serializable.
 - Keep judge model calls on judges. Use `createJudge("Name", assess)` for
   custom judges; use the provider-helper overload only when multiple judges
   reuse setup and need curried run options.
-- Put scenario-owned criteria on the input value; put per-run expectations or harness settings in `metadata`.
+- Put scenario-owned criteria on the input value. Put direct-check expected
+  values in Vitest case rows. Pass per-case judge criteria through explicit
+  matcher options, and suite-wide criteria through judge config.
 - Custom judges should use `createJudge(...)` for stable reporter labels.
 
 ## Verification

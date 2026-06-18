@@ -18,7 +18,6 @@ import {
   createJudge,
   describeEval,
   toolCalls,
-  type JudgeContext,
 } from "vitest-evals";
 
 const harness = openaiAgentsHarness({
@@ -45,8 +44,8 @@ describeEval("classifier agent", { harness }, (it) => {
 ```
 
 The adapter calls `runner.run(agent, input, options)` by default. It forwards
-the eval metadata, artifact helpers, and abort signal through the run options,
-then normalizes the `RunResult` into the standard `HarnessRun` shape.
+artifact helpers and the abort signal through the run options, then normalizes
+the `RunResult` into the standard `HarnessRun` shape.
 
 If your application has a custom entrypoint, wire it directly:
 
@@ -70,16 +69,15 @@ const harness = openaiAgentsHarness({
 ```
 
 `agent` and `runner` can be objects or per-run factories. An `agent` factory
-receives the per-run input and harness context before the adapter instruments
-local function tools. Use that when an agent needs scenario-specific tool
-closures, instructions, or metadata while staying on the native replay path:
+receives the per-run input before the adapter instruments local function tools.
+Use that when an agent needs scenario-specific tool closures or instructions
+while staying on the native replay path:
 
 ```ts
 const harness = openaiAgentsHarness({
-  agent: ({ input, context }) =>
+  agent: ({ input }) =>
     createClassifierAgent({
       bottleId: parseBottleId(input),
-      metadata: context.metadata,
     }),
   runner: () => new Runner({ modelProvider, tracingDisabled: true }),
   toolReplay: {

@@ -284,7 +284,12 @@ function collectStructuredDocsErrors() {
       label: "harness",
       dir: join(root, "packages/docs/src/content/docs/docs/harnesses"),
       template: "_TEMPLATE.md",
-      requiredHeadings: ["Install", "App Shape", "Configure Harness", "Eval"],
+      requiredHeadings: [
+        "Install",
+        "App Shape",
+        "Configure Harness",
+        "Writing Evals",
+      ],
     },
     {
       label: "judge",

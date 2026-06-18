@@ -17,7 +17,6 @@ import {
   createJudge,
   describeEval,
   toolCalls,
-  type JudgeContext,
 } from "vitest-evals";
 
 const harness = piAiHarness({
@@ -79,16 +78,15 @@ If the agent already implements `run(input, runtime)`, you can omit `run` and
 the harness will call that method automatically.
 
 `agent` can be an object or a per-run factory. The factory receives the per-run
-input and harness context before the adapter infers and instruments native
-agent tools. Use that for scenario-specific instructions, tool closures, or
-metadata without leaving the default replay path:
+input before the adapter infers and instruments native agent tools. Use that
+for scenario-specific instructions or tool closures without leaving the default
+replay path:
 
 ```ts
 const harness = piAiHarness({
-  agent: ({ input, context }) =>
+  agent: ({ input }) =>
     createRefundAgent({
       instructions: buildInstructions(input),
-      metadata: context.metadata,
     }),
   toolReplay: {
     lookupInvoice: true,

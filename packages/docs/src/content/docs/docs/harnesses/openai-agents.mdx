@@ -59,23 +59,19 @@ Use `output` when `finalOutput` needs validation or conversion before Vitest
 assertions and judges read `result.output`. The harness also attaches native
 run, response, and tool spans to `result.traces`.
 
-## Eval
+## Writing Evals
 
 Run the same question a user would ask the agent. `CapitalJudge` scores the
 normalized output from that run; it does not run the agent a second time.
 
 ```ts title="evals/capital.eval.ts"
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {

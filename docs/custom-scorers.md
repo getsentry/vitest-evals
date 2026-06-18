@@ -61,8 +61,8 @@ await expect(result).toSatisfyJudge(RefundRubricJudge);
 ```
 
 For simple response-level checks, a judge can just score `output`. When a judge
-needs normalized run context, type it with `JudgeContext` and read `metadata`,
-`toolCalls`, `session`, `harness`, or the curried `runJudge` helper from there.
+needs normalized run context, type it with `JudgeContext` and read `toolCalls`,
+`session`, `harness`, or the curried `runJudge` helper from there.
 LLM-backed judges should own their prompt, rubric text, and parser, then call
 `ctx.runJudge(...)` for the provider-specific model request. Core curries the
 matcher, judge, or suite `judgeHarness` into that function with the current
@@ -70,11 +70,11 @@ abort signal. Calling `harness.run(...)` inside a judge executes the app again,
 so reserve that for judges that intentionally need a second run.
 
 When rubric criteria are part of the scenario under test, keep them on
-`input`. Use per-run `metadata` for expectations or harness configuration
-that are not part of the scenario payload.
+`input`. Use explicit matcher options for case-specific judge criteria that are
+not part of the scenario payload.
 
 Explicit matcher calls on the branded result returned by fixture `run(...)`
-use the run's typed `output` and reuse registered input, metadata, and harness
+use the run's typed `output` and reuse registered input and harness
 context. The matcher requires any custom judge params and rejects judges whose
 output type cannot assess the received value. Inside an eval test, matcher
 calls on registered output objects or session objects reuse that exact run

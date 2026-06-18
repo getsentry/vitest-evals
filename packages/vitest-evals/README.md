@@ -30,8 +30,8 @@ workflow.
 
 - `describeEval(...)` binds exactly one harness to a suite
 - the suite callback receives a fixture-backed Vitest `it`
-- `run(input, { metadata? })` executes the harness explicitly and returns a
-  normalized `HarnessRun`
+- `run(input)` executes the harness explicitly and returns a normalized
+  `HarnessRun`
 - the returned `result.output` is the app-facing value you assert on directly
 - the returned `result.session` is the canonical JSON-serializable transcript for
   reporting, replay, tool assertions, and judges
@@ -41,19 +41,18 @@ workflow.
   that do not return traces themselves. Span attributes include typed
   OpenTelemetry GenAI semantic keys while still allowing provider-specific
   metadata
-- scenario-specific judge criteria can live in `input`; use `metadata` for
-  per-run expectations or harness configuration that are not part of the
-  scenario payload
+- scenario-specific judge criteria should live in `input` or explicit matcher
+  options, depending on whether the app or only the judge needs them
 - suite-level `judges` are optional and run automatically after each `run(...)`
 - suite-level `judgeThreshold` controls fail-on-score for those automatic judges
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
-  normalized run/session, tool calls, and metadata; `output` is only optional
+  normalized run/session, and tool calls; `output` is only optional
   when the harness output type includes `undefined`
 - judges own their prompt, rubric, and parsing; LLM-backed judges use
   `ctx.runJudge(...)` from a configured `judgeHarness`
 - explicit judge assertions use
-  `await expect(result).toSatisfyJudge(judge, context)`
+  `await expect(result).toSatisfyJudge(judge, options)`
 
 ## Explicit Run Example
 
@@ -80,18 +79,16 @@ describeEval(
       agent: () => createRefundAgent(),
     }),
     judgeHarness,
-    judges: [FactualityJudge()],
+    judges: [
+      FactualityJudge({
+        expected: "The refund request is approved.",
+      }),
+    ],
     judgeThreshold: 0.6,
   },
   (it) => {
     it("approves a refundable invoice", async ({ run }) => {
-      const result = await run("Refund invoice inv_123", {
-        metadata: {
-          expected: "The refund request is approved.",
-          expectedStatus: "approved",
-          expectedTools: ["lookupInvoice", "createRefund"],
-        },
-      });
+      const result = await run("Refund invoice inv_123");
 
       expect(result.output).toMatchObject({ status: "approved" });
       expect(toolCalls(result.session).map((call) => call.name)).toEqual([
@@ -121,13 +118,11 @@ describeEval("refund agent", { harness }, (it) => {
       input: "Refund invoice inv_404",
       expectedStatus: "denied",
     },
-  ])("$name", async ({ input, ...metadata }, { run }) => {
-    const result = await run(input, {
-      metadata,
-    });
+  ])("$name", async ({ input, expectedStatus }, { run }) => {
+    const result = await run(input);
 
     expect(result.output).toMatchObject({
-      status: metadata.expectedStatus,
+      status: expectedStatus,
     });
   });
 });
@@ -213,7 +208,7 @@ First-party harness packages are conveniences, not the only supported path. If
 you need to test a full application flow, use `createHarness(...)` to run your
 app through its normal entrypoint and return the app-facing output. Judges own
 their prompt/rubric text separately from the system under test.
-When generics are needed, use `createHarness<Input, Output, Metadata>(...)`.
+When generics are needed, use `createHarness<Input, Output>(...)`.
 
 ```ts
 import {
@@ -221,7 +216,6 @@ import {
   createJudge,
   createJudgeHarness,
   describeEval,
-  type JudgeContext,
 } from "vitest-evals";
 
 type AppEvent = {
@@ -238,14 +232,12 @@ type AppEvalInput = {
   };
 };
 
-type AppEvalMetadata = Record<string, never>;
-
 type AppOutput = {
   replies: Array<{ text: string }>;
   sideEffects: string[];
 };
 
-const appHarness = createHarness<AppEvalInput, AppOutput, AppEvalMetadata>({
+const appHarness = createHarness<AppEvalInput, AppOutput>({
   name: "custom-app",
   run: async ({ input, signal }) => {
     const result = await replayAppEvents(input.events, {
@@ -271,9 +263,9 @@ const judgeHarness = createJudgeHarness({
     promptJudgeModel({ prompt, signal }),
 });
 
-const AppRubricJudge = createJudge(
+const AppRubricJudge = createJudge<AppEvalInput, AppOutput>(
   "AppRubricJudge",
-  async (ctx: JudgeContext<AppEvalInput, AppOutput, AppEvalMetadata>) => {
+  async (ctx) => {
     if (!ctx.runJudge) {
       throw new Error("AppRubricJudge requires a configured judgeHarness.");
     }
@@ -323,11 +315,11 @@ describeEval(
 Use `Harness.run(...)` for the application under test. Calling
 `ctx.harness.run(...)` from inside a judge runs the application a second time,
 so reserve that for judges that intentionally need a second execution. Put
-criteria on `input` when they are part of the scenario itself; use per-run
-`metadata` for harness configuration or expectations that are not part of the
-scenario payload. `createHarness(...)` builds a default user/assistant session
-from `input` and typed `output`; return a full `HarnessRun` only when you need
-exact session control.
+criteria on `input` when they are part of the scenario itself; pass
+case-specific judge criteria through matcher options, or configure suite-wide
+criteria on the judge instance. `createHarness(...)` builds a default
+user/assistant session from `input` and typed `output`; return a full
+`HarnessRun` only when you need exact session control.
 
 Provider setup and rubric parsing stay in your judge. The core
 package only requires the judge to return a `JudgeResult` with a score and
@@ -449,7 +441,7 @@ so use that only when a second run is intentional.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered
-input and metadata. It requires any custom judge params and rejects judges whose
+input. It requires any custom judge params and rejects judges whose
 output type cannot assess the received value. Inside an eval test,
 matcher calls on registered output objects or session objects reuse that exact
 run context when the value can be registered by reference, so
@@ -457,10 +449,10 @@ run context when the value can be registered by reference, so
 outputs. Other raw values fall back to the current test's most recent
 `run(...)` context. For
 manually-created runs or values outside an eval context, pass any required
-`input`, `metadata`, or `harness` in matcher options. Structured or
+`input` or `harness` in matcher options. Structured or
 programmatic result checks should usually assert on `result.output` directly.
 When a judge needs richer normalized context or the configured suite harness,
-type it with `JudgeContext`.
+type it with `createJudge<Input, Output>(...)` or `JudgeContext<Input, Output>`.
 
 When you only need deterministic contract checks, built-ins such as
 `StructuredOutputJudge()` and `ToolCallJudge()` are still available.

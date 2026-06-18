@@ -58,9 +58,9 @@ Use an object when the default cache key or recording needs adjustment:
 ```ts
 replay: {
   version: "v2",
-  key: (args, context) => ({
+  key: (args) => ({
     args,
-    tenant: context.metadata.tenant,
+    tenant: args.tenant,
   }),
   sanitize: (recording) => ({
     ...recording,

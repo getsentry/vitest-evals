@@ -282,11 +282,18 @@ Root-level custom evaluation logic should generally be written as judges over
 normalized run/session data:
 
 ```ts
-import { createJudge, type JudgeOptions } from "vitest-evals";
+import { createJudge, type JudgeOptions, type JsonValue } from "vitest-evals";
 
 export const RefundToolJudge = createJudge(
   "RefundToolJudge",
-  async ({ expectedTools, toolCalls }: JudgeOptions<{ expectedTools: string[] }>) => ({
+  async ({
+    expectedTools,
+    toolCalls,
+  }: JudgeOptions<
+    unknown,
+    JsonValue | undefined,
+    { expectedTools: string[] }
+  >) => ({
     score: expectedTools.every(
       (name, index) => toolCalls[index]?.name === name,
     )

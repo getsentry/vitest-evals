@@ -25,7 +25,7 @@ explicit judge assertions when one case needs an extra check.
   </a>
   <a class="api-link-card" href="/docs/judges/structured-output/">
     <strong>StructuredOutputJudge</strong>
-    <span>Check JSON-safe output fields against expected metadata or matcher options.</span>
+    <span>Check JSON-safe output fields against judge config or matcher options.</span>
   </a>
   <a class="api-link-card" href="/docs/judges/custom/">
     <strong>Custom Judges</strong>
@@ -52,7 +52,10 @@ const judgeHarness = aiSdkJudgeHarness({
   model: openai("gpt-4.1-mini"),
   temperature: 0,
 });
-const factualityJudge = FactualityJudge({ judgeHarness });
+const factualityJudge = FactualityJudge({
+  expected: "Paris is the capital of France.",
+  judgeHarness,
+});
 
 describeEval(
   "capital questions",
@@ -63,11 +66,7 @@ describeEval(
   },
   (it) => {
     it("knows the capital of France", async ({ run }) => {
-      const result = await run("What is the capital of France?", {
-        metadata: {
-          expected: "Paris is the capital of France.",
-        },
-      });
+      const result = await run("What is the capital of France?");
 
       expect(result.output).toContain("Paris");
     });

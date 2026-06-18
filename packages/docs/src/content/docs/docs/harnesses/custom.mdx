@@ -60,23 +60,19 @@ export const qaHarness = createHarness<string, string>({
 Return a full `HarnessRun` only when you need complete control over messages,
 tool calls, usage, timings, artifacts, traces, and errors.
 
-## Eval
+## Writing Evals
 
 Use the custom harness like any first-party harness. The judge scores the
 normalized output from the single harness run.
 
 ```ts title="evals/capital.eval.ts"
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {

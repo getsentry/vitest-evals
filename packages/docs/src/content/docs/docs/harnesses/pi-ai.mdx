@@ -17,8 +17,8 @@ pnpm add -D vitest-evals @vitest-evals/harness-pi-ai
 
 ## App Shape
 
-The agent factory is the app boundary. It can close over prompts, metadata, and
-services, then expose the runtime-compatible `run(input, runtime)` shape the
+The agent factory is the app boundary. It can close over prompts and services,
+then expose the runtime-compatible `run(input, runtime)` shape the
 harness expects.
 
 ```ts title="src/questionAgent.ts"
@@ -30,14 +30,12 @@ type PiRuntime = {
 
 export function createQuestionAgent({
   instructions,
-  metadata,
 }: {
   instructions: string;
-  metadata: Record<string, unknown>;
 }) {
   return {
     async run(input: string, runtime: PiRuntime) {
-      const output = await answerQuestion(input, { instructions, metadata });
+      const output = await answerQuestion(input, { instructions });
 
       runtime.events?.message({
         role: "assistant",
@@ -54,18 +52,17 @@ export function createQuestionAgent({
 
 ## Configure Harness
 
-The harness creates the agent for each run and forwards per-case metadata from
-the eval into the app boundary.
+The harness creates the agent for each run and can derive app setup from the
+input or close over shared services.
 
 ```ts title="evals/qaHarness.ts"
 import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 import { createQuestionAgent } from "../src/questionAgent";
 
 export const qaHarness = piAiHarness({
-  agent: ({ input, context }) =>
+  agent: ({ input }) =>
     createQuestionAgent({
       instructions: buildInstructions(input),
-      metadata: context.metadata,
     }),
 });
 ```
@@ -74,23 +71,19 @@ Return `{ output }` from the Pi entrypoint when tests and judges should assert
 on a parsed domain value. The harness attaches native run, model, and tool spans
 to `result.traces` from the Pi runtime activity it observes.
 
-## Eval
+## Writing Evals
 
 Write the eval against the harness, not the Pi runtime directly. The judge reads
 the normalized output, so the scoring code stays independent of Pi internals.
 
 ```ts title="evals/capital.eval.ts"
 import { expect } from "vitest";
-import {
-  createJudge,
-  describeEval,
-  type JudgeContext,
-} from "vitest-evals";
+import { createJudge, describeEval } from "vitest-evals";
 import { qaHarness } from "./qaHarness";
 
-const CapitalJudge = createJudge(
+const CapitalJudge = createJudge<string, string>(
   "CapitalJudge",
-  async ({ output }: JudgeContext<string, string>) => {
+  async ({ output }) => {
     const passed = output.toLowerCase().includes("paris");
 
     return {
