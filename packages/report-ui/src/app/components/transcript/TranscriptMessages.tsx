@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from "react";
 import {
-  formatDuration,
   formatJson,
   type TranscriptEvent,
   type TranscriptMessage,
-  type TranscriptSpanEvent,
   type TranscriptToolEvent,
 } from "../../model";
 import { cx } from "../../ui";
@@ -50,13 +48,7 @@ function TranscriptEventList({ events }: { events: TranscriptEvent[] }) {
       continue;
     }
 
-    rows.push(
-      event.kind === "message" ? (
-        <TranscriptMessageEvent key={event.id} message={event} />
-      ) : (
-        <TranscriptSpanEventView event={event} key={event.id} />
-      ),
-    );
+    rows.push(<TranscriptMessageEvent key={event.id} message={event} />);
     index += 1;
   }
 
@@ -184,48 +176,6 @@ function formatBytes(bytes: number) {
 
 function isString(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
-}
-
-function TranscriptSpanEventView({ event }: { event: TranscriptSpanEvent }) {
-  const operation = event.operation;
-
-  return (
-    <article
-      className={cx(
-        "min-w-0 border-l-4 py-2 pl-3 pr-3",
-        operation.status === "error" || operation.error
-          ? "border-l-fail-line bg-panel text-ink"
-          : "border-l-line bg-panel text-ink",
-      )}
-    >
-      <TranscriptHeadingRow
-        left={
-          <span className="font-mono text-[0.86rem] font-bold text-muted-strong">
-            {operation.label}
-          </span>
-        }
-        right={
-          <TranscriptHeadingMeta className="text-[0.78rem] text-muted">
-            {formatDuration(operation.durationMs)}
-          </TranscriptHeadingMeta>
-        }
-      />
-      <div className="mt-1 font-mono text-[0.82rem] leading-snug text-ink">
-        {operation.name}
-      </div>
-      {operation.query ? (
-        <p className="mt-2 text-[0.9rem] leading-relaxed text-ink">
-          {operation.query}
-        </p>
-      ) : null}
-      {operation.error ? (
-        <p className="mt-2 text-[0.9rem] leading-relaxed text-fail">
-          {operation.error.type ? `${operation.error.type}: ` : ""}
-          {operation.error.message}
-        </p>
-      ) : null}
-    </article>
-  );
 }
 
 function transcriptRoleLabel(role: TranscriptMessage["role"]): string {

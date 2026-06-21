@@ -57,41 +57,7 @@ export type TranscriptToolEvent = {
   callId?: string;
 };
 
-export type TranscriptSpanEvent = {
-  kind: "span";
-  id: string;
-  operation: TranscriptOperation;
-};
-
-export type TranscriptEvent =
-  | TranscriptMessage
-  | TranscriptToolEvent
-  | TranscriptSpanEvent;
-
-export type TranscriptOperation = {
-  id: string;
-  kind: NonNullable<NormalizedSpan["kind"]> | "retrieval";
-  name: string;
-  label: string;
-  status?: NormalizedSpan["status"];
-  durationMs?: number;
-  provider?: string;
-  model?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  reasoningTokens?: number;
-  query?: string;
-  arguments?: JsonValue;
-  result?: JsonValue;
-  documents?: JsonValue;
-  error?: NormalizedError;
-  attributes?: NormalizedSpan["attributes"];
-};
-
-type TraceMessage = {
-  content?: JsonValue;
-  role: NormalizedMessage["role"];
-};
+export type TranscriptEvent = TranscriptMessage | TranscriptToolEvent;
 
 export type Transcript = {
   events: TranscriptEvent[];
@@ -205,10 +171,10 @@ export function buildSpanTree(spans: NormalizedSpan[]) {
   return roots.sort(compareSpans);
 }
 
-/** Builds a readable transcript projection from GenAI trace spans. */
+/** Builds a readable transcript projection from normalized session messages. */
 export function buildTranscript(run: HarnessRun): Transcript {
   return {
-    events: transcriptEvents(run),
+    events: sessionTranscriptEvents(run),
   };
 }
 
@@ -325,32 +291,6 @@ function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
   return durations.reduce((total, duration) => total + duration, 0);
 }
 
-function transcriptEvents(run: HarnessRun) {
-  const traceEvents = traceTranscriptEvents(run);
-  if (traceEvents.length === 0) {
-    return sessionTranscriptEvents(run);
-  }
-
-  return traceEvents.some((event) => event.kind === "message")
-    ? traceEvents
-    : [...sessionMessageEvents(run), ...traceEvents];
-}
-
-function sessionMessageEvents(run: HarnessRun) {
-  return run.session.messages.flatMap((message, messageIndex) =>
-    message.content === undefined
-      ? []
-      : [
-          {
-            content: message.content,
-            id: `message-${messageIndex}`,
-            kind: "message" as const,
-            role: message.role,
-          },
-        ],
-  );
-}
-
 function sessionTranscriptEvents(run: HarnessRun) {
   const events: TranscriptEvent[] = [];
   const pendingTools: Array<{
@@ -360,15 +300,20 @@ function sessionTranscriptEvents(run: HarnessRun) {
 
   run.session.messages.forEach((message, messageIndex) => {
     if (message.role === "tool") {
-      attachTranscriptToolResult(pendingTools, message);
+      if (attachTranscriptToolResult(pendingTools, message)) {
+        return;
+      }
     }
 
-    events.push({
-      content: message.content,
-      id: `message-${messageIndex}`,
-      kind: "message",
-      role: message.role,
-    });
+    if (message.content !== undefined) {
+      events.push({
+        content: message.content,
+        id: `message-${messageIndex}`,
+        kind: "message",
+        role: message.role,
+      });
+    }
+
     events.push(
       ...("toolCalls" in message ? (message.toolCalls ?? []) : []).map(
         (call, toolIndex): TranscriptToolEvent => {
@@ -400,13 +345,14 @@ function attachTranscriptToolResult(
   );
 
   if (!match) {
-    return;
+    return false;
   }
 
   match.event.error = result.error;
   match.event.result = result.content;
   match.event.durationMs = result.durationMs ?? match.call.durationMs;
   match.event.status = result.error ? "error" : "ok";
+  return true;
 }
 
 function findPendingTranscriptTool(
@@ -418,253 +364,8 @@ function findPendingTranscriptTool(
   );
 }
 
-function traceTranscriptEvents(run: HarnessRun) {
-  const events: TranscriptEvent[] = [];
-  const messages: TraceMessage[] = [];
-  for (const [index, span] of sortedRunSpans(run).entries()) {
-    const attributes = span.attributes;
-    events.push(
-      ...appendTraceMessages(
-        messages,
-        attributes?.["gen_ai.input.messages"],
-        span,
-        "input",
-      ),
-    );
-    events.push(
-      ...appendTraceMessages(
-        messages,
-        attributes?.["gen_ai.output.messages"],
-        span,
-        "output",
-      ),
-    );
-
-    if (operationKind(span) === "tool") {
-      events.push(traceToolEvent(span, index));
-      continue;
-    }
-
-    if (operationKind(span) === "retrieval" || shouldRenderSpanEvent(span)) {
-      events.push({
-        id: span.id ?? `span-${index}`,
-        kind: "span",
-        operation: transcriptOperation(span, index),
-      });
-    }
-  }
-
-  return events;
-}
-
-function appendTraceMessages(
-  existingMessages: TraceMessage[],
-  value: JsonValue | undefined,
-  span: NormalizedSpan,
-  direction: "input" | "output",
-) {
-  const snapshot = jsonMessages(value);
-  if (snapshot.length === 0) {
-    return [];
-  }
-
-  const startIndex = commonPrefixLength(existingMessages, snapshot);
-  const nextMessages = snapshot.slice(startIndex);
-  existingMessages.push(...nextMessages);
-
-  return nextMessages.map((message, index): TranscriptMessage => {
-    const messageIndex = startIndex + index;
-    return {
-      content: message.content,
-      id: `${span.id ?? "span"}:${direction}:message-${messageIndex}`,
-      kind: "message",
-      role: message.role,
-      spanId: span.id,
-    };
-  });
-}
-
-function jsonMessages(value: JsonValue | undefined) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((entry): TraceMessage[] => {
-    if (!isJsonObject(entry)) {
-      return [];
-    }
-    const role = messageRole(entry.role);
-    if (!role) {
-      return [];
-    }
-
-    const content = entry.content;
-    return [
-      {
-        content,
-        role,
-      },
-    ];
-  });
-}
-
-function commonPrefixLength(
-  existingMessages: TraceMessage[],
-  snapshot: TraceMessage[],
-) {
-  let index = 0;
-  while (
-    index < existingMessages.length &&
-    index < snapshot.length &&
-    sameTraceMessage(existingMessages[index], snapshot[index])
-  ) {
-    index += 1;
-  }
-  return index;
-}
-
-function sameTraceMessage(
-  left: TraceMessage | undefined,
-  right: TraceMessage | undefined,
-) {
-  return (
-    left?.role === right?.role &&
-    formatJson(left?.content) === formatJson(right?.content)
-  );
-}
-
-function transcriptOperation(
-  span: NormalizedSpan,
-  index: number,
-): TranscriptOperation {
-  const attributes = span.attributes;
-  const inferredKind = operationKind(span);
-  return {
-    id: span.id ?? `operation-${index}`,
-    kind: inferredKind,
-    name:
-      stringAttribute(attributes, "gen_ai.tool.name") ??
-      stringAttribute(attributes, "gen_ai.request.model") ??
-      stringAttribute(attributes, "gen_ai.workflow.name") ??
-      span.name,
-    label:
-      stringAttribute(attributes, "gen_ai.operation.name") ??
-      operationLabel(inferredKind),
-    status: span.status,
-    durationMs: span.durationMs,
-    provider: stringAttribute(attributes, "gen_ai.provider.name"),
-    model:
-      stringAttribute(attributes, "gen_ai.response.model") ??
-      stringAttribute(attributes, "gen_ai.request.model"),
-    inputTokens: numberAttribute(attributes, "gen_ai.usage.input_tokens"),
-    outputTokens: numberAttribute(attributes, "gen_ai.usage.output_tokens"),
-    reasoningTokens: numberAttribute(
-      attributes,
-      "gen_ai.usage.reasoning.output_tokens",
-    ),
-    query: stringAttribute(attributes, "gen_ai.retrieval.query.text"),
-    arguments: attributes?.["gen_ai.tool.call.arguments"],
-    result: attributes?.["gen_ai.tool.call.result"],
-    documents: attributes?.["gen_ai.retrieval.documents"],
-    error: span.error,
-    attributes,
-  };
-}
-
-function sortedRunSpans(run: HarnessRun) {
-  const spans = (run.traces ?? []).flatMap((trace) => trace.spans);
-  return spans.every((span) => hasTimestamp(span.startedAt))
-    ? [...spans].sort(compareSpans)
-    : spans;
-}
-
-function operationKind(span: NormalizedSpan): TranscriptOperation["kind"] {
-  if (span.attributes?.["gen_ai.retrieval.query.text"]) {
-    return "retrieval";
-  }
-  return span.kind ?? "custom";
-}
-
-function operationLabel(kind: TranscriptOperation["kind"]) {
-  switch (kind) {
-    case "agent":
-      return "Agent";
-    case "model":
-      return "Model";
-    case "tool":
-      return "Tool";
-    case "retrieval":
-      return "Retrieval";
-    case "guardrail":
-      return "Guardrail";
-    case "handoff":
-      return "Handoff";
-    case "run":
-      return "Run";
-    default:
-      return "Event";
-  }
-}
-
-function traceToolEvent(
-  span: NormalizedSpan,
-  index: number,
-): TranscriptToolEvent {
-  const attributes = span.attributes;
-  return {
-    arguments: attributes?.["gen_ai.tool.call.arguments"],
-    callId: stringAttribute(attributes, "gen_ai.tool.call.id"),
-    durationMs: span.durationMs,
-    error: span.error,
-    id: span.id ?? `tool-${index}`,
-    kind: "tool",
-    name: stringAttribute(attributes, "gen_ai.tool.name") ?? span.name,
-    result: attributes?.["gen_ai.tool.call.result"],
-    spanId: span.id,
-    status: span.status,
-  };
-}
-
-function shouldRenderSpanEvent(span: NormalizedSpan) {
-  return (
-    span.status === "error" ||
-    Boolean(span.error) ||
-    span.kind === "guardrail" ||
-    span.kind === "handoff"
-  );
-}
-
-function stringAttribute(
-  attributes: NormalizedSpan["attributes"] | undefined,
-  key: string,
-) {
-  const value = attributes?.[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function numberAttribute(
-  attributes: NormalizedSpan["attributes"] | undefined,
-  key: string,
-) {
-  const value = attributes?.[key];
-  return typeof value === "number" ? value : undefined;
-}
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function messageRole(value: JsonValue | undefined) {
-  return value === "system" ||
-    value === "user" ||
-    value === "assistant" ||
-    value === "tool"
-    ? value
-    : undefined;
-}
-
-function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function searchableCaseText(testCase: ReportCase) {
