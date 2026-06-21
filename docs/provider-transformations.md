@@ -49,6 +49,7 @@ type HarnessRun<TOutput extends JsonValue | undefined = JsonValue | undefined> =
   usage: UsageSummary;
   timings?: TimingSummary;
   artifacts?: Record<string, JsonValue>;
+  traces?: NormalizedTrace[];
   errors: Array<Record<string, JsonValue>>;
 };
 ```
@@ -61,6 +62,8 @@ Harness adapters should:
 - normalize assistant tool-call requests into `ToolCallRecord`
 - normalize completed or failed tool executions into separate `role: "tool"`
   messages with `toolCallId`
+- treat the transcript as the source for tool-call assertions; traces are
+  optional operational enrichment, not a fallback source for messages or tools
 - preserve provider tool-call ids when providers expose them; adapters that
   execute tools themselves should create runtime-local ids so request/result
   transcript messages remain unambiguous

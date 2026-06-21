@@ -184,7 +184,7 @@ Keep harness adapters thin. Core should own the generic model. A harness
 package should focus on:
 
 - executing the target runtime through its normal seam
-- capturing messages, tool calls, usage, timings, and errors
+- capturing transcript messages, usage, timings, and errors
 - returning a normalized `HarnessRun`
 - exposing narrow escape hatches like `run` and a typed `output` selector
 

@@ -145,8 +145,8 @@ while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
 report consumers. It exports stable schemas, TypeScript types, and helpers for:
 
 - JSON-safe values
-- normalized harness runs, sessions, messages, tool calls, usage, timings,
-  traces, spans, span events, errors, and artifacts
+- normalized harness runs, sessions, transcript-derived tool calls, usage,
+  timings, traces, spans, span events, errors, and artifacts
 - `task.meta.eval`
 - `task.meta.harness`
 - Vitest JSON reports
@@ -228,10 +228,10 @@ behavior only.
 ### `@vitest-evals/harness-ai-sdk`
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
-derive output, usage, messages, tool calls, and errors from common AI SDK
-result objects, while still allowing a custom `run` entrypoint and typed
-`output` selector. It preserves native trace spans from AI SDK steps when they
-are available; tool-call assertions should use the normalized session helpers.
+derive output, usage, transcript messages, and errors from common AI SDK result
+objects, while still allowing a custom `run` entrypoint and typed `output`
+selector. It preserves native trace spans from AI SDK steps when they are
+available; tool-call assertions should use the normalized session helpers.
 It exposes `aiSdkJudgeHarness(...)`, a thin adapter from AI SDK model
 configuration to the core judge harness interface.
 
@@ -240,9 +240,9 @@ configuration to the core judge harness interface.
 Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
 normalized run/session shape. It accepts existing agents/runners or per-run
 `agent`/`runner` factories, supports custom app entrypoints, normalizes
-`RunResult` output, messages, usage, tool calls, tool results, errors, trace
-metadata, records run/model spans when data is available, and records replay
-metadata for opt-in local function tools. It also exposes
+`RunResult` output, transcript messages, usage, errors, trace metadata,
+records run/model spans when data is available, and records replay metadata for
+opt-in local function tools. It also exposes
 `openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`
@@ -274,7 +274,7 @@ consumed independently.
 New runtime integrations should be implemented as thin adapter packages that:
 
 - execute the target runtime through its normal seam
-- capture messages, tool calls, usage, timings, and errors
+- capture transcript messages, usage, timings, and errors
 - normalize them into `HarnessRun`
 - avoid inventing harness-specific assertion or reporter behavior in userland
 

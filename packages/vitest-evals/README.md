@@ -319,13 +319,12 @@ Use `Harness.run(...)` for the application under test. Calling
 so reserve that for judges that intentionally need a second execution. Put
 criteria on `input` when they are part of the scenario itself; pass
 case-specific judge criteria through matcher options, or configure suite-wide
-criteria on the judge instance. `createHarness(...)` builds a default
-user/assistant session from `input` and typed `output`. When the app run
-includes tool calls, return ordered `messages` instead: put tool-call requests
-on the assistant message where they happened and put completed or failed tool
-executions in separate `role: "tool"` messages with `toolCallId` pointing at
-the assistant tool call id. Return a full `HarnessRun` only when you need exact
-session, trace, or usage control.
+criteria on the judge instance. `createHarness(...)` lightweight results must
+include ordered `messages`: put tool-call requests on the assistant message
+where they happened and put completed or failed tool executions in separate
+`role: "tool"` messages with `toolCallId` pointing at the assistant tool call
+id. Return a full `HarnessRun` only when you need exact session, trace, or
+usage control.
 
 Provider setup and rubric parsing stay in your judge. The core
 package only requires the judge to return a `JudgeResult` with a score and

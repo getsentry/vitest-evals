@@ -86,10 +86,14 @@ void invalidStringJudgeRunOptions;
 
 const outputSecondHarness = createHarness<string, RefundOutput>({
   name: "output-second",
-  run: async () => ({
+  run: async ({ input }) => ({
     output: {
       status: "approved",
     },
+    messages: [
+      { role: "user", content: input },
+      { role: "assistant", content: { status: "approved" } },
+    ],
   }),
 });
 type _CreateHarnessUsesOutputAsSecondGeneric = Expect<
@@ -383,6 +387,23 @@ test("createHarness rejects removed top-level tool call shortcut", async () => {
   ).rejects.toThrow("no longer accept top-level toolCalls");
 });
 
+test("createHarness requires explicit lightweight messages", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () =>
+      ({
+        output: "approved",
+      }) as any,
+  });
+
+  await expect(
+    lightweightHarness.run("Refund invoice inv_123", {
+      artifacts: {},
+      setArtifact: vi.fn(),
+    }),
+  ).rejects.toThrow("must include ordered messages");
+});
+
 test("createHarness attaches fallback traces to direct runs", async () => {
   const lightweightHarness = createHarness({
     name: "custom-app",
@@ -461,10 +482,20 @@ test("createHarness preserves typed lightweight output values", async () => {
   const output = {
     status: "approved",
   };
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, typeof output>({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output,
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: output,
+        },
+      ],
     }),
   });
 
@@ -487,10 +518,20 @@ test("createHarness preserves typed lightweight output values", async () => {
 });
 
 test("createHarness preserves null lightweight output in the session", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, null>({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: null,
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: null,
+        },
+      ],
     }),
   });
 
@@ -513,10 +554,20 @@ test("createHarness preserves null lightweight output in the session", async () 
 });
 
 test("createHarness serializes Error objects in lightweight errors", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, "denied">({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: "denied",
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: "denied",
+        },
+      ],
       errors: [new TypeError("agent failed")],
     }),
   });
@@ -535,10 +586,20 @@ test("createHarness serializes Error objects in lightweight errors", async () =>
 });
 
 test("createHarness normalizes lightweight traces", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, "approved">({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: "approved",
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: "approved",
+        },
+      ],
       traces: [
         {
           id: "trace_123",

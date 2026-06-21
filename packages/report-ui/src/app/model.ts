@@ -41,7 +41,6 @@ export type TranscriptMessage = {
   id: string;
   role: NormalizedMessage["role"];
   content?: JsonValue;
-  spanId?: string;
 };
 
 export type TranscriptToolEvent = {
@@ -53,7 +52,6 @@ export type TranscriptToolEvent = {
   error?: NormalizedError;
   durationMs?: number;
   status?: NormalizedSpan["status"] | "pending";
-  spanId?: string;
   callId?: string;
 };
 

@@ -111,8 +111,8 @@ The adapter provides:
 - native `Runner.run(agent, input, options)` execution
 - support for existing agents/runners or per-run `agent` and `runner` factories
 - a `run` escape hatch for app-specific entrypoints
-- normalized assistant output, messages, tool calls, tool results, usage,
-  timings, errors, and replay-friendly metadata
+- normalized assistant output, transcript messages, usage, timings, errors, and
+  replay-friendly metadata
 - app-facing `run.output` from native `finalOutput`, a custom `run()` result's
   `output`, or an explicit `output` selector; native OpenAI Agents `output`
   items stay in the normalized session trace

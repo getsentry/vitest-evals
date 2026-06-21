@@ -52,7 +52,7 @@ For `pi-ai` or `ai-sdk`, that means the harness is responsible for:
 
 - executing the application through its normal runtime
 - installing instrumented tool wrappers so replay/VCR policy can apply
-- observing framework events, messages, steps, tool calls, tool results, and
+- observing framework events, transcript messages, steps, tool activity, and
   errors
 - normalizing those events into a JSON-serializable session shape
 - extracting usage, timings, retry counts, cache hits, and other diagnostics

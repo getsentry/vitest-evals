@@ -13,8 +13,18 @@ import {
 
 const factualityHarness = createHarness<string, string>({
   name: "qa-harness",
-  run: async () => ({
+  run: async ({ input }) => ({
     output: "Paris is the capital of France.",
+    messages: [
+      {
+        role: "user",
+        content: input,
+      },
+      {
+        role: "assistant",
+        content: "Paris is the capital of France.",
+      },
+    ],
   }),
 });
 
@@ -361,10 +371,22 @@ test("FactualityJudge can be shared across different app harnesses and judge har
   const objectHarness = createHarness<{ question: string }, { answer: string }>(
     {
       name: "object-qa-harness",
-      run: async () => ({
+      run: async ({ input }) => ({
         output: {
           answer: "Paris",
         },
+        messages: [
+          {
+            role: "user",
+            content: input,
+          },
+          {
+            role: "assistant",
+            content: {
+              answer: "Paris",
+            },
+          },
+        ],
       }),
     },
   );

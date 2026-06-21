@@ -182,6 +182,10 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
  * ```ts
  * const result: SimpleHarnessResult<{ status: "approved" }> = {
  *   output: { status: "approved" },
+ *   messages: [
+ *     { role: "user", content: "Refund invoice inv_123" },
+ *     { role: "assistant", content: { status: "approved" } },
+ *   ],
  *   usage: { totalTokens: 260 },
  * };
  * ```
@@ -189,8 +193,8 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
 export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
 > = OutputField<TOutput> & {
-  /** Pre-normalized transcript messages. When omitted, a default user/assistant transcript is created. */
-  messages?: NormalizedMessage[];
+  /** Ordered normalized transcript messages for the application run. */
+  messages: NormalizedMessage[];
   /** Usage summary to attach to the run. */
   usage?: UsageSummary;
   /** Timing summary to attach to the run. */
@@ -231,6 +235,7 @@ export type CreateHarnessRunArgs<TInput> = {
  *   name: "refund-agent",
  *   run: async ({ input }) => ({
  *     output: await classifyRefund(input),
+ *     messages: [{ role: "user", content: input }],
  *   }),
  * };
  * ```
@@ -540,12 +545,12 @@ export function normalizeHarnessRun<
 
   const output = result.output;
   const usage = result.usage ?? {};
-  const messages =
-    result.messages ??
-    createDefaultSessionMessages({
-      input,
-      output,
-    });
+  if (!Array.isArray(result.messages)) {
+    throw new TypeError(
+      "createHarness results must include ordered messages. Return a full HarnessRun or a lightweight result with messages.",
+    );
+  }
+  const messages = result.messages;
   const metadata = result.metadata
     ? normalizeMetadata(result.metadata)
     : undefined;
@@ -598,30 +603,6 @@ export function createFailedHarnessRun(
     ...(artifacts && Object.keys(artifacts).length > 0 ? { artifacts } : {}),
     errors: [serializeError(error)],
   };
-}
-
-function createDefaultSessionMessages<TInput>({
-  input,
-  output,
-}: {
-  input: TInput;
-  output: JsonValue | undefined;
-}): NormalizedMessage[] {
-  const messages: NormalizedMessage[] = [
-    {
-      role: "user",
-      content: normalizeContent(input),
-    },
-  ];
-
-  if (output !== undefined) {
-    messages.push({
-      role: "assistant",
-      content: normalizeContent(output),
-    });
-  }
-
-  return messages;
 }
 
 function normalizeMergedArtifacts(
