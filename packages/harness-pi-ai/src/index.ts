@@ -1872,12 +1872,6 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
-  }
-
   const sessionMessages = [...messages];
   if (
     output !== undefined &&

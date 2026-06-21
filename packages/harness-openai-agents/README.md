@@ -115,10 +115,15 @@ The adapter provides:
   replay-friendly metadata
 - app-facing `run.output` from native `finalOutput`, a custom `run()` result's
   `output`, or an explicit `output` selector; native OpenAI Agents `output`
-  items stay in the normalized session trace
+  items stay in the normalized session transcript
 - native app output is accepted only when it is already JSON-safe; non-JSON
   values require an explicit `output` selector
 - opt-in replay metadata for local function tools configured with `toolReplay`
+
+Successful tool-call transcripts come from OpenAI Agents run items such as
+`newItems` and `output`. Runtime wrappers can enrich matching run items with
+execution and replay metadata, but they do not create replacement transcript
+messages.
 
 ## Tool Replay
 

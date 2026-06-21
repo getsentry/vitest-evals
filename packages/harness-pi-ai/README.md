@@ -164,8 +164,8 @@ const harness = piAiHarness({
 When an agent exposes both a native Pi tool and a runtime tool with the same
 name, a native tool call records in its own cassette namespace. Runtime calls of
 that same name are treated as implementation details while the native tool is
-executing, so delegated runtime calls do not create duplicate trace entries or
-overwrite the native recording.
+executing, so delegated runtime calls do not create duplicate transcript entries
+or overwrite the native recording.
 
 Supported modes:
 

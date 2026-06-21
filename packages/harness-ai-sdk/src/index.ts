@@ -217,7 +217,6 @@ type AiSdkLikeResult = {
   object?: unknown;
   text?: string;
   session?: NormalizedSession;
-  trace?: NormalizedSession;
   errors?: Array<Record<string, JsonValue>>;
 };
 
@@ -608,13 +607,12 @@ async function runAiSdkHarness<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(result) as TOutput | undefined);
-    const usage = resolveUsage(result, runtimeToolCalls.length);
+    const usage = resolveUsage(result);
     const session = resolveSession(
       input,
       result,
       output,
       replayMetadataByToolCallId,
-      runtimeMessages,
     );
     const errors = resolveHarnessRunErrors(result);
     const finishedAt = new Date();
@@ -643,13 +641,7 @@ async function runAiSdkHarness<
     const serializedError = serializeError(error);
     const usage =
       runtimeToolCalls.length > 0 ? { toolCalls: runtimeToolCalls.length } : {};
-    const session = resolveSession(
-      input,
-      undefined,
-      undefined,
-      replayMetadataByToolCallId,
-      runtimeMessages,
-    );
+    const session = resolveFailureSession(input, runtimeMessages);
     const run = {
       session,
       output: undefined,
@@ -1214,7 +1206,7 @@ function toOutputValue(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
+function resolveUsage(result: unknown): UsageSummary {
   const steps = resolveSteps(result);
   const usage = resolveLanguageModelUsage(result) ?? resolveStepUsage(steps);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
@@ -1230,12 +1222,10 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
       };
     }
 
-    return runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
+    return {};
   }
 
   const stepToolCallCount = countStepToolCalls(steps);
-  const toolCallCount =
-    stepToolCallCount > 0 ? stepToolCallCount : runtimeToolCallCount;
 
   return {
     provider: lastStep?.model.provider,
@@ -1246,7 +1236,7 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
       usage.outputTokenDetails?.reasoningTokens ?? usage.reasoningTokens,
     totalTokens:
       usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-    toolCalls: toolCallCount > 0 ? toolCallCount : undefined,
+    toolCalls: stepToolCallCount > 0 ? stepToolCallCount : undefined,
     metadata: normalizeMetadata({
       cacheReadTokens:
         usage.inputTokenDetails?.cacheReadTokens ?? usage.cachedInputTokens,
@@ -1327,7 +1317,6 @@ function resolveSession(
   result: unknown,
   output: JsonValue | undefined,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-  runtimeMessages: NormalizedMessage[],
 ): NormalizedSession {
   if (
     isNormalizedSession(
@@ -1335,12 +1324,6 @@ function resolveSession(
     )
   ) {
     return (result as { session: NormalizedSession }).session;
-  }
-
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
   }
 
   const steps = resolveSteps(result);
@@ -1353,10 +1336,6 @@ function resolveSession(
 
   for (const step of steps) {
     messages.push(...normalizeStep(step, replayMetadataByToolCallId));
-  }
-
-  if (steps.length === 0 && runtimeMessages.length > 0) {
-    messages.push(...runtimeMessages);
   }
 
   if (
@@ -1378,6 +1357,21 @@ function resolveSession(
     messages,
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
+  };
+}
+
+function resolveFailureSession(
+  input: unknown,
+  runtimeMessages: NormalizedMessage[],
+): NormalizedSession {
+  return {
+    messages: [
+      {
+        role: "user",
+        content: normalizeContent(input),
+      },
+      ...runtimeMessages,
+    ],
   };
 }
 

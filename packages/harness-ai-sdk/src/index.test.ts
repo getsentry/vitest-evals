@@ -888,14 +888,15 @@ test("omits empty runtime tool error content when custom run errors", async () =
   expect(run?.session.messages[2]).not.toHaveProperty("content");
 });
 
-test("preserves explicit null runtime tool results", async () => {
+test("does not derive successful transcripts from runtime tool bookkeeping", async () => {
+  const execute = vi.fn(async () => null);
   const harness = aiSdkHarness({
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
-        execute: async () => null,
+        execute,
       },
     } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
@@ -923,31 +924,13 @@ test("preserves explicit null runtime tool results", async () => {
     createHarnessContext({}),
   );
 
-  expect(toolCalls(run.session)).toMatchObject([
-    {
-      name: "lookupInvoice",
-      result: null,
-    },
-  ]);
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(run.usage.toolCalls).toBeUndefined();
+  expect(toolCalls(run.session)).toEqual([]);
   expect(run.session.messages).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
-    },
-    {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
-    },
-    {
-      role: "tool",
-      toolCallId: "call_lookup",
-      name: "lookupInvoice",
-      content: null,
     },
     {
       role: "assistant",
@@ -1131,6 +1114,7 @@ test("does not add app-side runtime calls to transcript when SDK steps are prese
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
+  expect(run.usage.toolCalls).toBeUndefined();
   expect(toolCalls(run.session)).toEqual([]);
   expect(run.session.messages).toMatchObject([
     {

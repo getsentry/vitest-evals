@@ -85,7 +85,7 @@ sound more magical than it really is.
 The spec should distinguish between:
 
 - `run.output`: the application-facing result the test author wants to assert on
-- the normalized assistant/session trace: the canonical record used for
+- the normalized assistant/session transcript: the canonical record used for
   reporting, tool assertions, replay metadata, and generic judges
 
 This matters for real apps because many agents do not naturally return a single

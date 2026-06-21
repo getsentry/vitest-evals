@@ -229,9 +229,11 @@ behavior only.
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, transcript messages, and errors from common AI SDK result
-objects, while still allowing a custom `run` entrypoint and typed `output`
-selector. It preserves native trace spans from AI SDK steps when they are
-available; tool-call assertions should use the normalized session helpers.
+objects. Successful tool-call transcripts come from AI SDK `steps`; custom
+`run` entrypoints that do not return steps should return a normalized
+`session` explicitly when tests need message or tool-call assertions. It
+preserves native trace spans from AI SDK steps when they are available;
+tool-call assertions should use the normalized session helpers.
 It exposes `aiSdkJudgeHarness(...)`, a thin adapter from AI SDK model
 configuration to the core judge harness interface.
 
@@ -242,14 +244,17 @@ normalized run/session shape. It accepts existing agents/runners or per-run
 `agent`/`runner` factories, supports custom app entrypoints, normalizes
 `RunResult` output, transcript messages, usage, errors, trace metadata,
 records run/model spans when data is available, and records replay metadata for
-opt-in local function tools. It also exposes
+opt-in local function tools. Successful tool-call transcripts come from
+OpenAI Agents run items; runtime wrappers can enrich those items but do not
+create replacement transcript messages. It also exposes
 `openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`
 
 Adapts `pi-ai` style agents into the same normalized shape. It automatically
-adds run/model spans when runtime usage data is available. It also owns the
-standard tool replay/VCR behavior for opt-in tools and exposes
+adds run/model spans when runtime usage data is available. Its runtime event
+stream and wrapped tool calls are the transcript source for Pi workflows. It
+also owns the standard tool replay/VCR behavior for opt-in tools and exposes
 `piAiJudgeHarness(...)` for judge-side model calls. Replay modes include:
 
 - `auto` (default)

@@ -259,6 +259,42 @@ const runResult = {
   ],
 } as const;
 
+function createLookupBottleRunItems({
+  callId = "call_lookup",
+  bottleId,
+  output,
+}: {
+  callId?: string;
+  bottleId: string;
+  output: JsonValue;
+}) {
+  return [
+    {
+      type: "tool_call_item",
+      rawItem: {
+        type: "function_call",
+        callId,
+        name: "lookupBottle",
+        arguments: JSON.stringify({
+          bottleId,
+        }),
+        status: "completed",
+      },
+    },
+    {
+      type: "tool_call_output_item",
+      output,
+      rawItem: {
+        type: "function_call_result",
+        callId,
+        name: "lookupBottle",
+        output,
+        status: "completed",
+      },
+    },
+  ];
+}
+
 describeEval(
   "openai agents harness adapter",
   {
@@ -621,6 +657,10 @@ test("passes run input and context to agent factory before tool instrumentation"
 
       return {
         finalOutput: evidence,
+        newItems: createLookupBottleRunItems({
+          bottleId: "bt_123",
+          output: evidence as JsonValue,
+        }),
       };
     }),
   };
@@ -668,6 +708,51 @@ test("passes run input and context to agent factory before tool instrumentation"
     },
   ]);
   expect(spansByKind(result, "tool")).toEqual([]);
+});
+
+test("does not derive successful transcripts from runtime tool capture", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: async () => ({
+      bottleId: "bt_123",
+      family: "bourbon",
+    }),
+  } satisfies OpenAiAgentsTool<string>;
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    } satisfies DemoAgent,
+    runner: {
+      run: async (agent: DemoAgent, _input: string, runOptions) => {
+        await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_123",
+          }),
+          {
+            toolCallId: "call_lookup",
+          },
+        );
+
+        return {
+          finalOutput: {
+            status: "classified",
+          },
+        };
+      },
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBeUndefined();
+  expect(toolCalls(result.session)).toEqual([]);
 });
 
 test("attaches a failed run when agent setup fails", async () => {
@@ -762,6 +847,10 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
           label: "bourbon",
           evidence,
         },
+        newItems: createLookupBottleRunItems({
+          bottleId: "bt_123",
+          output: evidence as JsonValue,
+        }),
       };
     }),
   };
@@ -1105,6 +1194,10 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
 
         return {
           finalOutput: evidence,
+          newItems: createLookupBottleRunItems({
+            bottleId: "bt_123",
+            output: evidence as JsonValue,
+          }),
         };
       },
     },
@@ -1234,6 +1327,11 @@ test("keeps tool capture isolated across overlapping runs", async () => {
 
         return {
           finalOutput: evidence,
+          newItems: createLookupBottleRunItems({
+            callId: `call_${scenario}`,
+            bottleId: `bt_${scenario}`,
+            output: evidence as JsonValue,
+          }),
         };
       },
     },

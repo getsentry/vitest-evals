@@ -561,7 +561,7 @@ pnpm exec vitest-evals serve eval-results/
 
 The command accepts JSON files, simple globs, and directories. It opens a local
 React report viewer for run summaries, eval cases, scores, harness sessions,
-tool calls, trace-backed transcripts, span details, and raw case metadata.
+tool calls, session transcripts, trace span details, and raw case metadata.
 
 Use the same JSON artifacts for local investigation and GitHub reporting.
 

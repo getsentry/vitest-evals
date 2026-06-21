@@ -870,7 +870,7 @@ async function executeOpenAiAgentsHarness<
           : (resolveOutput(normalizeResult, {
               allowOutputField: Boolean(options.run),
             }) as TOutput | undefined);
-        const usage = resolveUsage(normalizeResult, capture.calls.length);
+        const usage = resolveUsage(normalizeResult);
         const session = resolveSession(input, normalizeResult, output, usage, {
           runtimeToolCalls: capture.calls,
           runtimeMessages: capture.messages,
@@ -902,10 +902,7 @@ async function executeOpenAiAgentsHarness<
         const finishedAt = new Date();
         const usage =
           capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
-        const session = resolveSession(input, undefined, undefined, usage, {
-          runtimeToolCalls: capture.calls,
-          runtimeMessages: capture.messages,
-        });
+        const session = resolveFailureSession(input, capture.messages);
         const serializedError = serializeError(error);
         const run = {
           session,
@@ -1700,7 +1697,7 @@ function toOutputValue(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown, runtimeToolCallCount: number) {
+function resolveUsage(result: unknown) {
   const usage =
     getObjectProperty(getObjectProperty(result, "state"), "usage") ??
     getObjectProperty(getObjectProperty(result, "runContext"), "usage") ??
@@ -1709,8 +1706,7 @@ function resolveUsage(result: unknown, runtimeToolCallCount: number) {
     usage && typeof usage === "object"
       ? (usage as Record<string, unknown>)
       : undefined;
-  const toolCallCount =
-    countToolCallsFromResult(result) || runtimeToolCallCount || undefined;
+  const toolCallCount = countToolCallsFromResult(result) || undefined;
 
   if (!usageRecord) {
     return toolCallCount ? { toolCalls: toolCallCount } : {};
@@ -1751,12 +1747,6 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
-  }
-
   const newItems = arrayProperty(result, "newItems");
   const outputItems = arrayProperty(result, "output");
   const messages =
@@ -1780,8 +1770,6 @@ function resolveSession(
         options.runtimeMessages,
       ),
     );
-  } else if (options.runtimeMessages.length > 0) {
-    messages.push(...options.runtimeMessages);
   }
 
   if (
@@ -1823,6 +1811,15 @@ function resolveSession(
       ),
       lastAgent: normalizeAgentMetadata(getObjectProperty(result, "lastAgent")),
     }),
+  };
+}
+
+function resolveFailureSession(
+  input: unknown,
+  runtimeMessages: NormalizedMessage[],
+): NormalizedSession {
+  return {
+    messages: [...normalizeInputMessages(input), ...runtimeMessages],
   };
 }
 

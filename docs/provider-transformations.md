@@ -59,11 +59,19 @@ type HarnessRun<TOutput extends JsonValue | undefined = JsonValue | undefined> =
 Harness adapters should:
 
 - keep the stored session JSON-serializable
+- derive successful-run transcript messages from one explicit source: a returned
+  normalized `session`, provider transcript data such as steps/run items, or a
+  runtime event stream that the harness owns as the provider transcript
 - normalize assistant tool-call requests into `ToolCallRecord`
 - normalize completed or failed tool executions into separate `role: "tool"`
   messages with `toolCallId`
 - treat the transcript as the source for tool-call assertions; traces are
   optional operational enrichment, not a fallback source for messages or tools
+- keep wrapper bookkeeping out of successful transcripts unless the provider
+  transcript already reported the same tool item and the wrapper only adds
+  execution details such as replay metadata
+- require custom run entrypoints that lack provider transcript data to return a
+  normalized `session` explicitly
 - preserve provider tool-call ids when providers expose them; adapters that
   execute tools themselves should create runtime-local ids so request/result
   transcript messages remain unambiguous
@@ -129,12 +137,21 @@ function normalizeSession(input: string, result: ProviderResult): NormalizedSess
 ### `@vitest-evals/harness-ai-sdk`
 
 Normalizes AI SDK style `steps`, `toolCalls`, `toolResults`, and usage records
-into the root session and run model.
+into the root session and run model. Successful runs without AI SDK steps must
+return a normalized `session` when tool-call assertions need transcript data.
+
+### `@vitest-evals/harness-openai-agents`
+
+Normalizes OpenAI Agents run items such as `newItems` and `output` into the root
+session and run model. Runtime tool wrappers may enrich those run items with
+execution/replay metadata, but they do not create successful transcript messages
+without matching provider items.
 
 ### `@vitest-evals/harness-pi-ai`
 
-Normalizes `pi-ai` style message and tool activity and wraps tools so replay
-policy can be applied consistently.
+Normalizes the Pi runtime event stream and wrapped Pi tool activity. In this
+harness the runtime event stream is the transcript source because the adapter
+owns that provider-facing event boundary.
 
 ## User-Facing Guidance
 

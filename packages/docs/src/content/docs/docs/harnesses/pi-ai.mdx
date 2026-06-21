@@ -69,7 +69,9 @@ export const qaHarness = piAiHarness({
 
 Return `{ output }` from the Pi entrypoint when tests and judges should assert
 on a parsed domain value. The harness attaches native run/model spans to
-`result.traces` when runtime usage data is available.
+`result.traces` when runtime usage data is available. The Pi runtime event
+stream and wrapped tool calls are the transcript source for message and
+tool-call assertions.
 
 ## Writing Evals
 
