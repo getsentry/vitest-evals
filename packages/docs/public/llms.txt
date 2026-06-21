@@ -307,8 +307,8 @@ export const qaHarness = createHarness<string, string>({
 Lightweight harness results can include:
 
 - `output`: typed app-facing output
-- `messages`: normalized messages
-- `toolCalls`: lightweight tool-call records
+- `messages`: ordered normalized transcript messages, including assistant
+  tool-call requests and `role: "tool"` results
 - `usage`: stable usage units
 - `timings`: timing summary
 - `artifacts`: extra JSON-safe debug/report data
@@ -329,10 +329,11 @@ type NormalizedSession = {
 };
 ```
 
-Messages have `role`, optional `content`, optional `toolCalls`, and optional
-metadata. Tool calls have `name`, optional `id`, JSON-safe `arguments`,
-JSON-safe `result`, optional normalized `error`, timings, duration, and
-metadata.
+Messages have `role`, optional `content`, optional assistant `toolCalls`, and
+optional metadata. Assistant tool calls have `name`, optional `id`, JSON-safe
+`arguments`, timings, duration, and metadata. Tool result messages have
+`role: "tool"`, required `toolCallId`, optional `name`, JSON-safe `content`,
+optional normalized `error`, timings, duration, and metadata.
 
 `UsageSummary` intentionally contains stable usage units:
 
@@ -414,14 +415,14 @@ Key `toolReplay` by the Pi tool name.
 
 Use `createHarness<Input, Output>(...)` when the first-party adapters do not
 fit. This is appropriate for workflow engines, RAG pipelines, CLIs, or service
-functions that can return JSON-safe output, messages, tool calls, usage,
-timings, artifacts, or errors without going through a supported SDK adapter.
+functions that can return JSON-safe output, ordered messages, usage, timings,
+artifacts, or errors without going through a supported SDK adapter.
 
-Return `output` for ordinary Vitest assertions and `toolCalls` for deterministic
-tool judges. Use `setArtifact(name, value)` for JSON-safe debug details that
-belong in reports but not in the app output contract. Return a full
-`HarnessRun` only when the app needs complete control over normalized messages,
-usage, timings, artifacts, and errors.
+Return `output` for ordinary Vitest assertions and ordered `messages` when the
+run includes transcript or tool activity. Use `setArtifact(name, value)` for
+JSON-safe debug details that belong in reports but not in the app output
+contract. Return a full `HarnessRun` only when the app needs complete control
+over normalized messages, usage, timings, artifacts, and errors.
 
 ## Judges
 

@@ -121,6 +121,7 @@ const workspace: ReportWorkspace = {
         toolCalls: [
           {
             name: "validateRefund",
+            status: "ok",
           },
         ],
       },
@@ -266,6 +267,7 @@ describe("case helpers", () => {
     expect(caseToolCalls(workspace.cases[1]!)).toEqual([
       {
         name: "validateRefund",
+        status: "ok",
       },
     ]);
     expect(caseTotalTokens(workspace.cases[0]!)).toBe(1220);
@@ -291,10 +293,46 @@ describe("case helpers", () => {
     });
   });
 
+  test("joins session tool result messages into transcript tool events by id", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const run = testCase.harness!.run!;
+    run.traces = [];
+    const assistantMessage = run.session.messages.find(
+      (message) => message.role === "assistant",
+    );
+    assistantMessage!.toolCalls![0] = {
+      id: "call_lookup",
+      name: "lookupInvoice",
+      arguments: { invoiceId: "inv_123" },
+      durationMs: 6,
+    };
+    run.session.messages.push({
+      role: "tool",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
+      content: { refundable: false },
+      durationMs: 8,
+    });
+
+    expect(
+      buildTranscript(run).events.find((event) => event.kind === "tool"),
+    ).toMatchObject({
+      arguments: { invoiceId: "inv_123" },
+      durationMs: 8,
+      kind: "tool",
+      name: "lookupInvoice",
+      result: { refundable: false },
+      status: "ok",
+    });
+  });
+
   test("does not let usage undercount recorded session tool calls", () => {
     const testCase = structuredClone(workspace.cases[0]!);
     testCase.harness!.run!.usage.toolCalls = 1;
-    testCase.harness!.run!.session.messages[0]!.toolCalls!.push({
+    const assistantMessage = testCase.harness!.run!.session.messages.find(
+      (message) => message.role === "assistant",
+    );
+    assistantMessage!.toolCalls!.push({
       name: "createRefund",
     });
 

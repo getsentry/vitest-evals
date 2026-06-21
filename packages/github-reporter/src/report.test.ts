@@ -84,16 +84,29 @@ const sampleJson: VitestJsonReport = {
                       role: "assistant",
                       toolCalls: [
                         {
+                          id: "call_lookup",
                           name: "lookupInvoice",
                           durationMs: 6,
                         },
                         {
+                          id: "call_refund",
                           name: "createRefund",
-                          error: {
-                            message: "skipped: invoice not refundable",
-                          },
                         },
                       ],
+                    },
+                    {
+                      role: "tool",
+                      toolCallId: "call_lookup",
+                      name: "lookupInvoice",
+                      durationMs: 6,
+                    },
+                    {
+                      role: "tool",
+                      toolCallId: "call_refund",
+                      name: "createRefund",
+                      error: {
+                        message: "skipped: invoice not refundable",
+                      },
                     },
                   ],
                 },
@@ -223,10 +236,11 @@ describe("collectEvalReport", () => {
         toolCalls: [
           {
             name: "validateRefund",
-            durationMs: 8,
+            status: "ok",
           },
           {
             name: "notifyCustomer",
+            status: "error",
             error: {
               message: "blocked by policy",
             },
@@ -243,11 +257,9 @@ describe("collectEvalReport", () => {
     expect(report.failures[0]?.harness).toBeUndefined();
     expect(report.failures[0]?.toolCalls).toMatchObject([
       {
-        durationMs: 8,
         name: "validateRefund",
       },
       {
-        error: "blocked by policy",
         name: "notifyCustomer",
       },
     ]);

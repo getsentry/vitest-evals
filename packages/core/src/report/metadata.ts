@@ -1,12 +1,17 @@
 import { z } from "zod";
 import {
   HarnessRunSchema,
-  NormalizedMessageSchema,
+  NormalizedErrorSchema,
+  NormalizedAssistantMessageSchema,
   NormalizedSessionSchema,
   NormalizedSpanEventSchema,
   NormalizedSpanSchema,
+  NormalizedSystemMessageSchema,
+  NormalizedToolResultMessageSchema,
   NormalizedTraceSchema,
+  NormalizedUserMessageSchema,
   TimingSummarySchema,
+  ToolCallSchema,
   ToolCallRecordSchema,
   UsageSummarySchema,
 } from "../harness";
@@ -43,7 +48,7 @@ export const EvalMetaSchema = z
     avgScore: NullableFiniteNumberSchema,
     output: JsonValueSchema.optional(),
     thresholdFailed: z.boolean().optional(),
-    toolCalls: z.array(ToolCallRecordSchema).optional(),
+    toolCalls: z.array(ToolCallSchema).optional(),
   })
   .strict();
 
@@ -62,9 +67,39 @@ export const EvalTaskMetaSchema = z
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
 const LenientToolCallRecordSchema = ToolCallRecordSchema.strip();
-const LenientMessageSchema = NormalizedMessageSchema.extend({
-  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
-}).strip();
+const LenientToolCallSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      name: z.string(),
+      arguments: JsonObjectSchema.optional(),
+      status: z.literal("pending"),
+    })
+    .strip(),
+  z
+    .object({
+      name: z.string(),
+      arguments: JsonObjectSchema.optional(),
+      status: z.literal("ok"),
+      result: JsonValueSchema.optional(),
+    })
+    .strip(),
+  z
+    .object({
+      name: z.string(),
+      arguments: JsonObjectSchema.optional(),
+      status: z.literal("error"),
+      error: NormalizedErrorSchema,
+    })
+    .strip(),
+]);
+const LenientMessageSchema = z.union([
+  NormalizedSystemMessageSchema.strip(),
+  NormalizedUserMessageSchema.strip(),
+  NormalizedAssistantMessageSchema.extend({
+    toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
+  }).strip(),
+  NormalizedToolResultMessageSchema.strip(),
+]);
 const LenientSessionSchema = NormalizedSessionSchema.extend({
   messages: z.array(LenientMessageSchema).default([]).catch([]),
 }).strip();
@@ -87,7 +122,7 @@ const LenientHarnessMetaSchema = HarnessMetaSchema.extend({
 const LenientEvalScoreSchema = EvalScoreSchema.strip();
 const LenientEvalMetaSchema = EvalMetaSchema.extend({
   scores: z.array(LenientEvalScoreSchema).optional().catch(undefined),
-  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
+  toolCalls: z.array(LenientToolCallSchema).optional().catch(undefined),
 }).strip();
 
 /** Reads eval metadata from an arbitrary Vitest assertion meta value. */

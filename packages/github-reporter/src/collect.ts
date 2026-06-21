@@ -1,8 +1,9 @@
 import {
   collectReportWorkspace,
+  toolCalls,
   type HarnessRun,
   type ReportCase,
-  type ToolCallRecord,
+  type ToolCall,
 } from "@vitest-evals/core";
 import type {
   CollectOptions,
@@ -130,27 +131,13 @@ function collectToolCalls(reportCase: ReportCase) {
 }
 
 function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
-  const messages = session?.messages ?? [];
-  const toolCalls: ToolCallSummary[] = [];
-
-  for (const message of messages) {
-    if (!Array.isArray(message.toolCalls)) {
-      continue;
-    }
-
-    for (const call of message.toolCalls) {
-      toolCalls.push(toToolCallSummary(call));
-    }
-  }
-
-  return toolCalls;
+  return session ? toolCalls(session).map(toToolCallSummary) : [];
 }
 
-function toToolCallSummary(call: ToolCallRecord): ToolCallSummary {
+function toToolCallSummary(call: ToolCall): ToolCallSummary {
   return {
     name: call.name,
-    error: getToolCallError(call.error),
-    durationMs: numberField(call.durationMs),
+    error: call.status === "error" ? getToolCallError(call.error) : undefined,
   };
 }
 

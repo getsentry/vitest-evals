@@ -13,7 +13,12 @@ import {
   test,
 } from "vitest";
 import "vitest";
-import { normalizeMetadata } from "./harness";
+import {
+  normalizeMetadata,
+  toJsonValue,
+  type JsonValue,
+  type ToolCall as NormalizedToolCall,
+} from "./harness";
 export { configure, evaluate } from "./legacy/evaluate";
 import { formatScores, wrapText } from "./legacy/format";
 import type {
@@ -21,6 +26,7 @@ import type {
   Score,
   ScoreFn,
   TaskFn,
+  ToolCall as LegacyToolCall,
 } from "./legacy/shared";
 export type {
   BaseScorerOptions,
@@ -152,11 +158,13 @@ export function describeEval(name: string, options: LegacyDescribeEvalOptions) {
             scores.length;
           const thresholdFailed = threshold !== null && avgScore < threshold;
 
+          const normalizedToolCalls = normalizeLegacyToolCalls(toolCalls);
+
           testTask.meta.eval = {
             scores: normalizedScoresWithName,
             avgScore,
             output,
-            ...(toolCalls && { toolCalls }),
+            ...(normalizedToolCalls ? { toolCalls: normalizedToolCalls } : {}),
             thresholdFailed,
           };
 
@@ -174,6 +182,30 @@ export function describeEval(name: string, options: LegacyDescribeEvalOptions) {
       );
     }
   });
+}
+
+function normalizeLegacyToolCalls(
+  toolCalls: LegacyToolCall[] | undefined,
+): NormalizedToolCall[] | undefined {
+  return toolCalls?.map((call) => {
+    const args = toJsonValue(call.arguments);
+    return {
+      name: call.name,
+      ...(isJsonObject(args) ? { arguments: args } : {}),
+      status: "ok",
+    };
+  });
+}
+
+function isJsonObject(
+  value: JsonValue | undefined,
+): value is Record<string, JsonValue> {
+  return (
+    value !== undefined &&
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  );
 }
 
 export { formatScores, wrapText } from "./legacy/format";

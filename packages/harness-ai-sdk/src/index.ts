@@ -2,7 +2,6 @@ import {
   attachHarnessRunToError,
   createFailedHarnessRun,
   createGenAiUsageAttributes,
-  createToolCallSpans,
   ensureRunTrace,
   getHarnessRunFromError,
   hasCallableMethod,
@@ -16,7 +15,6 @@ import {
   normalizeSpanAttributes,
   normalizeSpanError,
   toJsonValue,
-  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import type {
   Harness,
@@ -566,6 +564,7 @@ async function runAiSdkHarness<
   const trace = createTraceRecorder(options.name ?? "ai-sdk");
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
   const runtimeToolCalls: ToolCallRecord[] = [];
+  const runtimeMessages: NormalizedMessage[] = [];
   const tools = createToolset({
     input,
     context,
@@ -573,6 +572,7 @@ async function runAiSdkHarness<
     toolReplay: options.toolReplay,
     replayMetadataByToolCallId,
     runtimeToolCalls,
+    runtimeMessages,
   });
   const runtime = {
     tools,
@@ -614,7 +614,7 @@ async function runAiSdkHarness<
       result,
       output,
       replayMetadataByToolCallId,
-      runtimeToolCalls,
+      runtimeMessages,
     );
     const errors = resolveHarnessRunErrors(result);
     const finishedAt = new Date();
@@ -648,7 +648,7 @@ async function runAiSdkHarness<
       undefined,
       undefined,
       replayMetadataByToolCallId,
-      runtimeToolCalls,
+      runtimeMessages,
     );
     const run = {
       session,
@@ -861,11 +861,6 @@ function finishAiSdkTrace(
     options.result,
     options.usage,
   );
-  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
-    traceId: trace.id,
-    parentId: trace.rootSpanId,
-    spanIdPrefix: `${trace.id}:tool`,
-  });
   const finishedAt = options.finishedAt;
   const durationMs = finishedAt.getTime() - trace.startedAt.getTime();
   const rootError = options.errors?.[0]
@@ -887,7 +882,7 @@ function finishAiSdkTrace(
       ...createGenAiUsageAttributes(options.usage),
     }),
   };
-  const spans = [rootSpan, ...modelSpans, ...toolSpans];
+  const spans = [rootSpan, ...modelSpans];
 
   return {
     id: trace.id,
@@ -978,6 +973,7 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
   toolReplay,
   replayMetadataByToolCallId,
   runtimeToolCalls,
+  runtimeMessages,
 }: {
   input: TInput;
   context: HarnessContext;
@@ -985,6 +981,7 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
   toolReplay: AiSdkToolReplayPolicies<TInput> | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
   runtimeToolCalls: ToolCallRecord[];
+  runtimeMessages: NormalizedMessage[];
 }) {
   return Object.fromEntries(
     Object.entries(tools ?? {}).map(([toolName, tool]) => {
@@ -1009,6 +1006,17 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
         ) => {
           const startedAt = new Date();
           const normalizedArgs = normalizeArguments(toolInput);
+          const call: ToolCallRecord = {
+            id: execution.toolCallId,
+            name: toolName,
+            ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
+            startedAt: startedAt.toISOString(),
+          };
+          runtimeToolCalls.push(call);
+          runtimeMessages.push({
+            role: "assistant",
+            toolCalls: [call],
+          });
           const replayContext = {
             input,
             signal: context.signal,
@@ -1031,7 +1039,6 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
                   replay: undefined,
                 };
             const finishedAt = new Date();
-            const normalizedResult = toJsonValue(executionResult.result);
             const replayMetadata = normalizeReplayMetadata(
               executionResult.replay,
             );
@@ -1043,17 +1050,22 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
               );
             }
 
-            runtimeToolCalls.push({
-              id: execution.toolCallId,
+            call.finishedAt = finishedAt.toISOString();
+            call.durationMs = finishedAt.getTime() - startedAt.getTime();
+            if (replayMetadata) {
+              call.metadata = replayMetadata;
+            }
+            const normalizedResult = toJsonValue(executionResult.result);
+            runtimeMessages.push({
+              role: "tool",
+              toolCallId: execution.toolCallId,
               name: toolName,
-              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
               ...(normalizedResult !== undefined
-                ? { result: normalizedResult }
+                ? { content: normalizedResult }
                 : {}),
-              startedAt: startedAt.toISOString(),
-              finishedAt: finishedAt.toISOString(),
-              durationMs: finishedAt.getTime() - startedAt.getTime(),
-              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+              startedAt: call.startedAt,
+              finishedAt: call.finishedAt,
+              durationMs: call.durationMs,
             });
 
             return executionResult.result as InferToolOutput<typeof tool>;
@@ -1066,15 +1078,19 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
               replayMetadataByToolCallId.set(execution.toolCallId, replay);
             }
 
-            runtimeToolCalls.push({
-              id: execution.toolCallId,
+            call.finishedAt = finishedAt.toISOString();
+            call.durationMs = finishedAt.getTime() - startedAt.getTime();
+            if (replayMetadata) {
+              call.metadata = replayMetadata;
+            }
+            runtimeMessages.push({
+              role: "tool",
+              toolCallId: execution.toolCallId,
               name: toolName,
-              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
               error: normalizeError(error),
-              startedAt: startedAt.toISOString(),
-              finishedAt: finishedAt.toISOString(),
-              durationMs: finishedAt.getTime() - startedAt.getTime(),
-              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+              startedAt: call.startedAt,
+              finishedAt: call.finishedAt,
+              durationMs: call.durationMs,
             });
             throw error;
           }
@@ -1311,7 +1327,7 @@ function resolveSession(
   result: unknown,
   output: JsonValue | undefined,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-  runtimeToolCalls: ToolCallRecord[] = [],
+  runtimeMessages: NormalizedMessage[],
 ): NormalizedSession {
   if (
     isNormalizedSession(
@@ -1334,21 +1350,13 @@ function resolveSession(
       content: normalizeContent(input),
     },
   ];
-  const stepToolCallIds = new Set<string>();
 
   for (const step of steps) {
-    for (const toolCall of step.toolCalls ?? []) {
-      stepToolCallIds.add(toolCall.toolCallId);
-    }
     messages.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
-  const unmatchedRuntimeToolCalls = runtimeToolCalls.filter(
-    (call) => call.id === undefined || !stepToolCallIds.has(call.id),
-  );
-
-  if (unmatchedRuntimeToolCalls.length > 0) {
-    messages.push(...normalizeRuntimeToolCalls(unmatchedRuntimeToolCalls));
+  if (steps.length === 0 && runtimeMessages.length > 0) {
+    messages.push(...runtimeMessages);
   }
 
   if (
@@ -1371,42 +1379,6 @@ function resolveSession(
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
   };
-}
-
-function normalizeRuntimeToolCalls(
-  runtimeToolCalls: ToolCallRecord[],
-): NormalizedMessage[] {
-  const messages: NormalizedMessage[] = [
-    {
-      role: "assistant",
-      toolCalls: runtimeToolCalls,
-    },
-  ];
-
-  for (const call of runtimeToolCalls) {
-    if (call.result === undefined && !call.error) {
-      continue;
-    }
-
-    const content =
-      call.result !== undefined
-        ? call.result
-        : call.error && call.error.message.length > 0
-          ? call.error.message
-          : undefined;
-
-    messages.push({
-      role: "tool",
-      ...(content !== undefined ? { content } : {}),
-      metadata: normalizeMetadata({
-        name: call.name,
-        toolCallId: call.id,
-        isError: Boolean(call.error),
-      }),
-    });
-  }
-
-  return messages;
 }
 
 function resolveSteps(result: unknown): StepLike[] {
@@ -1440,12 +1412,17 @@ function normalizeStep(
       toolResult,
     ]),
   );
+  const toolErrorsById = new Map(
+    (step.toolCalls ?? [])
+      .filter((toolCall) => toolCall.invalid || toolCall.error !== undefined)
+      .map((toolCall) => [
+        toolCall.toolCallId,
+        normalizeError(toolCall.error ?? toolCall.invalid),
+      ]),
+  );
 
   const normalizedCalls = (step.toolCalls ?? []).map((toolCall) =>
     normalizeToolCall(toolCall, toolResultsById, replayMetadataByToolCallId),
-  );
-  const normalizedCallsById = new Map(
-    normalizedCalls.map((toolCall) => [toolCall.id, toolCall]),
   );
   const assistantMetadata = normalizeMetadata({
     stepNumber: step.stepNumber,
@@ -1472,11 +1449,13 @@ function normalizeStep(
         : normalizeContent(toolResult.output);
     messages.push({
       role: "tool",
+      toolCallId: toolResult.toolCallId,
+      name: toolResult.toolName,
       ...(content !== undefined ? { content } : {}),
+      ...(toolErrorsById.has(toolResult.toolCallId)
+        ? { error: toolErrorsById.get(toolResult.toolCallId) }
+        : {}),
       metadata: normalizeMetadata({
-        name: toolResult.toolName,
-        toolCallId: toolResult.toolCallId,
-        isError: Boolean(normalizedCallsById.get(toolResult.toolCallId)?.error),
         preliminary: toolResult.preliminary,
         providerExecuted: toolResult.providerExecuted,
         title: toolResult.title,
@@ -1495,8 +1474,6 @@ function normalizeToolCall(
 ): ToolCallRecord {
   const toolResult = toolResultsById.get(toolCall.toolCallId);
   const normalizedArguments = normalizeArguments(toolCall.input);
-  const normalizedResult =
-    toolResult !== undefined ? toJsonValue(toolResult.output) : undefined;
   const errorValue =
     toolCall.invalid || toolCall.error !== undefined
       ? normalizeError(toolCall.error ?? toolCall.invalid)
@@ -1509,16 +1486,13 @@ function normalizeToolCall(
     id: toolCall.toolCallId,
     name: toolCall.toolName,
     ...(normalizedArguments ? { arguments: normalizedArguments } : {}),
-    ...(toolResult && normalizedResult !== undefined
-      ? { result: normalizedResult }
-      : {}),
-    ...(errorValue ? { error: errorValue } : {}),
     metadata: normalizeMetadata({
       providerExecuted:
         toolCall.providerExecuted ?? toolResult?.providerExecuted,
       title: toolCall.title ?? toolResult?.title,
       dynamic: toolCall.dynamic,
       invalid: toolCall.invalid,
+      ...(errorValue ? { error: errorValue } : {}),
       preliminary: toolResult?.preliminary,
       providerMetadata:
         toolCall.providerMetadata ?? toolResult?.providerMetadata,

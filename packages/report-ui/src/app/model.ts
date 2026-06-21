@@ -5,6 +5,7 @@ import {
   type NormalizedError,
   type NormalizedMessage,
   type NormalizedSpan,
+  type NormalizedToolResultMessage,
   type ReportCase,
   type ReportWorkspace,
   type ToolCallRecord,
@@ -51,7 +52,7 @@ export type TranscriptToolEvent = {
   result?: JsonValue;
   error?: NormalizedError;
   durationMs?: number;
-  status?: NormalizedSpan["status"];
+  status?: NormalizedSpan["status"] | "pending";
   spanId?: string;
   callId?: string;
 };
@@ -352,7 +353,16 @@ function sessionMessageEvents(run: HarnessRun) {
 
 function sessionTranscriptEvents(run: HarnessRun) {
   const events: TranscriptEvent[] = [];
+  const pendingTools: Array<{
+    call: ToolCallRecord;
+    event: TranscriptToolEvent;
+  }> = [];
+
   run.session.messages.forEach((message, messageIndex) => {
+    if (message.role === "tool") {
+      attachTranscriptToolResult(pendingTools, message);
+    }
+
     events.push({
       content: message.content,
       id: `message-${messageIndex}`,
@@ -360,21 +370,52 @@ function sessionTranscriptEvents(run: HarnessRun) {
       role: message.role,
     });
     events.push(
-      ...(message.toolCalls ?? []).map(
-        (call, toolIndex): TranscriptToolEvent => ({
-          arguments: call.arguments,
-          callId: call.id,
-          durationMs: call.durationMs,
-          error: call.error,
-          id: call.id ?? `message-${messageIndex}:tool-${toolIndex}`,
-          kind: "tool",
-          name: call.name,
-          result: call.result,
-        }),
+      ...("toolCalls" in message ? (message.toolCalls ?? []) : []).map(
+        (call, toolIndex): TranscriptToolEvent => {
+          const event: TranscriptToolEvent = {
+            arguments: call.arguments,
+            callId: call.id,
+            durationMs: call.durationMs,
+            id: call.id ?? `message-${messageIndex}:tool-${toolIndex}`,
+            kind: "tool",
+            name: call.name,
+            status: "pending",
+          };
+          pendingTools.push({ call, event });
+          return event;
+        },
       ),
     );
   });
   return events;
+}
+
+function attachTranscriptToolResult(
+  tools: Array<{ call: ToolCallRecord; event: TranscriptToolEvent }>,
+  result: NormalizedToolResultMessage,
+) {
+  const match = findPendingTranscriptTool(
+    tools,
+    (call) => call.id === result.toolCallId,
+  );
+
+  if (!match) {
+    return;
+  }
+
+  match.event.error = result.error;
+  match.event.result = result.content;
+  match.event.durationMs = result.durationMs ?? match.call.durationMs;
+  match.event.status = result.error ? "error" : "ok";
+}
+
+function findPendingTranscriptTool(
+  tools: Array<{ call: ToolCallRecord; event: TranscriptToolEvent }>,
+  predicate: (call: ToolCallRecord) => boolean,
+) {
+  return tools.find(
+    ({ call, event }) => event.status === "pending" && predicate(call),
+  );
 }
 
 function traceTranscriptEvents(run: HarnessRun) {

@@ -9,8 +9,11 @@ custom judges through `ctx.session` and `ctx.toolCalls`.
 
 ## Tool Calls
 
-Use `toolCalls(result)` for the flattened tool history. The helpers also accept
-a normalized session when that is the only value available.
+Use `toolCalls(result)` for the flattened tool history. It returns assistant
+tool-call requests with `status`, `result`, and `error` filled from matching
+`role: "tool"` result messages that reference the call id. Calls without a
+matching result have `status: "pending"`. The helpers also accept a normalized
+session when that is the only value available.
 
 ```ts title="evals/refund.eval.ts"
 import { expect } from "vitest";

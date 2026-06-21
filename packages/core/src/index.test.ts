@@ -5,6 +5,7 @@ import {
   failedSpans,
   latestAssistantMessageContent,
   messagesByRole,
+  NormalizedMessageSchema,
   parseVitestJsonReport,
   readEvalTaskMeta,
   spans,
@@ -224,6 +225,7 @@ describe("readEvalTaskMeta", () => {
           toolCalls: [
             {
               name: "lookupInvoice",
+              status: "pending",
             },
           ],
         },
@@ -237,6 +239,7 @@ describe("readEvalTaskMeta", () => {
         toolCalls: [
           {
             name: "lookupInvoice",
+            status: "pending",
           },
         ],
       },
@@ -369,6 +372,7 @@ describe("readEvalTaskMeta", () => {
         toolCalls: [
           {
             name: "lookupInvoice",
+            status: "pending",
             unexpected: true,
           },
         ],
@@ -604,5 +608,117 @@ describe("normalized run helpers", () => {
     ]);
     expect(failedSpans(run)).toEqual([]);
     expect(failedSpans(run.traces)).toEqual([]);
+  });
+
+  test("keeps idless tool calls pending when no matching result can be linked", () => {
+    expect(
+      toolCalls({
+        messages: [
+          {
+            role: "assistant",
+            toolCalls: [
+              {
+                name: "lookupInvoice",
+                arguments: { invoiceId: "inv_123" },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        name: "lookupInvoice",
+        arguments: { invoiceId: "inv_123" },
+        status: "pending",
+      },
+    ]);
+  });
+
+  test("requires tool result messages to reference a tool call id", () => {
+    expect(() =>
+      NormalizedMessageSchema.parse({
+        role: "tool",
+        name: "lookupInvoice",
+        content: { refundable: true },
+      }),
+    ).toThrow();
+  });
+
+  test("uses tool ids to disambiguate out-of-order results when available", () => {
+    expect(
+      toolCalls({
+        messages: [
+          {
+            role: "assistant",
+            toolCalls: [
+              {
+                id: "call_1",
+                name: "lookupInvoice",
+                arguments: { invoiceId: "inv_123" },
+              },
+              {
+                id: "call_2",
+                name: "lookupInvoice",
+                arguments: { invoiceId: "inv_456" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            toolCallId: "call_2",
+            name: "lookupInvoice",
+            content: { invoiceId: "inv_456" },
+          },
+          {
+            role: "tool",
+            toolCallId: "call_1",
+            name: "lookupInvoice",
+            content: { invoiceId: "inv_123" },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        name: "lookupInvoice",
+        arguments: { invoiceId: "inv_123" },
+        status: "ok",
+        result: { invoiceId: "inv_123" },
+      },
+      {
+        name: "lookupInvoice",
+        arguments: { invoiceId: "inv_456" },
+        status: "ok",
+        result: { invoiceId: "inv_456" },
+      },
+    ]);
+  });
+
+  test("does not fall back to ordered matching when a result id is explicit", () => {
+    expect(
+      toolCalls({
+        messages: [
+          {
+            role: "assistant",
+            toolCalls: [
+              {
+                id: "call_1",
+                name: "lookupInvoice",
+              },
+            ],
+          },
+          {
+            role: "tool",
+            toolCallId: "call_missing",
+            name: "lookupInvoice",
+            content: { invoiceId: "inv_123" },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        name: "lookupInvoice",
+        status: "pending",
+      },
+    ]);
   });
 });

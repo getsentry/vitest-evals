@@ -1,6 +1,6 @@
 import { DefaultReporter, VerboseReporter } from "vitest/node";
 import c from "tinyrainbow";
-import type { ToolCallRecord, UsageSummary } from "./harness";
+import type { ToolCall } from "./harness";
 import { toolCalls } from "./harness";
 
 const TEST_NAME_SEPARATOR = c.dim(" > ");
@@ -198,9 +198,9 @@ export default class DefaultEvalReporter extends VerboseReporter {
         this.log(this.formatRawLine("raw in", call.arguments, isLastItem));
       }
       if (this.toolDetailLevel >= 4) {
-        if (call.error) {
+        if (call.status === "error") {
           this.log(this.formatRawLine("raw err", call.error, isLastItem));
-        } else if (call.result !== undefined) {
+        } else if (call.status === "ok" && call.result !== undefined) {
           this.log(this.formatRawLine("raw out", call.result, isLastItem));
         }
       }
@@ -212,14 +212,11 @@ export default class DefaultEvalReporter extends VerboseReporter {
     }
   }
 
-  private formatToolCallLines(call: ToolCallRecord, isLastItem: boolean) {
+  private formatToolCallLines(call: ToolCall, isLastItem: boolean) {
     const prefix = c.dim(`   ${this.getItemPrefix(isLastItem)} `);
     const detailPrefix = c.dim(this.getDetailPrefix(isLastItem));
-    const replayStatus = this.getReplayStatus(call);
     const lines = [
-      `${prefix}${c.dim(this.formatFieldLabel("tool"))} ${c.cyan(call.name)}${
-        replayStatus ? ` ${c.dim(`[${replayStatus}]`)}` : ""
-      }`,
+      `${prefix}${c.dim(this.formatFieldLabel("tool"))} ${c.cyan(call.name)}`,
     ];
 
     const argumentsSummary = this.formatToolCallArguments(call.arguments);
@@ -230,37 +227,42 @@ export default class DefaultEvalReporter extends VerboseReporter {
     }
 
     lines.push(
-      `${detailPrefix}${c.dim(this.formatFieldLabel(call.error ? "error" : "result"))} ${this.formatToolCallOutcome(call)}`,
+      `${detailPrefix}${c.dim(this.formatFieldLabel(call.status === "error" ? "error" : "result"))} ${this.formatToolCallOutcome(call)}`,
     );
 
     return lines;
   }
 
-  private formatToolCallOutcome(call: ToolCallRecord) {
-    const totalTokens = this.getToolCallTokens(call);
-    const summary = call.error
-      ? this.summarizeValue(call.error)
-      : this.summarizeToolResult(call.result, call.arguments);
-    const responseSize = this.getSerializedSize(call.error ?? call.result);
+  private formatToolCallOutcome(call: ToolCall) {
+    const outcomeValue =
+      call.status === "error"
+        ? call.error
+        : call.status === "ok"
+          ? call.result
+          : undefined;
+    const summary =
+      call.status === "error"
+        ? this.summarizeValue(call.error)
+        : call.status === "ok"
+          ? this.summarizeToolResult(call.result, call.arguments)
+          : null;
+    const responseSize = this.getSerializedSize(outcomeValue);
     const metrics: string[] = [];
 
-    if (this.toolDetailLevel >= 2 && totalTokens && totalTokens > 0) {
-      metrics.push(`${totalTokens} tok`);
-    } else if (this.toolDetailLevel >= 2 && responseSize !== null) {
+    if (this.toolDetailLevel >= 2 && responseSize !== null) {
       metrics.push(this.formatBytes(responseSize));
     }
-    if (
-      this.toolDetailLevel >= 2 &&
-      call.durationMs !== undefined &&
-      call.durationMs > 0
-    ) {
-      metrics.push(`${call.durationMs}ms`);
-    }
 
-    const outcome = summary ?? (call.error ? "tool failed" : "ok");
+    const outcome =
+      summary ??
+      (call.status === "error"
+        ? "tool failed"
+        : call.status === "pending"
+          ? "pending"
+          : "ok");
     const metricsText =
       metrics.length > 0 ? ` ${c.dim(`[${metrics.join(" | ")}]`)}` : "";
-    if (call.error) {
+    if (call.status === "error") {
       return `${c.red(outcome)}${metricsText}`;
     }
 
@@ -600,41 +602,6 @@ export default class DefaultEvalReporter extends VerboseReporter {
     return DEFAULT_TOOL_DETAIL_LEVEL;
   }
 
-  private getToolCallTokens(call: ToolCallRecord) {
-    const usage = call.metadata?.usage;
-    if (this.isUsageSummary(usage)) {
-      return (
-        usage.totalTokens ??
-        (usage.inputTokens ?? 0) +
-          (usage.outputTokens ?? 0) +
-          (usage.reasoningTokens ?? 0)
-      );
-    }
-
-    const metadataTotalTokens = call.metadata?.totalTokens;
-    return typeof metadataTotalTokens === "number" ? metadataTotalTokens : null;
-  }
-
-  private getReplayStatus(call: ToolCallRecord) {
-    const replay = call.metadata?.replay;
-    if (
-      replay &&
-      typeof replay === "object" &&
-      !Array.isArray(replay) &&
-      "status" in replay
-    ) {
-      const status = (replay as { status?: unknown }).status;
-      if (status === "recorded") {
-        return "recorded";
-      }
-      if (status === "replayed") {
-        return "cached";
-      }
-    }
-
-    return null;
-  }
-
   private getSerializedSize(value: unknown) {
     if (value === undefined) {
       return null;
@@ -661,10 +628,6 @@ export default class DefaultEvalReporter extends VerboseReporter {
     }
 
     return `${Math.round(kib)}KB`;
-  }
-
-  private isUsageSummary(value: unknown): value is UsageSummary {
-    return Boolean(value && typeof value === "object");
   }
 
   private formatInlineJson(

@@ -66,7 +66,7 @@ export type TimingSummary = {
   metadata?: Record<string, JsonValue>;
 };
 
-/** Normalized error object captured in a tool call or trace span. */
+/** Normalized error object captured in a tool result or trace span. */
 export const NormalizedErrorSchema = z
   .object({
     message: z.string(),
@@ -74,14 +74,12 @@ export const NormalizedErrorSchema = z
   })
   .catchall(JsonValueSchema);
 
-/** Normalized tool call captured in a harness session. */
+/** Normalized tool call requested by an assistant message. */
 export const ToolCallRecordSchema = z
   .object({
     id: z.string().optional(),
     name: z.string(),
     arguments: JsonObjectSchema.optional(),
-    result: JsonValueSchema.optional(),
-    error: NormalizedErrorSchema.optional(),
     startedAt: z.string().optional(),
     finishedAt: z.string().optional(),
     durationMs: FiniteNumberSchema.optional(),
@@ -89,7 +87,7 @@ export const ToolCallRecordSchema = z
   })
   .strict();
 
-/** Normalized tool call captured in a harness session. */
+/** Normalized tool call requested by an assistant message. */
 export type ToolCallRecord = {
   /** Provider or runtime tool-call id when one is available. */
   id?: string;
@@ -97,10 +95,6 @@ export type ToolCallRecord = {
   name: string;
   /** JSON-safe tool arguments after provider/runtime normalization. */
   arguments?: Record<string, JsonValue>;
-  /** JSON-safe tool result returned by the application tool. */
-  result?: JsonValue;
-  /** Normalized tool error when execution failed. */
-  error?: NormalizedError;
   /** ISO timestamp for the start of tool execution. */
   startedAt?: string;
   /** ISO timestamp for the end of tool execution. */
@@ -111,27 +105,165 @@ export type ToolCallRecord = {
   metadata?: Record<string, JsonValue>;
 };
 
-/** Normalized transcript message captured in a harness session. */
-export const NormalizedMessageSchema = z
+/** Normalized system message captured in a harness session. */
+export const NormalizedSystemMessageSchema = z
   .object({
-    role: z.enum(["system", "user", "assistant", "tool"]),
+    role: z.literal("system"),
+    content: JsonValueSchema.optional(),
+    metadata: JsonObjectSchema.optional(),
+  })
+  .strict();
+
+/** Normalized user message captured in a harness session. */
+export const NormalizedUserMessageSchema = z
+  .object({
+    role: z.literal("user"),
+    content: JsonValueSchema.optional(),
+    metadata: JsonObjectSchema.optional(),
+  })
+  .strict();
+
+/** Normalized assistant message captured in a harness session. */
+export const NormalizedAssistantMessageSchema = z
+  .object({
+    role: z.literal("assistant"),
     content: JsonValueSchema.optional(),
     toolCalls: z.array(ToolCallRecordSchema).optional(),
     metadata: JsonObjectSchema.optional(),
   })
   .strict();
 
-/** Normalized transcript message captured in a harness session. */
-export type NormalizedMessage = {
+/** Normalized tool-result message captured in a harness session. */
+export const NormalizedToolResultMessageSchema = z
+  .object({
+    role: z.literal("tool"),
+    toolCallId: z.string(),
+    name: z.string().optional(),
+    content: JsonValueSchema.optional(),
+    error: NormalizedErrorSchema.optional(),
+    startedAt: z.string().optional(),
+    finishedAt: z.string().optional(),
+    durationMs: FiniteNumberSchema.optional(),
+    metadata: JsonObjectSchema.optional(),
+  })
+  .strict();
+
+const ToolCallBaseSchema = z
+  .object({
+    name: z.string(),
+    arguments: JsonObjectSchema.optional(),
+  })
+  .strict();
+
+/** Tool call observed in a normalized session, with result status when known. */
+export const ToolCallSchema = z.discriminatedUnion("status", [
+  ToolCallBaseSchema.extend({
+    status: z.literal("pending"),
+  }).strict(),
+  ToolCallBaseSchema.extend({
+    status: z.literal("ok"),
+    result: JsonValueSchema.optional(),
+  }).strict(),
+  ToolCallBaseSchema.extend({
+    status: z.literal("error"),
+    error: NormalizedErrorSchema,
+  }).strict(),
+]);
+
+/** Normalized system message captured in a harness session. */
+export type NormalizedSystemMessage = {
   /** Transcript role for the normalized message. */
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system";
   /** JSON-safe message content. */
   content?: JsonValue;
-  /** Tool calls associated with this message. */
+  /** Extra JSON-safe message metadata. */
+  metadata?: Record<string, JsonValue>;
+};
+
+/** Normalized user message captured in a harness session. */
+export type NormalizedUserMessage = {
+  /** Transcript role for the normalized message. */
+  role: "user";
+  /** JSON-safe message content. */
+  content?: JsonValue;
+  /** Extra JSON-safe message metadata. */
+  metadata?: Record<string, JsonValue>;
+};
+
+/** Normalized assistant message captured in a harness session. */
+export type NormalizedAssistantMessage = {
+  /** Transcript role for the normalized message. */
+  role: "assistant";
+  /** JSON-safe assistant message content. */
+  content?: JsonValue;
+  /** Tool calls requested by this assistant message. */
   toolCalls?: ToolCallRecord[];
   /** Extra JSON-safe message metadata. */
   metadata?: Record<string, JsonValue>;
 };
+
+/** Normalized tool-result message captured in a harness session. */
+export type NormalizedToolResultMessage = {
+  /** Transcript role for the normalized message. */
+  role: "tool";
+  /** Tool-call id this result responds to. */
+  toolCallId: string;
+  /** Tool name when available from the provider or runtime. */
+  name?: string;
+  /** JSON-safe tool result content. */
+  content?: JsonValue;
+  /** Normalized tool error when execution failed. */
+  error?: NormalizedError;
+  /** ISO timestamp for the start of tool execution. */
+  startedAt?: string;
+  /** ISO timestamp for the end of tool execution. */
+  finishedAt?: string;
+  /** Tool execution duration in milliseconds. */
+  durationMs?: number;
+  /** Extra JSON-safe message metadata. */
+  metadata?: Record<string, JsonValue>;
+};
+
+type ToolCallBase = {
+  /** Tool name as exposed to the agent or application runtime. */
+  name: string;
+  /** JSON-safe tool arguments after provider/runtime normalization. */
+  arguments?: Record<string, JsonValue>;
+};
+
+/** Tool call observed in a normalized session, with result status when known. */
+export type ToolCall =
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call without a matching result message. */
+      status: "pending";
+    })
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call with a successful result message. */
+      status: "ok";
+      /** JSON-safe tool result content when execution produced content. */
+      result?: JsonValue;
+    })
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call with an error result message. */
+      status: "error";
+      /** Normalized tool error captured by the result message. */
+      error: NormalizedError;
+    });
+
+/** Normalized transcript message captured in a harness session. */
+export const NormalizedMessageSchema = z.union([
+  NormalizedSystemMessageSchema,
+  NormalizedUserMessageSchema,
+  NormalizedAssistantMessageSchema,
+  NormalizedToolResultMessageSchema,
+]);
+
+/** Normalized transcript message captured in a harness session. */
+export type NormalizedMessage =
+  | NormalizedSystemMessage
+  | NormalizedUserMessage
+  | NormalizedAssistantMessage
+  | NormalizedToolResultMessage;
 
 /** Normalized transcript produced by an application harness. */
 export const NormalizedSessionSchema = z

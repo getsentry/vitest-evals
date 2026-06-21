@@ -52,18 +52,18 @@ from `packages/core`:
 - `UsageSummary`
 - `NormalizedTrace` and `NormalizedSpan`
 - helper accessors such as `toolCalls(result)`, `assistantMessages(result)`,
-  and `spansByKind(result, "tool")`
+  and `spans(result)`
 
 The normalized session model lives in `packages/core` and is intentionally
 JSON-serializable so it can be persisted, attached to errors, and emitted by
 reporters without custom serialization logic.
 
 Normalized traces are also JSON-serializable. First-party harnesses attach
-native run, model, and tool spans automatically when they observe those
-operations. `createHarness(...)` attaches fallback run and tool spans for custom
-harnesses that do not return traces themselves. Span attributes include typed
-OpenTelemetry GenAI semantic keys for common model, agent, tool, and token
-fields while still allowing provider-specific attributes.
+native spans when provider/runtime data exposes real operations.
+`createHarness(...)` attaches a fallback run span for custom harnesses that do
+not return traces themselves. Span attributes include typed OpenTelemetry GenAI
+semantic keys for common model, agent, tool, and token fields while still
+allowing provider-specific attributes.
 
 `UsageSummary` is intentionally limited to stable usage units such as tokens,
 tool counts, retries, provider, and model. Provider-specific cost estimates are
@@ -230,9 +230,10 @@ behavior only.
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, messages, tool calls, and errors from common AI SDK
 result objects, while still allowing a custom `run` entrypoint and typed
-`output` selector. It also derives native trace spans from AI SDK steps and
-normalized tool activity. It exposes `aiSdkJudgeHarness(...)`, a thin adapter
-from AI SDK model configuration to the core judge harness interface.
+`output` selector. It preserves native trace spans from AI SDK steps when they
+are available; tool-call assertions should use the normalized session helpers.
+It exposes `aiSdkJudgeHarness(...)`, a thin adapter from AI SDK model
+configuration to the core judge harness interface.
 
 ### `@vitest-evals/harness-openai-agents`
 
@@ -240,15 +241,15 @@ Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
 normalized run/session shape. It accepts existing agents/runners or per-run
 `agent`/`runner` factories, supports custom app entrypoints, normalizes
 `RunResult` output, messages, usage, tool calls, tool results, errors, trace
-metadata, records native response/tool spans, and records replay metadata for
-opt-in local function tools. It also exposes `openaiAgentsJudgeHarness(...)`
-for judge-side model calls.
+metadata, records run/model spans when data is available, and records replay
+metadata for opt-in local function tools. It also exposes
+`openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`
 
 Adapts `pi-ai` style agents into the same normalized shape. It automatically
-adds run, model, and tool spans from the normalized Pi runtime activity. It also
-owns the standard tool replay/VCR behavior for opt-in tools and exposes
+adds run/model spans when runtime usage data is available. It also owns the
+standard tool replay/VCR behavior for opt-in tools and exposes
 `piAiJudgeHarness(...)` for judge-side model calls. Replay modes include:
 
 - `auto` (default)

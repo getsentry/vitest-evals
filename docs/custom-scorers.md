@@ -112,7 +112,12 @@ describeEval("legacy refund suite", {
   ],
   task: async () => ({
     result: JSON.stringify({ status: "approved" }),
-    toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
+    toolCalls: [
+      {
+        name: "lookupInvoice",
+        arguments: { invoiceId: "inv_123" },
+      },
+    ],
   }),
   scorers: [StructuredOutputScorer(), ToolCallScorer()],
 });

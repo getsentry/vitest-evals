@@ -14,7 +14,17 @@ type ToolCallRecord = {
   id?: string;
   name: string;
   arguments?: Record<string, JsonValue>;
-  result?: JsonValue;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  metadata?: Record<string, JsonValue>;
+};
+
+type NormalizedToolResultMessage = {
+  role: "tool";
+  toolCallId: string;
+  name?: string;
+  content?: JsonValue;
   error?: {
     message: string;
     type?: string;
@@ -48,7 +58,12 @@ type HarnessRun<TOutput extends JsonValue | undefined = JsonValue | undefined> =
 Harness adapters should:
 
 - keep the stored session JSON-serializable
-- normalize tool calls into `ToolCallRecord`
+- normalize assistant tool-call requests into `ToolCallRecord`
+- normalize completed or failed tool executions into separate `role: "tool"`
+  messages with `toolCallId`
+- preserve provider tool-call ids when providers expose them; adapters that
+  execute tools themselves should create runtime-local ids so request/result
+  transcript messages remain unambiguous
 - preserve the application-facing result separately in `run.output`
 - attach provider/model and stable usage data when available
 - keep provider-specific cost estimates in `usage.metadata`, not as normalized
@@ -67,27 +82,39 @@ function normalizeProviderStep(step: ProviderStep): ToolCallRecord[] {
     id: call.id,
     name: call.name,
     arguments: toJsonRecord(call.arguments),
-    result: toJsonValue(call.result),
-    error: call.error
-      ? {
-          message: String(call.error.message),
-          type: call.error.name,
-        }
-      : undefined,
     durationMs: call.durationMs,
   }));
 }
 
 function normalizeSession(input: string, result: ProviderResult): NormalizedSession {
+  const messages: NormalizedMessage[] = [{ role: "user", content: input }];
+
+  for (const step of result.steps) {
+    messages.push({
+      role: "assistant",
+      content: step.text,
+      toolCalls: normalizeProviderStep(step),
+    });
+
+    for (const toolResult of step.toolResults ?? []) {
+      messages.push({
+        role: "tool",
+        toolCallId: toolResult.toolCallId,
+        name: toolResult.name,
+        ...(toolResult.error
+          ? {
+              error: {
+                message: String(toolResult.error.message),
+                type: toolResult.error.name,
+              },
+            }
+          : { content: toJsonValue(toolResult.output) }),
+      });
+    }
+  }
+
   return {
-    messages: [
-      { role: "user", content: input },
-      ...result.steps.map((step) => ({
-        role: "assistant",
-        content: step.text,
-        toolCalls: normalizeProviderStep(step),
-      })),
-    ],
+    messages,
     provider: result.provider,
     model: result.model,
   };

@@ -42,13 +42,12 @@ same shape regardless of runtime:
 | Field | Purpose |
 | --- | --- |
 | `output` | The domain value your tests usually assert on. |
-| `messages` | Conversation transcript or normalized app messages. |
-| `toolCalls` | Deterministic tool activity for tool judges and replay. |
+| `session.messages` | Ordered conversation transcript, including assistant tool-call requests and `role: "tool"` results. |
+| `toolCalls(result)` | Deterministic tool-call projection for tool judges and replay checks. |
 | `traces` | Operation spans for runs, model calls, tools, guardrails, handoffs, or custom work. |
 | `usage` | Stable usage units such as provider, model, tokens, tools, and retries. |
 
 First-party harnesses attach trace spans automatically from native runtime data
-they observe, including run, model, and tool operations. `createHarness()`
-attaches fallback run and tool spans when a custom harness does not return
-traces itself. Span attributes are JSON-safe and include typed OpenTelemetry
-GenAI semantic keys where they apply.
+they observe. `createHarness()` attaches a fallback run span when a custom
+harness does not return traces itself. Span attributes are JSON-safe and include
+typed OpenTelemetry GenAI semantic keys where they apply.

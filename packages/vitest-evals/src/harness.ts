@@ -14,6 +14,7 @@ import type {
   GenAiOperationName,
   HarnessRun,
   HarnessRunError,
+  NormalizedError,
   JsonPrimitive,
   JsonValue,
   NormalizedMessage,
@@ -21,8 +22,10 @@ import type {
   NormalizedSpan,
   NormalizedSpanAttributes,
   NormalizedSpanEvent,
+  NormalizedToolResultMessage,
   NormalizedTrace,
   TimingSummary,
+  ToolCall,
   ToolCallRecord,
   UsageSummary,
 } from "@vitest-evals/core";
@@ -49,6 +52,7 @@ export type {
   GenAiToolType,
   HarnessRun,
   HarnessRunError,
+  NormalizedError,
   JsonPrimitive,
   JsonValue,
   NormalizedMessage,
@@ -57,23 +61,15 @@ export type {
   NormalizedSpanAttributeKey,
   NormalizedSpanAttributes,
   NormalizedSpanEvent,
+  NormalizedToolResultMessage,
   NormalizedTrace,
   OpenTelemetrySemanticAttributeKey,
   OpenTelemetrySemanticAttributes,
   TimingSummary,
+  ToolCall,
   ToolCallRecord,
   UsageSummary,
 } from "@vitest-evals/core";
-
-/** Options for converting normalized tool calls into trace spans. */
-export type CreateToolCallSpansOptions = {
-  /** Trace id to attach to each generated tool span. */
-  traceId?: string;
-  /** Parent span id to attach to each generated tool span. */
-  parentId?: string;
-  /** Prefix used to create internal span ids instead of reusing tool-call ids. */
-  spanIdPrefix?: string;
-};
 
 /** Options for attaching a fallback run trace to a harness result. */
 export type EnsureRunTraceOptions = {
@@ -152,21 +148,6 @@ export type Harness<
 /** Value or promise accepted by lightweight harness callbacks. */
 export type MaybePromise<T> = T | Promise<T>;
 
-/** Lightweight tool-call record accepted by `createHarness(...)` results. */
-export type SimpleToolCallRecord = Omit<
-  ToolCallRecord,
-  "arguments" | "result" | "error" | "metadata"
-> & {
-  /** Raw tool arguments accepted by `createHarness(...)` before normalization. */
-  arguments?: unknown;
-  /** Raw tool result accepted by `createHarness(...)` before normalization. */
-  result?: unknown;
-  /** Raw tool error accepted by `createHarness(...)` before normalization. */
-  error?: unknown;
-  /** Raw tool metadata accepted by `createHarness(...)` before normalization. */
-  metadata?: Record<string, unknown>;
-};
-
 /** Lightweight span event accepted by `createHarness(...)` results. */
 export type SimpleSpanEvent = Omit<NormalizedSpanEvent, "attributes"> & {
   /** Raw event attributes accepted by `createHarness(...)` before normalization. */
@@ -201,7 +182,6 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
  * ```ts
  * const result: SimpleHarnessResult<{ status: "approved" }> = {
  *   output: { status: "approved" },
- *   toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
  *   usage: { totalTokens: 260 },
  * };
  * ```
@@ -211,8 +191,6 @@ export type SimpleHarnessResult<
 > = OutputField<TOutput> & {
   /** Pre-normalized transcript messages. When omitted, a default user/assistant transcript is created. */
   messages?: NormalizedMessage[];
-  /** Lightweight tool-call records to normalize into the session. */
-  toolCalls?: SimpleToolCallRecord[];
   /** Usage summary to attach to the run. */
   usage?: UsageSummary;
   /** Timing summary to attach to the run. */
@@ -407,7 +385,26 @@ export function normalizeContent(value: unknown): JsonValue {
  *
  *     return {
  *       output,
- *       toolCalls: result.toolCalls,
+ *       messages: [
+ *         { role: "user", content: input },
+ *         {
+ *           role: "assistant",
+ *           toolCalls: [
+ *             {
+ *               id: "call_lookup",
+ *               name: "lookupInvoice",
+ *               arguments: { invoiceId: result.invoiceId },
+ *             },
+ *           ],
+ *         },
+ *         {
+ *           role: "tool",
+ *           toolCallId: "call_lookup",
+ *           name: "lookupInvoice",
+ *           content: { refundable: result.refundable },
+ *         },
+ *         { role: "assistant", content: output },
+ *       ],
  *       usage: { provider: "openai", model: "gpt-4o-mini" },
  *     };
  *   },
@@ -487,7 +484,25 @@ export function createHarness<
  * ```ts
  * const run = normalizeHarnessRun("Refund invoice inv_123", {
  *   output: { status: "approved" },
- *   toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
+ *   messages: [
+ *     { role: "user", content: "Refund invoice inv_123" },
+ *     {
+ *       role: "assistant",
+ *       toolCalls: [
+ *         {
+ *           id: "call_lookup",
+ *           name: "lookupInvoice",
+ *           arguments: { invoiceId: "inv_123" },
+ *         },
+ *       ],
+ *     },
+ *     {
+ *       role: "tool",
+ *       toolCallId: "call_lookup",
+ *       name: "lookupInvoice",
+ *       content: { refundable: true },
+ *     },
+ *   ],
  *   usage: { provider: "openai", model: "gpt-4o-mini" },
  * });
  *
@@ -517,15 +532,19 @@ export function normalizeHarnessRun<
     return result;
   }
 
+  if ("toolCalls" in result) {
+    throw new TypeError(
+      'createHarness results no longer accept top-level toolCalls. Return messages with assistant toolCalls and role: "tool" results linked by toolCallId instead.',
+    );
+  }
+
   const output = result.output;
-  const toolCalls = normalizeSimpleToolCalls(result.toolCalls);
   const usage = result.usage ?? {};
   const messages =
     result.messages ??
     createDefaultSessionMessages({
       input,
       output,
-      toolCalls,
     });
   const metadata = result.metadata
     ? normalizeMetadata(result.metadata)
@@ -584,11 +603,9 @@ export function createFailedHarnessRun(
 function createDefaultSessionMessages<TInput>({
   input,
   output,
-  toolCalls: normalizedToolCalls,
 }: {
   input: TInput;
   output: JsonValue | undefined;
-  toolCalls: ToolCallRecord[];
 }): NormalizedMessage[] {
   const messages: NormalizedMessage[] = [
     {
@@ -597,75 +614,14 @@ function createDefaultSessionMessages<TInput>({
     },
   ];
 
-  if (output !== undefined || normalizedToolCalls.length > 0) {
+  if (output !== undefined) {
     messages.push({
       role: "assistant",
-      ...(output !== undefined ? { content: normalizeContent(output) } : {}),
-      ...(normalizedToolCalls.length > 0
-        ? { toolCalls: normalizedToolCalls }
-        : {}),
+      content: normalizeContent(output),
     });
   }
 
   return messages;
-}
-
-function normalizeSimpleToolCalls(
-  calls: SimpleToolCallRecord[] | undefined,
-): ToolCallRecord[] {
-  return (calls ?? []).map((call) => {
-    const {
-      arguments: rawArguments,
-      result: rawResult,
-      error: rawError,
-      metadata: rawMetadata,
-      ...toolCall
-    } = call;
-    const args = normalizeToolCallArguments(rawArguments);
-    const result = toJsonValue(rawResult);
-    const error = normalizeToolCallError(rawError);
-    const metadata = rawMetadata ? normalizeMetadata(rawMetadata) : undefined;
-
-    return {
-      ...toolCall,
-      ...(args ? { arguments: args } : {}),
-      ...(result !== undefined ? { result } : {}),
-      ...(error ? { error } : {}),
-      ...(metadata ? { metadata } : {}),
-    };
-  });
-}
-
-function normalizeToolCallArguments(
-  value: unknown,
-): Record<string, JsonValue> | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const normalized = toJsonValue(value);
-  return normalized &&
-    typeof normalized === "object" &&
-    !Array.isArray(normalized)
-    ? normalized
-    : undefined;
-}
-
-function normalizeToolCallError(
-  value: unknown,
-): ToolCallRecord["error"] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const serialized = serializeError(value);
-  const { message, type, ...details } = serialized;
-
-  return {
-    ...details,
-    message: typeof message === "string" ? message : String(message),
-    ...(typeof type === "string" ? { type } : {}),
-  };
 }
 
 function normalizeMergedArtifacts(
@@ -876,49 +832,6 @@ export function createGenAiUsageAttributes(
 }
 
 /**
- * Converts normalized tool-call records into trace spans.
- *
- * Tool-call ids are preserved as GenAI attributes. Pass `spanIdPrefix` when the
- * spans belong to a known trace so span ids stay internally unique.
- */
-export function createToolCallSpans(
-  calls: ToolCallRecord[],
-  options: CreateToolCallSpansOptions = {},
-): NormalizedSpan[] {
-  return calls.map((call, index) => {
-    const spanError = call.error ? normalizeSpanError(call.error) : undefined;
-    const spanId = options.spanIdPrefix
-      ? `${options.spanIdPrefix}:${index + 1}`
-      : call.id;
-
-    return {
-      ...(spanId ? { id: spanId } : {}),
-      ...(options.traceId ? { traceId: options.traceId } : {}),
-      ...(options.parentId ? { parentId: options.parentId } : {}),
-      name: call.name,
-      kind: "tool",
-      ...(call.startedAt ? { startedAt: call.startedAt } : {}),
-      ...(call.finishedAt ? { finishedAt: call.finishedAt } : {}),
-      ...(call.durationMs !== undefined ? { durationMs: call.durationMs } : {}),
-      status: spanError ? "error" : "ok",
-      ...(spanError ? { error: spanError } : {}),
-      attributes: normalizeSpanAttributes({
-        "gen_ai.operation.name": "execute_tool",
-        "gen_ai.tool.name": call.name,
-        "gen_ai.tool.type": "function",
-        ...(call.id ? { "gen_ai.tool.call.id": call.id } : {}),
-        ...(call.arguments !== undefined
-          ? { "gen_ai.tool.call.arguments": call.arguments }
-          : {}),
-        ...(call.result !== undefined
-          ? { "gen_ai.tool.call.result": call.result }
-          : {}),
-      }),
-    } satisfies NormalizedSpan;
-  });
-}
-
-/**
  * Attaches a fallback run trace when a harness result does not already contain spans.
  *
  * This keeps custom harnesses inspectable while first-party harness packages
@@ -953,11 +866,6 @@ export function ensureRunTrace(
       ...createGenAiUsageAttributes(run.usage),
     }),
   };
-  const toolSpans = createToolCallSpans(toolCalls(run.session), {
-    traceId,
-    parentId: rootSpanId,
-    spanIdPrefix: `${traceId}:tool`,
-  });
   const trace: NormalizedTrace = {
     id: traceId,
     name: options.name,
@@ -965,7 +873,7 @@ export function ensureRunTrace(
     finishedAt: options.finishedAt.toISOString(),
     durationMs,
     ...(options.source ? { metadata: { source: options.source } } : {}),
-    spans: [runSpan, ...toolSpans],
+    spans: [runSpan],
   };
 
   run.traces = [trace];

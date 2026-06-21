@@ -1,9 +1,4 @@
-import type {
-  Harness,
-  HarnessRun,
-  JsonValue,
-  ToolCallRecord,
-} from "../harness";
+import type { Harness, HarnessRun, JsonValue, ToolCall } from "../harness";
 import type { JudgeHarness, RunJudge } from "./judgeHarness";
 
 /**
@@ -58,7 +53,7 @@ export interface JudgeContext<
   /** App-facing output returned by the harness. */
   output: TOutput;
   /** Flattened tool calls observed in the normalized session. */
-  toolCalls: ToolCallRecord[];
+  toolCalls: ToolCall[];
   /** Complete normalized harness run being judged. */
   run: HarnessRun<TOutput>;
   /** Normalized transcript associated with the harness run. */

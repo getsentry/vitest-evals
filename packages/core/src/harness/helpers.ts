@@ -3,13 +3,17 @@ import type {
   NormalizedMessage,
   NormalizedSession,
   NormalizedSpan,
+  NormalizedToolResultMessage,
   NormalizedTrace,
-  ToolCallRecord,
+  ToolCall,
 } from "./index";
 import type { JsonValue } from "../json";
 
 /**
- * Flattens every recorded tool call from a normalized run or session.
+ * Returns every tool call observed in a normalized run or session.
+ *
+ * Tool results are joined from matching `role: "tool"` transcript messages
+ * when the transcript contains a result for the call.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -20,14 +24,44 @@ import type { JsonValue } from "../json";
  * expect(names).toEqual(["lookupInvoice", "createRefund"]);
  * ```
  */
-export function toolCalls(run: HarnessRun): ToolCallRecord[];
-export function toolCalls(session: NormalizedSession): ToolCallRecord[];
-export function toolCalls(
-  source: HarnessRun | NormalizedSession,
-): ToolCallRecord[] {
-  return sessionFrom(source).messages.flatMap(
-    (message) => message.toolCalls ?? [],
-  );
+export function toolCalls(run: HarnessRun): ToolCall[];
+export function toolCalls(session: NormalizedSession): ToolCall[];
+export function toolCalls(source: HarnessRun | NormalizedSession): ToolCall[] {
+  const resultsById = new Map<string, NormalizedToolResultMessage>();
+  for (const message of toolResultsFromSource(source)) {
+    if (!resultsById.has(message.toolCallId)) {
+      resultsById.set(message.toolCallId, message);
+    }
+  }
+
+  return toolCallsFromSource(source).map((call) => {
+    const result = call.id ? resultsById.get(call.id) : undefined;
+    const normalizedCall = {
+      name: call.name,
+      ...(call.arguments ? { arguments: call.arguments } : {}),
+    };
+
+    if (!result) {
+      return {
+        ...normalizedCall,
+        status: "pending",
+      };
+    }
+
+    if (result.error) {
+      return {
+        ...normalizedCall,
+        status: "error",
+        error: result.error,
+      };
+    }
+
+    return {
+      ...normalizedCall,
+      status: "ok",
+      ...(result.content !== undefined ? { result: result.content } : {}),
+    };
+  });
 }
 
 /**
@@ -223,16 +257,34 @@ export function latestAssistantMessageContent(
  * const toolOutputs = toolMessages(result).map((message) => message.content);
  * ```
  */
-export function toolMessages(run: HarnessRun): NormalizedMessage[];
-export function toolMessages(session: NormalizedSession): NormalizedMessage[];
+export function toolMessages(run: HarnessRun): NormalizedToolResultMessage[];
+export function toolMessages(
+  session: NormalizedSession,
+): NormalizedToolResultMessage[];
 export function toolMessages(
   source: HarnessRun | NormalizedSession,
-): NormalizedMessage[] {
-  return messagesByRoleFromSource(source, "tool");
+): NormalizedToolResultMessage[] {
+  return toolResultsFromSource(source);
 }
 
 function sessionFrom(source: HarnessRun | NormalizedSession) {
   return "session" in source ? source.session : source;
+}
+
+function toolResultsFromSource(source: HarnessRun | NormalizedSession) {
+  return sessionFrom(source).messages.filter(isToolResultMessage);
+}
+
+function toolCallsFromSource(source: HarnessRun | NormalizedSession) {
+  return sessionFrom(source).messages.flatMap((message) =>
+    message.role === "assistant" ? (message.toolCalls ?? []) : [],
+  );
+}
+
+function isToolResultMessage(
+  message: NormalizedMessage,
+): message is NormalizedToolResultMessage {
+  return message.role === "tool";
 }
 
 function tracesFrom(

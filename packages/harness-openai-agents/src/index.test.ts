@@ -8,7 +8,12 @@ import {
   spansByKind,
   toolCalls,
 } from "vitest-evals";
-import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
+import type {
+  Harness,
+  HarnessContext,
+  JsonValue,
+  NormalizedSession,
+} from "vitest-evals/harness";
 import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
 
 type Classification = {
@@ -23,6 +28,12 @@ type Expect<T extends true> = T;
 type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   ? TOutput
   : never;
+
+function firstAssistantToolCall(session: NormalizedSession) {
+  return session.messages.flatMap((message) =>
+    message.role === "assistant" ? (message.toolCalls ?? []) : [],
+  )[0];
+}
 
 const typedRunOutputHarness = openaiAgentsHarness({
   agent: {
@@ -304,24 +315,32 @@ describeEval(
               arguments: {
                 bottleId: "bt_123",
               },
-              result: {
-                bottleId: "bt_123",
-                family: "bourbon",
-              },
             },
           ],
         },
         {
           role: "tool",
+          toolCallId: "call_lookup",
+          name: "lookupBottle",
           content: {
             bottleId: "bt_123",
             family: "bourbon",
           },
           metadata: {
-            name: "lookupBottle",
-            toolCallId: "call_lookup",
-            isError: false,
+            itemType: "tool_call_output_item",
+            rawType: "function_call_result",
+            status: "completed",
           },
+        },
+      ]);
+      expect(toolCalls(result.session)).toMatchObject([
+        {
+          name: "lookupBottle",
+          result: {
+            bottleId: "bt_123",
+            family: "bourbon",
+          },
+          status: "ok",
         },
       ]);
       expect(spansByKind(result, "run")).toMatchObject([
@@ -345,18 +364,7 @@ describeEval(
           },
         },
       ]);
-      expect(spansByKind(result, "tool")).toMatchObject([
-        {
-          id: expect.not.stringMatching(/^call_lookup$/),
-          name: "lookupBottle",
-          status: "ok",
-          attributes: {
-            "gen_ai.operation.name": "execute_tool",
-            "gen_ai.tool.call.id": "call_lookup",
-            "gen_ai.tool.name": "lookupBottle",
-          },
-        },
-      ]);
+      expect(spansByKind(result, "tool")).toEqual([]);
     });
   },
 );
@@ -651,31 +659,15 @@ test("passes run input and context to agent factory before tool instrumentation"
   });
   expect(toolCalls(result.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       result: {
         bottleId: "bt_123",
         preparedInput: "Classify bottle bt_123",
         scenario: "refund",
       },
-      metadata: {
-        replay: {
-          status: "recorded",
-        },
-      },
     },
   ]);
-  expect(spansByKind(result, "tool")).toMatchObject([
-    {
-      id: expect.not.stringMatching(/^call_lookup$/),
-      name: "lookupBottle",
-      status: "ok",
-      attributes: {
-        "gen_ai.tool.call.id": "call_lookup",
-        "gen_ai.tool.name": "lookupBottle",
-      },
-    },
-  ]);
+  expect(spansByKind(result, "tool")).toEqual([]);
 });
 
 test("attaches a failed run when agent setup fails", async () => {
@@ -791,7 +783,6 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
   expect(agent.tools?.[0].invoke).toBe(originalInvoke);
   expect(toolCalls(firstRun.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       arguments: {
         bottleId: "bt_123",
@@ -800,16 +791,15 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
         bottleId: "bt_123",
         family: "bourbon",
       },
-      metadata: {
-        replay: {
-          status: "recorded",
-        },
-      },
     },
   ]);
+  const firstCall = firstAssistantToolCall(firstRun.session);
+  expect(firstCall?.metadata?.replay).toMatchObject({
+    status: "recorded",
+  });
 
   const recordingPath = (
-    toolCalls(firstRun.session)[0].metadata?.replay as { recordingPath: string }
+    firstCall?.metadata?.replay as { recordingPath: string }
   ).recordingPath;
   const recording = JSON.parse(
     readFileSync(join(process.cwd(), recordingPath), "utf8"),
@@ -839,19 +829,17 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
   expect(agent.tools?.[0].invoke).toBe(originalInvoke);
   expect(toolCalls(secondRun.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       result: {
         bottleId: "bt_123",
         family: "bourbon",
       },
-      metadata: {
-        replay: {
-          status: "replayed",
-        },
-      },
     },
   ]);
+  const secondCall = firstAssistantToolCall(secondRun.session);
+  expect(secondCall?.metadata?.replay).toMatchObject({
+    status: "replayed",
+  });
 });
 
 test("prefers captured local tool results over model-visible output wrappers", async () => {
@@ -922,7 +910,6 @@ test("prefers captured local tool results over model-visible output wrappers", a
 
   expect(toolCalls(result.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       result: {
         bottleId: "bt_123",
@@ -934,8 +921,8 @@ test("prefers captured local tool results over model-visible output wrappers", a
     expect.objectContaining({
       role: "tool",
       content: {
-        type: "text",
-        text: '{"bottleId":"bt_123","family":"bourbon"}',
+        bottleId: "bt_123",
+        family: "bourbon",
       },
     }),
   );
@@ -1005,8 +992,10 @@ test("preserves explicit null captured local tool results", async () => {
   );
   const [call] = toolCalls(result.session);
 
-  expect(call).toHaveProperty("result", null);
-  expect(call.error).toBeUndefined();
+  expect(call).toMatchObject({
+    result: null,
+    status: "ok",
+  });
 });
 
 test("errors when replay is configured for unknown OpenAI Agents tools", async () => {
@@ -1129,7 +1118,6 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
   expect(agent.tools[0]).toBe(originalTool);
   expect(toolCalls(result.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       arguments: {
         bottleId: "bt_123",
@@ -1266,7 +1254,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
   expect(agent.tools?.[0].invoke).toBe(originalInvoke);
   expect(toolCalls(firstRun.session)).toMatchObject([
     {
-      id: "call_first",
       arguments: {
         bottleId: "bt_first",
       },
@@ -1277,7 +1264,6 @@ test("keeps tool capture isolated across overlapping runs", async () => {
   ]);
   expect(toolCalls(secondRun.session)).toMatchObject([
     {
-      id: "call_second",
       arguments: {
         bottleId: "bt_second",
       },
@@ -1330,16 +1316,12 @@ test("marks failed tool output items as tool call errors", async () => {
   const [call] = toolCalls(result.session);
 
   expect(call).toMatchObject({
-    id: "call_patch",
     name: "apply_patch_call",
+    status: "error",
     error: {
       message: "patch rejected",
     },
-    metadata: {
-      outputStatus: "failed",
-    },
   });
-  expect(call.result).toBeUndefined();
 });
 
 test("attaches partial tool calls when Runner.run errors", async () => {
@@ -1389,7 +1371,6 @@ test("attaches partial tool calls when Runner.run errors", async () => {
   ]);
   expect(toolCalls(run!.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupBottle",
       arguments: {
         bottleId: "bt_missing",
@@ -1408,14 +1389,5 @@ test("attaches partial tool calls when Runner.run errors", async () => {
       },
     },
   ]);
-  expect(spansByKind(run!, "tool")).toMatchObject([
-    {
-      id: expect.not.stringMatching(/^call_lookup$/),
-      name: "lookupBottle",
-      status: "ok",
-      attributes: {
-        "gen_ai.tool.call.id": "call_lookup",
-      },
-    },
-  ]);
+  expect(spansByKind(run!, "tool")).toEqual([]);
 });

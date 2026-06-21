@@ -6,7 +6,7 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedSession,
-  ToolCallRecord,
+  ToolCall,
 } from "./harness";
 import {
   createFailedHarnessRun,
@@ -37,7 +37,7 @@ type EvalTaskMeta = {
     scores: (JudgeResult & { name: string })[];
     avgScore: number;
     output?: unknown;
-    toolCalls?: ToolCallRecord[];
+    toolCalls?: ToolCall[];
     thresholdFailed?: boolean;
   };
   harness?: {
@@ -267,7 +267,7 @@ export type JudgeAssertionOptions<
   /** Override or provide the app-facing output for the judge. */
   output?: JudgeAssertionOutput<TJudgeOptions>;
   /** Override or provide flattened tool calls for the judge. */
-  toolCalls?: ToolCallRecord[];
+  toolCalls?: ToolCall[];
   /** Override or provide the complete normalized harness run. */
   run?: HarnessRun<JudgeAssertionOutput<TJudgeOptions>>;
   /** Override or provide the normalized session transcript. */
@@ -697,7 +697,7 @@ function appendJudgeScore(
     score: JudgeResult & { name: string };
     output?: unknown;
     thresholdFailed: boolean;
-    toolCalls?: ToolCallRecord[];
+    toolCalls?: ToolCall[];
   },
 ) {
   const previousScores = task.meta.eval?.scores ?? [];
@@ -1189,7 +1189,6 @@ export {
   createFailedHarnessRun,
   createGenAiUsageAttributes,
   createHarness,
-  createToolCallSpans,
   ensureRunTrace,
   failedSpans,
   getHarnessRunFromError,
@@ -1205,7 +1204,6 @@ export {
   toolCalls,
   toolMessages,
   userMessages,
-  type CreateToolCallSpansOptions,
   type EnsureRunTraceOptions,
   type CreateHarnessOptions,
   type CreateHarnessRunArgs,
@@ -1231,6 +1229,7 @@ export {
   type NormalizedSpanAttributes,
   type NormalizedSpanAttributeKey,
   type NormalizedSpanEvent,
+  type NormalizedToolResultMessage,
   type NormalizedTrace,
   type OpenTelemetrySemanticAttributeKey,
   type OpenTelemetrySemanticAttributes,
@@ -1238,8 +1237,8 @@ export {
   type SimpleSpanEvent,
   type SimpleSpanRecord,
   type SimpleTraceRecord,
-  type SimpleToolCallRecord,
   type TimingSummary,
+  type ToolCall,
   type ToolCallRecord,
   type UsageSummary,
 } from "./harness";

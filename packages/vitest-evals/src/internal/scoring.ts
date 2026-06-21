@@ -1,6 +1,6 @@
-import type { JsonValue, ToolCallRecord } from "../harness";
+import type { JsonValue, ToolCall } from "../harness";
 
-export type ToolCallLike = ToolCallRecord;
+export type ToolCallLike = ToolCall;
 
 export type ScoreMetadata = {
   rationale?: string;

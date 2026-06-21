@@ -31,9 +31,9 @@ export async function answerQuestion(input: string): Promise<string> {
 ## Configure Harness
 
 `createHarness()` adapts that production entrypoint into normalized eval data.
-Return `output` for assertions and judges; attach usage, tool calls, and
-artifacts when reports need them. It automatically attaches fallback run and
-tool spans unless the harness returns its own traces.
+Return `output` for assertions and judges; attach usage, ordered transcript
+messages, and artifacts when reports need them. It automatically attaches a
+fallback run span unless the harness returns its own traces.
 
 ```ts title="evals/qaHarness.ts"
 import { createHarness } from "vitest-evals";

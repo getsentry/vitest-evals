@@ -3,9 +3,11 @@ import type {
   HarnessContext,
   HarnessRun,
   JsonValue,
+  NormalizedError,
   NormalizedMessage,
   NormalizedSpan,
   NormalizedSession,
+  NormalizedToolResultMessage,
   NormalizedTrace,
   TimingSummary,
   ToolCallRecord,
@@ -15,7 +17,6 @@ import {
   attachHarnessRunToError,
   createFailedHarnessRun,
   createGenAiUsageAttributes,
-  createToolCallSpans,
   ensureRunTrace,
   getHarnessRunFromError,
   hasCallableMethod,
@@ -29,7 +30,6 @@ import {
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
-  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import {
   executeWithReplay,
@@ -601,6 +601,7 @@ type OpenAiAgentsHarnessRunnerOptionsWithoutOutput<
 
 type RuntimeToolCapture = {
   calls: ToolCallRecord[];
+  messages: NormalizedMessage[];
 };
 
 /** Adapts an `@openai/agents` Runner workflow into a normalized harness. */
@@ -776,6 +777,7 @@ async function executeOpenAiAgentsHarness<
   const trace = createTraceRecorder(options.name ?? "openai-agents");
   const capture: RuntimeToolCapture = {
     calls: [],
+    messages: [],
   };
 
   return withInstrumentedAgentTools(
@@ -871,6 +873,7 @@ async function executeOpenAiAgentsHarness<
         const usage = resolveUsage(normalizeResult, capture.calls.length);
         const session = resolveSession(input, normalizeResult, output, usage, {
           runtimeToolCalls: capture.calls,
+          runtimeMessages: capture.messages,
         });
         const errors = resolveHarnessRunErrors(normalizeResult);
         const finishedAt = new Date();
@@ -901,6 +904,7 @@ async function executeOpenAiAgentsHarness<
           capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
         const session = resolveSession(input, undefined, undefined, usage, {
           runtimeToolCalls: capture.calls,
+          runtimeMessages: capture.messages,
         });
         const serializedError = serializeError(error);
         const run = {
@@ -1255,12 +1259,6 @@ function finishOpenAiAgentsTrace(
     options.result,
     options.usage,
   );
-  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
-    traceId: trace.id,
-    parentId: trace.rootSpanId,
-    spanIdPrefix: `${trace.id}:tool`,
-  });
-
   return {
     id: trace.id,
     name: trace.name,
@@ -1270,7 +1268,7 @@ function finishOpenAiAgentsTrace(
     metadata: {
       source: "harness-openai-agents",
     },
-    spans: [rootSpan, ...modelSpans, ...toolSpans],
+    spans: [rootSpan, ...modelSpans],
   };
 }
 
@@ -1520,7 +1518,20 @@ async function executeInstrumentedTool<TInput>({
 }) {
   const startedAt = new Date();
   const toolCallId = resolveToolCallId(runContext, rawInput, details);
+  const resolvedToolCallId =
+    toolCallId ?? createRuntimeToolCallId(toolName, capture.calls.length);
   const normalizedArgs = normalizeArguments(rawInput);
+  const call: ToolCallRecord = {
+    id: resolvedToolCallId,
+    name: toolName,
+    ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
+    startedAt: startedAt.toISOString(),
+  };
+  capture.calls.push(call);
+  capture.messages.push({
+    role: "assistant",
+    toolCalls: [call],
+  });
   const replayContext = {
     input,
     signal: context.signal,
@@ -1545,35 +1556,35 @@ async function executeInstrumentedTool<TInput>({
           replay: undefined,
         };
     const finishedAt = new Date();
-    const normalizedResult = normalizeToolResult(execution.result);
-    const call = {
-      ...(toolCallId ? { id: toolCallId } : {}),
+    call.finishedAt = finishedAt.toISOString();
+    call.durationMs = finishedAt.getTime() - startedAt.getTime();
+    call.metadata = normalizeReplayMetadata(execution.replay);
+    const normalizedResult = normalizeContent(execution.result);
+    capture.messages.push({
+      role: "tool",
+      toolCallId: resolvedToolCallId,
       name: toolName,
-      ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
-      ...(normalizedResult !== undefined ? { result: normalizedResult } : {}),
-      startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
-      durationMs: finishedAt.getTime() - startedAt.getTime(),
-      metadata: normalizeReplayMetadata(execution.replay),
-    } satisfies ToolCallRecord;
-
-    capture.calls.push(call);
+      ...(normalizedResult !== undefined ? { content: normalizedResult } : {}),
+      startedAt: call.startedAt,
+      finishedAt: call.finishedAt,
+      durationMs: call.durationMs,
+    });
     return execution.result;
   } catch (error) {
     const finishedAt = new Date();
     const replay = getReplayMetadataFromError(error);
-    const call = {
-      ...(toolCallId ? { id: toolCallId } : {}),
+    call.finishedAt = finishedAt.toISOString();
+    call.durationMs = finishedAt.getTime() - startedAt.getTime();
+    call.metadata = normalizeReplayMetadata(replay);
+    capture.messages.push({
+      role: "tool",
+      toolCallId: resolvedToolCallId,
       name: toolName,
-      ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
       error: normalizeError(error),
-      startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
-      durationMs: finishedAt.getTime() - startedAt.getTime(),
-      metadata: normalizeReplayMetadata(replay),
-    } satisfies ToolCallRecord;
-
-    capture.calls.push(call);
+      startedAt: call.startedAt,
+      finishedAt: call.finishedAt,
+      durationMs: call.durationMs,
+    });
     throw error;
   }
 }
@@ -1729,6 +1740,7 @@ function resolveSession(
   usage: UsageSummary,
   options: {
     runtimeToolCalls: ToolCallRecord[];
+    runtimeMessages: NormalizedMessage[];
   },
 ): NormalizedSession {
   if (
@@ -1753,12 +1765,24 @@ function resolveSession(
       : normalizeHistoryMessages(result, input);
 
   if (newItems && newItems.length > 0) {
-    messages.push(...normalizeRunItems(newItems, options.runtimeToolCalls));
+    messages.push(
+      ...normalizeRunItems(
+        newItems,
+        options.runtimeToolCalls,
+        options.runtimeMessages,
+      ),
+    );
   } else if (outputItems && outputItems.length > 0) {
-    messages.push(...normalizeRunItems(outputItems, options.runtimeToolCalls));
+    messages.push(
+      ...normalizeRunItems(
+        outputItems,
+        options.runtimeToolCalls,
+        options.runtimeMessages,
+      ),
+    );
+  } else if (options.runtimeMessages.length > 0) {
+    messages.push(...options.runtimeMessages);
   }
-
-  appendUnmatchedRuntimeToolCalls(messages, options.runtimeToolCalls);
 
   if (
     output !== undefined &&
@@ -1855,15 +1879,17 @@ function normalizeInputMessages(input: unknown): NormalizedMessage[] {
 function normalizeRunItems(
   items: unknown[],
   runtimeToolCalls: ToolCallRecord[],
+  runtimeMessages: NormalizedMessage[],
 ): NormalizedMessage[] {
   const messages: NormalizedMessage[] = [];
   const outputItemsByCallId = new Map<string, unknown>();
   const runtimeCallsById = new Map(
-    runtimeToolCalls
-      .filter((call): call is ToolCallRecord & { id: string } =>
-        Boolean(call.id),
-      )
-      .map((call) => [call.id, call]),
+    runtimeToolCalls.map((call) => [call.id, call]),
+  );
+  const runtimeResultsById = new Map(
+    runtimeMessages
+      .filter(isToolResultMessage)
+      .map((message) => [message.toolCallId, message]),
   );
 
   for (const item of items) {
@@ -1892,7 +1918,7 @@ function normalizeRunItems(
       const call = normalizeToolCallItem(
         item,
         rawItem,
-        outputItemsByCallId.get(callId ?? ""),
+        callId ? outputItemsByCallId.get(callId) : undefined,
         runtimeCall,
       );
       messages.push({
@@ -1904,7 +1930,14 @@ function normalizeRunItems(
     }
 
     if (isToolCallOutputItem(item, rawItem)) {
-      messages.push(normalizeToolResultMessage(item, rawItem));
+      const message = normalizeToolResultMessage(
+        item,
+        rawItem,
+        runtimeResultsById,
+      );
+      if (message) {
+        messages.push(message);
+      }
       continue;
     }
 
@@ -1920,43 +1953,10 @@ function normalizeRunItems(
   return messages;
 }
 
-function appendUnmatchedRuntimeToolCalls(
-  messages: NormalizedMessage[],
-  runtimeToolCalls: ToolCallRecord[],
-) {
-  const seenIds = new Set(
-    messages.flatMap((message) =>
-      (message.toolCalls ?? [])
-        .map((call) => call.id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const unmatched = runtimeToolCalls.filter(
-    (call) => !call.id || !seenIds.has(call.id),
-  );
-
-  for (const call of unmatched) {
-    messages.push({
-      role: "assistant",
-      toolCalls: [call],
-    });
-
-    if (call.result !== undefined || call.error) {
-      messages.push({
-        role: "tool",
-        ...(call.result !== undefined
-          ? { content: call.result }
-          : call.error && call.error.message.length > 0
-            ? { content: call.error.message }
-            : {}),
-        metadata: normalizeMetadata({
-          name: call.name,
-          toolCallId: call.id,
-          isError: Boolean(call.error),
-        }),
-      });
-    }
-  }
+function isToolResultMessage(
+  message: NormalizedMessage,
+): message is NormalizedToolResultMessage {
+  return message.role === "tool";
 }
 
 function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
@@ -1976,6 +1976,21 @@ function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
   }
 
   const content = normalizeMessageContent(rawItem, item);
+  if (role === "tool") {
+    const toolCallId = resolveRawToolCallId(rawItem);
+    if (!toolCallId) {
+      return undefined;
+    }
+
+    return {
+      role: "tool",
+      toolCallId,
+      name: resolveRawToolName(rawItem),
+      ...(content !== undefined ? { content } : {}),
+      metadata: normalizeRunItemMetadata(item, rawItem),
+    };
+  }
+
   return {
     role,
     ...(content !== undefined ? { content } : {}),
@@ -1996,20 +2011,14 @@ function normalizeToolCallItem(
   const outputStatus = stringProperty(rawOutputItem, "status");
   const outputError =
     outputStatus === "failed" ? normalizeToolOutputError(output) : undefined;
-  const normalizedResult =
-    output !== undefined ? normalizeToolResult(output) : undefined;
   const call = {
     id: resolveRawToolCallId(rawItem),
     name: resolveRawToolName(rawItem),
     arguments: normalizeArguments(getObjectProperty(rawItem, "arguments")),
-    ...(outputError
-      ? { error: outputError }
-      : normalizedResult !== undefined
-        ? { result: normalizedResult }
-        : {}),
     metadata: normalizeMetadata({
       status: getObjectProperty(rawItem, "status"),
       outputStatus,
+      ...(outputError ? { outputError } : {}),
       namespace: getObjectProperty(rawItem, "namespace"),
       providerData: getObjectProperty(rawItem, "providerData"),
       itemType: getObjectProperty(item, "type"),
@@ -2023,19 +2032,38 @@ function normalizeToolCallItem(
 function normalizeToolResultMessage(
   item: unknown,
   rawItem: unknown,
-): NormalizedMessage {
+  runtimeResultsById: Map<string, NormalizedToolResultMessage>,
+): NormalizedMessage | undefined {
+  const toolCallId = resolveRawToolCallId(rawItem);
+  if (!toolCallId) {
+    return undefined;
+  }
+
+  const runtimeResult = runtimeResultsById.get(toolCallId);
+  if (runtimeResult) {
+    return {
+      ...runtimeResult,
+      name: runtimeResult.name ?? resolveRawToolName(rawItem),
+      metadata: mergeMetadata(
+        normalizeRunItemMetadata(item, rawItem),
+        runtimeResult.metadata,
+      ),
+    };
+  }
+
   const output =
     getObjectProperty(item, "output") ?? getObjectProperty(rawItem, "output");
   const status = stringProperty(rawItem, "status");
-  const isError = status === "failed";
+  const error =
+    status === "failed" ? normalizeToolOutputError(output) : undefined;
 
   return {
     role: "tool",
+    toolCallId,
+    name: resolveRawToolName(rawItem),
     ...(output !== undefined ? { content: normalizeContent(output) } : {}),
+    ...(error ? { error } : {}),
     metadata: normalizeMetadata({
-      name: resolveRawToolName(rawItem),
-      toolCallId: resolveRawToolCallId(rawItem),
-      isError,
       status,
       namespace: getObjectProperty(rawItem, "namespace"),
       providerData: getObjectProperty(rawItem, "providerData"),
@@ -2043,6 +2071,16 @@ function normalizeToolResultMessage(
       rawType: getObjectProperty(rawItem, "type"),
     }),
   };
+}
+
+function mergeMetadata(
+  providerMetadata: Record<string, JsonValue> | undefined,
+  runtimeMetadata: Record<string, JsonValue> | undefined,
+) {
+  return normalizeMetadata({
+    ...(providerMetadata ?? {}),
+    ...(runtimeMetadata ?? {}),
+  });
 }
 
 function mergeToolCalls(
@@ -2053,40 +2091,22 @@ function mergeToolCalls(
     return call;
   }
 
-  const error = runtimeCall.error ?? call.error;
-  const hasRuntimeResult = hasOwnObjectProperty(runtimeCall, "result");
-  const hasCallResult = hasOwnObjectProperty(call, "result");
-  const result = hasRuntimeResult ? runtimeCall.result : call.result;
-
-  const merged = {
+  return {
     ...runtimeCall,
     ...call,
-    id: call.id ?? runtimeCall.id,
-    name: call.name ?? runtimeCall.name,
+    id: call.id,
+    name: call.name,
     arguments: call.arguments ?? runtimeCall.arguments,
     metadata: normalizeMetadata({
       ...(runtimeCall.metadata ?? {}),
       ...(call.metadata ?? {}),
     }),
   };
+}
 
-  if (error) {
-    const { result: _result, ...withoutResult } = merged;
-    return {
-      ...withoutResult,
-      error,
-    };
-  }
-
-  const { error: _error, result: _result, ...withoutOutcome } = merged;
-  if (hasRuntimeResult || hasCallResult) {
-    return {
-      ...withoutOutcome,
-      result,
-    };
-  }
-
-  return withoutOutcome;
+/** Creates a runtime-local id used on both assistant tool calls and tool results. */
+function createRuntimeToolCallId(toolName: string, index: number) {
+  return `runtime:${toolName}:${index + 1}`;
 }
 
 function normalizeMessageContent(
@@ -2226,18 +2246,7 @@ function normalizeReplayToolInput(value: unknown): JsonValue {
   return toReplayJsonValue(parsed, "OpenAI Agents tool input");
 }
 
-function normalizeToolResult(value: unknown): JsonValue | undefined {
-  const normalized = toJsonValue(value);
-  if (normalized !== undefined) {
-    return normalized;
-  }
-
-  return value === undefined ? undefined : String(value);
-}
-
-function normalizeToolOutputError(
-  output: unknown,
-): NonNullable<ToolCallRecord["error"]> {
+function normalizeToolOutputError(output: unknown): NormalizedError {
   return {
     message: resolveToolOutputErrorMessage(output),
   };
@@ -2275,7 +2284,7 @@ function parseMaybeJson(value: unknown) {
   }
 }
 
-function normalizeError(error: unknown): NonNullable<ToolCallRecord["error"]> {
+function normalizeError(error: unknown): NormalizedError {
   const serialized = serializeError(error);
   const { message, type, ...details } = serialized;
 
@@ -2367,10 +2376,6 @@ function getObjectProperty(value: unknown, key: string): unknown {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)[key]
     : undefined;
-}
-
-function hasOwnObjectProperty(value: object, key: keyof ToolCallRecord) {
-  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function stringProperty(value: unknown, key: string): string | undefined {

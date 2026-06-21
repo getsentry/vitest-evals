@@ -7,7 +7,12 @@ import {
   spansByKind,
   toolCalls,
 } from "vitest-evals";
-import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
+import type {
+  Harness,
+  HarnessContext,
+  JsonValue,
+  NormalizedSession,
+} from "vitest-evals/harness";
 import { piAiHarness, type PiAiRuntime, type PiAiToolset } from "./index";
 
 type RefundDecision = {
@@ -22,6 +27,12 @@ type Expect<T extends true> = T;
 type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   ? TOutput
   : never;
+
+function firstAssistantToolCall(session: NormalizedSession) {
+  return session.messages.flatMap((message) =>
+    message.role === "assistant" ? (message.toolCalls ?? []) : [],
+  )[0];
+}
 
 const typedRunOutputHarness = piAiHarness({
   agent: {
@@ -220,15 +231,7 @@ test("accepts agent as a factory", async () => {
     preparedInput: "Refund invoice inv_123",
     agentId: "refund-agent",
   });
-  expect(spansByKind(result, "tool")).toMatchObject([
-    {
-      name: "lookupInvoice",
-      status: "ok",
-      attributes: {
-        "gen_ai.tool.name": "lookupInvoice",
-      },
-    },
-  ]);
+  expect(spansByKind(result, "tool")).toEqual([]);
 });
 
 test("does not infer app output from arbitrary custom result shapes", async () => {
@@ -353,16 +356,7 @@ describeEval(
           },
         },
       ]);
-      expect(spansByKind(result, "tool")).toMatchObject([
-        {
-          name: "lookupInvoice",
-          status: "ok",
-          attributes: {
-            "gen_ai.operation.name": "execute_tool",
-            "gen_ai.tool.name": "lookupInvoice",
-          },
-        },
-      ]);
+      expect(spansByKind(result, "tool")).toEqual([]);
     });
   },
 );
@@ -409,10 +403,14 @@ describeEval(
             const toolResult = await nativeTools[0].execute("lookupInvoice", {
               invoiceId: "inv_123",
             });
-            runtime.events.tool("lookupInvoice", {
-              content: toolResult.content,
-              details: toolResult.details,
-            });
+            runtime.events.tool(
+              "lookupInvoice",
+              {
+                content: toolResult.content,
+                details: toolResult.details,
+              },
+              { name: "lookupInvoice" },
+            );
             runtime.events.assistant("approved");
 
             return {
@@ -438,6 +436,8 @@ describeEval(
 
       expect(result.session.messages).toContainEqual({
         role: "tool",
+        toolCallId: "lookupInvoice",
+        name: "lookupInvoice",
         content: {
           content: [
             {
@@ -453,13 +453,9 @@ describeEval(
             refundable: true,
           },
         },
-        metadata: {
-          name: "lookupInvoice",
-        },
       });
       expect(toolCalls(result.session)).toMatchObject([
         {
-          id: "lookupInvoice",
           name: "lookupInvoice",
           arguments: {
             invoiceId: "inv_123",
@@ -470,14 +466,7 @@ describeEval(
           },
         },
       ]);
-      expect(spansByKind(result, "tool")).toMatchObject([
-        {
-          name: "lookupInvoice",
-          attributes: {
-            "gen_ai.tool.call.id": "lookupInvoice",
-          },
-        },
-      ]);
+      expect(spansByKind(result, "tool")).toEqual([]);
     });
   },
 );
@@ -524,10 +513,14 @@ describeEval(
             const toolResult = await nativeTools[0].execute("lookupInvoice", {
               invoiceId: "inv_123",
             });
-            runtime.events.tool("lookupInvoice", {
-              content: toolResult.content,
-              details: toolResult.details,
-            });
+            runtime.events.tool(
+              "lookupInvoice",
+              {
+                content: toolResult.content,
+                details: toolResult.details,
+              },
+              { name: "lookupInvoice" },
+            );
             runtime.events.assistant("approved");
 
             return {
@@ -617,10 +610,14 @@ describeEval(
                 invoiceId: "inv_123",
               },
             );
-            runtime.events.tool("lookupInvoice", {
-              content: toolResult.content,
-              details: toolResult.details,
-            });
+            runtime.events.tool(
+              "lookupInvoice",
+              {
+                content: toolResult.content,
+                details: toolResult.details,
+              },
+              { name: "lookupInvoice" },
+            );
             runtime.events.assistant("approved");
 
             return {
@@ -707,10 +704,14 @@ describeEval(
             const toolResult = await nativeTools[0].execute("lookupInvoice", {
               invoiceId: "inv_123",
             });
-            runtime.events.tool("lookupInvoice", {
-              content: toolResult.content,
-              details: toolResult.details,
-            });
+            runtime.events.tool(
+              "lookupInvoice",
+              {
+                content: toolResult.content,
+                details: toolResult.details,
+              },
+              { name: "lookupInvoice" },
+            );
             runtime.events.assistant("approved");
 
             return {
@@ -828,14 +829,13 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
       invoiceId: "inv_123",
       refundable: true,
     },
-    metadata: {
-      replay: {
-        status: "recorded",
-      },
-    },
+  });
+  const firstCall = firstAssistantToolCall(firstRun.session);
+  expect(firstCall?.metadata?.replay).toMatchObject({
+    status: "recorded",
   });
   const recordingPath = (
-    firstCalls[0].metadata?.replay as { recordingPath: string }
+    firstCall?.metadata?.replay as { recordingPath: string }
   ).recordingPath;
   expect(recordingPath).toContain("lookupInvoice.native");
   const recording = JSON.parse(
@@ -871,13 +871,11 @@ test("lets native Pi tools own replay when they delegate to a runtime tool of th
   expect(nativeExecute).toHaveBeenCalledTimes(1);
   expect(lookupInvoice).toHaveBeenCalledTimes(1);
   expect(toolCalls(secondRun.session)).toHaveLength(1);
-  expect(toolCalls(secondRun.session)[0]).toMatchObject({
-    name: "lookupInvoice",
-    metadata: {
-      replay: {
-        status: "replayed",
-      },
-    },
+  expect(toolCalls(secondRun.session)[0]?.name).toBe("lookupInvoice");
+  expect(
+    firstAssistantToolCall(secondRun.session)?.metadata?.replay,
+  ).toMatchObject({
+    status: "replayed",
   });
 });
 
@@ -1166,15 +1164,7 @@ test("attaches a partial run when the harness errors", async () => {
       },
     },
   ]);
-  expect(spansByKind(run!, "tool")).toMatchObject([
-    {
-      name: "lookupInvoice",
-      status: "error",
-      error: {
-        message: "Invoice inv_missing not found",
-      },
-    },
-  ]);
+  expect(spansByKind(run!, "tool")).toEqual([]);
 });
 
 test("attaches a failed run when agent setup fails", async () => {
@@ -1293,21 +1283,19 @@ test("replays native agent tools without breaking the agent-facing result", asyn
   expect(firstRun.output).toEqual({
     status: "approved",
   });
-  const [firstCall] = toolCalls(firstRun.session);
-  expect(firstCall).toMatchObject({
+  expect(toolCalls(firstRun.session)[0]).toMatchObject({
     name: "lookupInvoice",
     result: {
       invoiceId: "inv_123",
       refundable: true,
     },
-    metadata: {
-      replay: {
-        status: "recorded",
-      },
-    },
+  });
+  const firstCall = firstAssistantToolCall(firstRun.session);
+  expect(firstCall?.metadata?.replay).toMatchObject({
+    status: "recorded",
   });
   const recordingPath = (
-    firstCall.metadata?.replay as { recordingPath: string }
+    firstCall?.metadata?.replay as { recordingPath: string }
   ).recordingPath;
   const recording = JSON.parse(
     readFileSync(join(process.cwd(), recordingPath), "utf8"),
@@ -1353,11 +1341,6 @@ test("replays native agent tools without breaking the agent-facing result", asyn
         invoiceId: "inv_123",
         refundable: true,
       },
-      metadata: {
-        replay: {
-          status: "recorded",
-        },
-      },
     },
   ]);
 
@@ -1377,13 +1360,13 @@ test("replays native agent tools without breaking the agent-facing result", asyn
         invoiceId: "inv_123",
         refundable: true,
       },
-      metadata: {
-        replay: {
-          status: "replayed",
-        },
-      },
     },
   ]);
+  expect(
+    firstAssistantToolCall(secondRun.session)?.metadata?.replay,
+  ).toMatchObject({
+    status: "replayed",
+  });
 });
 
 test("does not opt native agent tools into replay from tool objects", async () => {
@@ -1448,7 +1431,7 @@ test("does not opt native agent tools into replay from tool objects", async () =
   });
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+  expect(firstAssistantToolCall(run.session)?.metadata?.replay).toBeUndefined();
 });
 
 test("passes run input and context to agent factory before native tool instrumentation", async () => {
@@ -1552,13 +1535,13 @@ test("passes run input and context to agent factory before native tool instrumen
         preparedInput: "Refund invoice inv_123",
         scenario: "refund",
       },
-      metadata: {
-        replay: {
-          status: "recorded",
-        },
-      },
     },
   ]);
+  expect(
+    firstAssistantToolCall(result.session)?.metadata?.replay,
+  ).toMatchObject({
+    status: "recorded",
+  });
 });
 
 test("records and replays opt-in tools in auto mode", async () => {
@@ -1600,13 +1583,13 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 
   expect(execute).toHaveBeenCalledTimes(1);
-  const firstCall = toolCalls(firstRun.session)[0];
-  expect(firstCall.metadata?.replay).toMatchObject({
+  const firstCall = firstAssistantToolCall(firstRun.session);
+  expect(firstCall?.metadata?.replay).toMatchObject({
     status: "recorded",
   });
 
   const recordingPath = (
-    firstCall.metadata?.replay as { recordingPath: string }
+    firstCall?.metadata?.replay as { recordingPath: string }
   ).recordingPath;
   expect(recordingPath).toMatch(/^\.tmp-pi-replay-/);
   const recording = JSON.parse(
@@ -1633,7 +1616,9 @@ test("records and replays opt-in tools in auto mode", async () => {
   });
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
+  expect(
+    firstAssistantToolCall(secondRun.session)?.metadata?.replay,
+  ).toMatchObject({
     status: "replayed",
   });
 });
@@ -1675,7 +1660,7 @@ test("does not opt runtime tools into replay from tool definitions", async () =>
   });
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+  expect(firstAssistantToolCall(run.session)?.metadata?.replay).toBeUndefined();
 });
 
 test("errors when strict mode is missing a recording", async () => {
