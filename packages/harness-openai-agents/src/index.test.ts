@@ -1017,6 +1017,88 @@ test("prefers captured local tool results over model-visible output wrappers", a
   );
 });
 
+test("uses run item envelope ids to join captured tool results", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: vi.fn(async () => ({
+      bottleId: "bt_123",
+      family: "bourbon",
+    })),
+  } satisfies OpenAiAgentsTool<string>;
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    } satisfies DemoAgent,
+    runner: {
+      run: async (agent: DemoAgent, _input: string, runOptions) => {
+        const evidence = await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_123",
+          }),
+          {
+            toolCallId: "call_lookup",
+          },
+        );
+
+        return {
+          finalOutput: "classified",
+          newItems: [
+            {
+              type: "tool_call_item",
+              callId: "call_lookup",
+              rawItem: {
+                type: "function_call",
+                name: "lookupBottle",
+                arguments: JSON.stringify({
+                  bottleId: "bt_123",
+                }),
+                status: "completed",
+              },
+            },
+            {
+              type: "tool_call_output_item",
+              callId: "call_lookup",
+              rawItem: {
+                type: "function_call_result",
+                name: "lookupBottle",
+                status: "completed",
+                output: {
+                  type: "text",
+                  text: JSON.stringify(evidence),
+                },
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+
+  expect(firstAssistantToolCall(result.session)).toMatchObject({
+    id: "call_lookup",
+    name: "lookupBottle",
+  });
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupBottle",
+      result: {
+        bottleId: "bt_123",
+        family: "bourbon",
+      },
+      status: "ok",
+    },
+  ]);
+});
+
 test("preserves explicit null captured local tool results", async () => {
   const lookupBottle = {
     type: "function",

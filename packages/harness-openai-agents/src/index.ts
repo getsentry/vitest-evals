@@ -1891,7 +1891,7 @@ function normalizeRunItems(
 
   for (const item of items) {
     const rawItem = getRunItemRawItem(item);
-    const callId = resolveRawToolCallId(rawItem);
+    const callId = resolveRunItemToolCallId(item, rawItem);
     if (callId && isToolCallOutputItem(item, rawItem)) {
       outputItemsByCallId.set(callId, item);
     }
@@ -1910,11 +1910,12 @@ function normalizeRunItems(
     }
 
     if (isToolCallItem(item, rawItem)) {
-      const callId = resolveRawToolCallId(rawItem);
+      const callId = resolveRunItemToolCallId(item, rawItem);
       const runtimeCall = callId ? runtimeCallsById.get(callId) : undefined;
       const call = normalizeToolCallItem(
         item,
         rawItem,
+        callId,
         callId ? outputItemsByCallId.get(callId) : undefined,
         runtimeCall,
       );
@@ -1974,7 +1975,7 @@ function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
 
   const content = normalizeMessageContent(rawItem, item);
   if (role === "tool") {
-    const toolCallId = resolveRawToolCallId(rawItem);
+    const toolCallId = resolveRunItemToolCallId(item, rawItem);
     if (!toolCallId) {
       return undefined;
     }
@@ -1998,6 +1999,7 @@ function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
 function normalizeToolCallItem(
   item: unknown,
   rawItem: unknown,
+  toolCallId: string | undefined,
   outputItem: unknown,
   runtimeCall: ToolCallRecord | undefined,
 ): ToolCallRecord {
@@ -2009,7 +2011,7 @@ function normalizeToolCallItem(
   const outputError =
     outputStatus === "failed" ? normalizeToolOutputError(output) : undefined;
   const call = {
-    id: resolveRawToolCallId(rawItem),
+    id: toolCallId,
     name: resolveRawToolName(rawItem),
     arguments: normalizeArguments(getObjectProperty(rawItem, "arguments")),
     metadata: normalizeMetadata({
@@ -2031,7 +2033,7 @@ function normalizeToolResultMessage(
   rawItem: unknown,
   runtimeResultsById: Map<string, NormalizedToolResultMessage>,
 ): NormalizedMessage | undefined {
-  const toolCallId = resolveRawToolCallId(rawItem);
+  const toolCallId = resolveRunItemToolCallId(item, rawItem);
   if (!toolCallId) {
     return undefined;
   }
@@ -2091,7 +2093,7 @@ function mergeToolCalls(
   return {
     ...runtimeCall,
     ...call,
-    id: call.id,
+    id: call.id ?? runtimeCall.id,
     name: call.name,
     arguments: call.arguments ?? runtimeCall.arguments,
     metadata: normalizeMetadata({
@@ -2183,6 +2185,15 @@ function resolveRawToolCallId(rawItem: unknown) {
   );
 }
 
+function resolveRunItemToolCallId(item: unknown, rawItem: unknown) {
+  return (
+    resolveRawToolCallId(rawItem) ??
+    stringProperty(item, "callId") ??
+    stringProperty(item, "call_id") ??
+    stringProperty(item, "id")
+  );
+}
+
 function resolveRawToolName(rawItem: unknown) {
   const rawType = stringProperty(rawItem, "type");
   if (rawType === "tool_search_call" || rawType === "tool_search_output") {
@@ -2212,7 +2223,7 @@ function countToolCallsFromResult(result: unknown): number {
       return count;
     }
 
-    const callId = resolveRawToolCallId(rawItem);
+    const callId = resolveRunItemToolCallId(item, rawItem);
     if (callId) {
       if (seenCallIds.has(callId)) {
         return count;
