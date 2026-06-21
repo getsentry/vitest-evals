@@ -84,6 +84,7 @@ export type UsageSummary = {
 /** Tool-call summary shown in reporter output. */
 export type ToolCallSummary = {
   name: string;
+  status: "pending" | "ok" | "error";
   error?: string;
   durationMs?: number;
 };

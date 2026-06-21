@@ -245,6 +245,10 @@ describe("collectEvalReport", () => {
               message: "blocked by policy",
             },
           },
+          {
+            name: "emailCustomer",
+            status: "pending",
+          },
         ],
       },
     };
@@ -253,19 +257,26 @@ describe("collectEvalReport", () => {
       workspace: "/repo",
     });
 
-    expect(report.usage.toolCalls).toBe(2);
+    expect(report.usage.toolCalls).toBe(3);
     expect(report.failures[0]?.harness).toBeUndefined();
     expect(report.failures[0]?.toolCalls).toMatchObject([
       {
         name: "validateRefund",
+        status: "ok",
       },
       {
         name: "notifyCustomer",
+        status: "error",
+      },
+      {
+        name: "emailCustomer",
+        status: "pending",
       },
     ]);
     expect(renderJobSummary(report)).toContain(
       "notifyCustomer  error: blocked by policy",
     );
+    expect(renderJobSummary(report)).toContain("emailCustomer   pending");
   });
 });
 
@@ -775,6 +786,22 @@ describe("buildCheckAnnotations", () => {
 
     expect(buildCheckAnnotations(report, { maxAnnotations: 100 })).toHaveLength(
       50,
+    );
+  });
+
+  test("labels pending tool calls in Check Run annotations", () => {
+    const json = structuredClone(sampleJson);
+    const harnessRun = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .harness.run;
+    harnessRun.session.messages[0].toolCalls.push({
+      name: "emailCustomer",
+    });
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(buildCheckAnnotations(report)[0]?.raw_details).toContain(
+      "- emailCustomer: pending",
     );
   });
 });

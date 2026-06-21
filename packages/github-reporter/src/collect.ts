@@ -137,6 +137,7 @@ function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
 function toToolCallSummary(call: ToolCall): ToolCallSummary {
   return {
     name: call.name,
+    status: call.status,
     error: call.status === "error" ? getToolCallError(call.error) : undefined,
   };
 }
