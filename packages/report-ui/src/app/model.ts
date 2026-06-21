@@ -301,6 +301,9 @@ function sessionTranscriptEvents(run: HarnessRun) {
       if (attachTranscriptToolResult(pendingTools, message)) {
         return;
       }
+
+      events.push(transcriptToolResultEvent(message, messageIndex));
+      return;
     }
 
     if (message.content !== undefined) {
@@ -331,6 +334,24 @@ function sessionTranscriptEvents(run: HarnessRun) {
     );
   });
   return events;
+}
+
+function transcriptToolResultEvent(
+  result: NormalizedToolResultMessage,
+  messageIndex: number,
+): TranscriptToolEvent {
+  return {
+    callId: result.toolCallId,
+    ...(result.durationMs !== undefined
+      ? { durationMs: result.durationMs }
+      : {}),
+    ...(result.error ? { error: result.error } : {}),
+    id: `message-${messageIndex}:tool-result`,
+    kind: "tool",
+    name: result.name ?? result.toolCallId,
+    ...(result.content !== undefined ? { result: result.content } : {}),
+    status: result.error ? "error" : "ok",
+  };
 }
 
 function attachTranscriptToolResult(

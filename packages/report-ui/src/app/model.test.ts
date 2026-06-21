@@ -327,6 +327,34 @@ describe("case helpers", () => {
     });
   });
 
+  test("renders unmatched tool result errors as transcript tool events", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: {
+        messages: [
+          {
+            role: "tool",
+            toolCallId: "call_timeout",
+            name: "lookupInvoice",
+            error: { message: "Tool timed out", type: "TimeoutError" },
+          },
+        ],
+      },
+      usage: {},
+    });
+
+    expect(transcript.events).toEqual([
+      {
+        callId: "call_timeout",
+        error: { message: "Tool timed out", type: "TimeoutError" },
+        id: "message-0:tool-result",
+        kind: "tool",
+        name: "lookupInvoice",
+        status: "error",
+      },
+    ]);
+  });
+
   test("does not let usage undercount recorded session tool calls", () => {
     const testCase = structuredClone(workspace.cases[0]!);
     testCase.harness!.run!.usage.toolCalls = 1;
