@@ -1937,6 +1937,18 @@ function normalizeRunItems(
   for (const item of items) {
     const rawItem = getRunItemRawItem(item);
 
+    if (isToolCallOutputItem(item, rawItem)) {
+      const message = normalizeToolResultMessage(
+        item,
+        rawItem,
+        runtimeResultsById,
+      );
+      if (message) {
+        events.push(message);
+      }
+      continue;
+    }
+
     const message = normalizeModelMessage(item);
     if (message) {
       events.push(message);
@@ -1973,18 +1985,6 @@ function normalizeRunItems(
           ? { metadata: mergeMetadata(call.metadata, metadata) }
           : {}),
       });
-      continue;
-    }
-
-    if (isToolCallOutputItem(item, rawItem)) {
-      const message = normalizeToolResultMessage(
-        item,
-        rawItem,
-        runtimeResultsById,
-      );
-      if (message) {
-        events.push(message);
-      }
       continue;
     }
 

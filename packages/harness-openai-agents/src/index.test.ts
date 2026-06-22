@@ -1425,6 +1425,85 @@ test("uses run item envelope ids to join captured tool results", async () => {
   ]);
 });
 
+test("merges runtime timing for tool output items with tool message roles", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: vi.fn(async () => ({
+      bottleId: "bt_123",
+      family: "bourbon",
+    })),
+  } satisfies OpenAiAgentsTool<string>;
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    },
+    runner: {
+      run: async (agent: DemoAgent, _input: string, runOptions) => {
+        const evidence = await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_123",
+          }),
+          createOpenAiToolCallDetails("call_lookup"),
+        );
+
+        return {
+          finalOutput: "classified",
+          newItems: [
+            {
+              type: "tool_call_item",
+              rawItem: {
+                type: "function_call",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                arguments: JSON.stringify({
+                  bottleId: "bt_123",
+                }),
+                status: "completed",
+              },
+            },
+            {
+              type: "tool_call_output_item",
+              rawItem: {
+                type: "function_call_result",
+                role: "tool",
+                callId: "call_lookup",
+                name: "lookupBottle",
+                status: "completed",
+                output: evidence as JsonValue,
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+  const toolResult = result.session.events.find(
+    (event) => event.type === "tool_result",
+  );
+
+  expect(toolResult).toMatchObject({
+    type: "tool_result",
+    toolCallId: "call_lookup",
+    name: "lookupBottle",
+    content: {
+      bottleId: "bt_123",
+      family: "bourbon",
+    },
+    startedAt: expect.any(String),
+    finishedAt: expect.any(String),
+    durationMs: expect.any(Number),
+  });
+});
+
 test("normalizes Responses-style function call output items", async () => {
   const harness = openaiAgentsHarness({
     agent: {
