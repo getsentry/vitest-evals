@@ -373,11 +373,67 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
-  test("drops persisted session messages that cannot convert to valid events", () => {
+  test("normalizes message tool calls without provider ids", () => {
     expect(
       readEvalTaskMeta({
         harness: {
-          name: "malformed",
+          name: "message-transport",
+          run: {
+            session: {
+              messages: [
+                {
+                  role: "assistant",
+                  content: "Checking invoice",
+                  toolCalls: [
+                    {
+                      name: "lookupInvoice",
+                      result: {
+                        refundable: true,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).toMatchObject({
+      harness: {
+        name: "message-transport",
+        run: {
+          session: {
+            events: [
+              {
+                type: "message",
+                role: "assistant",
+                content: "Checking invoice",
+              },
+              {
+                type: "tool_call",
+                id: "message-0:tool-call-0",
+                name: "lookupInvoice",
+              },
+              {
+                type: "tool_result",
+                toolCallId: "message-0:tool-call-0",
+                content: {
+                  refundable: true,
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  test("drops provider-style tool messages without tool call ids", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "message-transport",
           run: {
             session: {
               messages: [
@@ -389,6 +445,13 @@ describe("readEvalTaskMeta", () => {
                     },
                   ],
                 },
+                {
+                  role: "tool",
+                  name: "lookupInvoice",
+                  content: {
+                    refundable: true,
+                  },
+                },
               ],
             },
             usage: {},
@@ -397,7 +460,7 @@ describe("readEvalTaskMeta", () => {
       }),
     ).toEqual({
       harness: {
-        name: "malformed",
+        name: "message-transport",
       },
     });
   });

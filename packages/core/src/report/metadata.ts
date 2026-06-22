@@ -160,8 +160,7 @@ function normalizePersistedToolCall(input: unknown) {
 }
 
 // This is only for persisted artifacts that used provider-style message
-// transport. Current harness runs must store `session.events`; missing tool ids
-// are not synthesized because the event model requires real links.
+// transport. Current harness runs must store `session.events`.
 function normalizePersistedSession(input: unknown) {
   if (!isJsonObject(input) || Array.isArray(input.events)) {
     return input;

@@ -68,7 +68,7 @@ export type TranscriptMessageEvent = {
 export type TranscriptToolCallEvent = {
   /** Transcript event discriminator. */
   type: "tool_call";
-  /** Provider, runtime, or harness-generated id used to link a result event. */
+  /** Transcript-local id used to link a result event. */
   id: string;
   /** Tool name as exposed to the agent or application runtime. */
   name: string;
@@ -117,8 +117,12 @@ export type TranscriptMessageToolCall = Omit<
   TranscriptToolCallEvent,
   "type" | "id"
 > & {
-  /** Provider or runtime tool-call id used to link result events. */
-  id: string;
+  /** Tool-call id when the message transport exposes one. */
+  id?: string;
+  /** JSON-safe inline result for message transports that nest outcomes. */
+  result?: JsonValue;
+  /** Inline error for message transports that nest outcomes. */
+  error?: NormalizedError;
 };
 
 /** Provider-style message accepted at harness input boundaries. */
@@ -144,7 +148,7 @@ export function messagesToTranscriptEvents(
 ): TranscriptEvent[] {
   const events: TranscriptEvent[] = [];
 
-  for (const message of messages) {
+  for (const [messageIndex, message] of messages.entries()) {
     if (message.role === "tool") {
       events.push({
         type: "tool_result",
@@ -175,10 +179,12 @@ export function messagesToTranscriptEvents(
       continue;
     }
 
-    for (const toolCall of message.toolCalls ?? []) {
+    for (const [toolIndex, toolCall] of (message.toolCalls ?? []).entries()) {
+      const id =
+        toolCall.id ?? `message-${messageIndex}:tool-call-${toolIndex}`;
       events.push({
         type: "tool_call",
-        id: toolCall.id,
+        id,
         name: toolCall.name,
         ...(toolCall.arguments !== undefined
           ? { arguments: toolCall.arguments }
@@ -190,6 +196,23 @@ export function messagesToTranscriptEvents(
           : {}),
         ...(toolCall.metadata ? { metadata: toolCall.metadata } : {}),
       });
+      if (toolCall.result !== undefined || toolCall.error) {
+        events.push({
+          type: "tool_result",
+          toolCallId: id,
+          name: toolCall.name,
+          ...(toolCall.result !== undefined
+            ? { content: toolCall.result }
+            : {}),
+          ...(toolCall.error ? { error: toolCall.error } : {}),
+          ...(toolCall.startedAt ? { startedAt: toolCall.startedAt } : {}),
+          ...(toolCall.finishedAt ? { finishedAt: toolCall.finishedAt } : {}),
+          ...(toolCall.durationMs !== undefined
+            ? { durationMs: toolCall.durationMs }
+            : {}),
+          ...(toolCall.metadata ? { metadata: toolCall.metadata } : {}),
+        });
+      }
     }
   }
 
