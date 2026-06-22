@@ -10,6 +10,7 @@ import {
   TranscriptToolResultEventSchema,
   TranscriptEventSchema,
   NormalizedTraceSchema,
+  messagesToTranscriptEvents,
   TimingSummarySchema,
   ToolCallSchema,
   UsageSummarySchema,
@@ -65,39 +66,45 @@ export const EvalTaskMetaSchema = z
 /** Combined eval and harness metadata stored on a Vitest assertion. */
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
-const LenientToolCallSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      name: z.string(),
-      arguments: JsonObjectSchema.optional(),
-      status: z.literal("pending"),
-    })
-    .strip(),
-  z
-    .object({
-      name: z.string(),
-      arguments: JsonObjectSchema.optional(),
-      status: z.literal("ok"),
-      result: JsonValueSchema.optional(),
-    })
-    .strip(),
-  z
-    .object({
-      name: z.string(),
-      arguments: JsonObjectSchema.optional(),
-      status: z.literal("error"),
-      error: NormalizedErrorSchema,
-    })
-    .strip(),
-]);
+const LenientToolCallSchema = z.preprocess(
+  normalizePersistedToolCall,
+  z.discriminatedUnion("status", [
+    z
+      .object({
+        name: z.string(),
+        arguments: JsonObjectSchema.optional(),
+        status: z.literal("pending"),
+      })
+      .strip(),
+    z
+      .object({
+        name: z.string(),
+        arguments: JsonObjectSchema.optional(),
+        status: z.literal("ok"),
+        result: JsonValueSchema.optional(),
+      })
+      .strip(),
+    z
+      .object({
+        name: z.string(),
+        arguments: JsonObjectSchema.optional(),
+        status: z.literal("error"),
+        error: NormalizedErrorSchema,
+      })
+      .strip(),
+  ]),
+);
 const LenientTranscriptEventSchema = z.union([
   TranscriptMessageEventSchema.strip(),
   TranscriptToolCallEventSchema.strip(),
   TranscriptToolResultEventSchema.strip(),
 ]);
-const LenientSessionSchema = NormalizedSessionSchema.extend({
-  events: z.array(LenientTranscriptEventSchema).default([]).catch([]),
-}).strip();
+const LenientSessionSchema = z.preprocess(
+  normalizePersistedSession,
+  NormalizedSessionSchema.extend({
+    events: z.array(LenientTranscriptEventSchema).default([]).catch([]),
+  }).strip(),
+);
 const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
 const LenientSpanSchema = NormalizedSpanSchema.extend({
   events: z.array(LenientSpanEventSchema).optional().catch(undefined),
@@ -138,4 +145,35 @@ export function readEvalTaskMeta(input: unknown): EvalTaskMeta | undefined {
   };
 
   return meta.eval || meta.harness ? meta : undefined;
+}
+
+function normalizePersistedToolCall(input: unknown) {
+  if (!isJsonObject(input) || typeof input.status === "string") {
+    return input;
+  }
+
+  if (input.error !== undefined) {
+    return { ...input, status: "error" };
+  }
+
+  return { ...input, status: "ok" };
+}
+
+function normalizePersistedSession(input: unknown) {
+  if (!isJsonObject(input) || Array.isArray(input.events)) {
+    return input;
+  }
+
+  const messages = input.messages;
+  if (!Array.isArray(messages)) {
+    return input;
+  }
+
+  const events = messagesToTranscriptEvents(messages as never[]);
+  const parsedEvents = events
+    .map((event) => LenientTranscriptEventSchema.safeParse(event))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+
+  return { ...input, events: parsedEvents };
 }

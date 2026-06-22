@@ -254,6 +254,114 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
+  test("normalizes persisted eval tool calls without status", () => {
+    expect(
+      readEvalTaskMeta({
+        eval: {
+          avgScore: 1,
+          toolCalls: [
+            {
+              name: "lookupInvoice",
+            },
+            {
+              name: "createRefund",
+              error: {
+                message: "amount mismatch",
+              },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      eval: {
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+            status: "ok",
+          },
+          {
+            name: "createRefund",
+            status: "error",
+            error: {
+              message: "amount mismatch",
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  test("normalizes persisted session messages into events", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "persisted",
+          run: {
+            session: {
+              messages: [
+                {
+                  role: "user",
+                  content: "Refund invoice inv_123",
+                },
+                {
+                  role: "assistant",
+                  content: "Checking invoice",
+                  toolCalls: [
+                    {
+                      id: "call_lookup",
+                      name: "lookupInvoice",
+                      arguments: {
+                        invoiceId: "inv_123",
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    refundable: true,
+                  },
+                },
+              ],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).toMatchObject({
+      harness: {
+        run: {
+          session: {
+            events: [
+              {
+                type: "message",
+                role: "user",
+                content: "Refund invoice inv_123",
+              },
+              {
+                type: "message",
+                role: "assistant",
+                content: "Checking invoice",
+              },
+              {
+                type: "tool_call",
+                id: "call_lookup",
+                name: "lookupInvoice",
+              },
+              {
+                type: "tool_result",
+                toolCallId: "call_lookup",
+                name: "lookupInvoice",
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+
   test("defaults missing harness errors for legacy run metadata", () => {
     expect(
       readEvalTaskMeta({
