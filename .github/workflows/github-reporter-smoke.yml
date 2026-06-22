@@ -229,18 +229,26 @@ jobs:
           ];
 
           const assertionResults = cases.map((testCase) => {
-            const toolCalls = (testCase.toolCalls ?? []).map((toolCall, index) => ({
-              id: `call_${index + 1}`,
-              name: toolCall.name,
-              durationMs: toolCall.durationMs,
-            }));
-            const toolResults = (testCase.toolCalls ?? []).map((toolCall, index) => ({
-              role: "tool",
-              toolCallId: `call_${index + 1}`,
-              name: toolCall.name,
-              durationMs: toolCall.durationMs,
-              ...(toolCall.error ? { error: toolCall.error } : {}),
-            }));
+            const toolEvents = (testCase.toolCalls ?? []).flatMap(
+              (toolCall, index) => {
+                const toolCallId = `call_${index + 1}`;
+                return [
+                  {
+                    type: "tool_call",
+                    id: toolCallId,
+                    name: toolCall.name,
+                    durationMs: toolCall.durationMs,
+                  },
+                  {
+                    type: "tool_result",
+                    toolCallId,
+                    name: toolCall.name,
+                    durationMs: toolCall.durationMs,
+                    ...(toolCall.error ? { error: toolCall.error } : {}),
+                  },
+                ];
+              },
+            );
 
             return {
               ancestorTitles: ["refund eval"],
@@ -282,13 +290,7 @@ jobs:
                       totalMs: testCase.timingMs,
                     },
                     session: {
-                      messages: [
-                        {
-                          role: "assistant",
-                          toolCalls,
-                        },
-                        ...toolResults,
-                      ],
+                      events: toolEvents,
                     },
                     errors: testCase.errors ?? [],
                   },
