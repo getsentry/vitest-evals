@@ -78,9 +78,10 @@ message format.
 Harness adapters and `createHarness(...)` may accept either:
 
 - normalized `events`, which are stored directly
-- provider-style `messages`, including Chat Completions-style assistant
-  `toolCalls` and separate `role: "tool"` results, which are normalized into
-  events at the harness boundary
+- OpenAI/AI SDK-inspired `messages`, including assistant `toolCalls` or
+  `tool_calls`, separate `role: "tool"` results, and AI SDK-style
+  `tool-call`/`tool-result` content parts, which are normalized into events at
+  the harness boundary
 
 After that boundary, there is no `messages` fallback and no nested
 `assistant.toolCalls` data in normalized run metadata.
@@ -129,6 +130,10 @@ stored normalized shape:
   `function_call_output` items as first-class conversation items.
 - OpenAI Agents exposes run items such as `tool_call_item` and
   `tool_call_output_item`.
+- AI SDK model messages may represent ordered text and tool activity as
+  `content` parts with `type: "tool-call"` and `type: "tool-result"`.
+- Anthropic Messages represents tool use through `tool_use` and `tool_result`
+  content blocks.
 
 All of those shapes normalize into the same ordered event stream.
 
@@ -184,8 +189,8 @@ function normalizeSession(input: string, result: ProviderResult): NormalizedSess
 }
 ```
 
-For Chat Completions-style inputs, custom harness authors may still return
-message-shaped data and let `createHarness(...)` normalize it:
+For OpenAI Chat Completions-style inputs, custom harness authors may still
+return message-shaped data and let `createHarness(...)` normalize it:
 
 ```ts
 return {
@@ -206,6 +211,11 @@ return {
   ],
 };
 ```
+
+AI SDK-style message content parts are also accepted when they use
+`type: "tool-call"` and `type: "tool-result"`. Other providers that expose
+content-block or item-stream payloads should map those records into `events`
+directly instead of expecting `messages` to parse every raw provider object.
 
 ## First-Party Harness Responsibilities
 

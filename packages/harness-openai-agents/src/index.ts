@@ -2157,6 +2157,7 @@ function isToolCallItem(item: unknown, rawItem: unknown) {
   return (
     itemType === "tool_call_item" ||
     rawType === "function_call" ||
+    rawType === "custom_tool_call" ||
     rawType === "hosted_tool_call" ||
     rawType === "tool_search_call" ||
     rawType === "shell_call" ||
@@ -2171,9 +2172,12 @@ function isToolCallOutputItem(item: unknown, rawItem: unknown) {
 
   return (
     itemType === "tool_call_output_item" ||
+    rawType === "function_call_output" ||
     rawType === "function_call_result" ||
+    rawType === "custom_tool_call_output" ||
     rawType === "tool_search_output" ||
     rawType === "shell_call_output" ||
+    rawType === "computer_call_output" ||
     rawType === "computer_call_result" ||
     rawType === "apply_patch_call_output"
   );

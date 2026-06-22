@@ -334,8 +334,8 @@ case-specific judge criteria through matcher options, or configure suite-wide
 criteria on the judge instance.
 
 `createHarness(...)` lightweight results must return at least one normalized
-event, either directly as `events` or from provider-style `messages`. Stored
-run metadata always uses `session.events`, a flat ordered transcript:
+event, either directly as `events` or from OpenAI/AI SDK-inspired `messages`.
+Stored run metadata always uses `session.events`, a flat ordered transcript:
 
 ```ts
 events: [
@@ -356,10 +356,13 @@ events: [
 ];
 ```
 
-For Chat Completions-style app code, returning `messages` is also accepted; the
-harness normalizer converts assistant `toolCalls` and `role: "tool"` results
-into the same flat `events` shape. Assertions and judges should read normalized
-projections through helpers such as `toolCalls(result)`, `userMessages(result)`,
+For OpenAI Chat Completions-style or AI SDK-style app code, returning
+`messages` is also accepted; the harness normalizer converts assistant
+`toolCalls`/`tool_calls`, `role: "tool"` results, and AI SDK
+`tool-call`/`tool-result` content parts into the same flat `events` shape.
+Other provider content blocks or item streams should adapt those records into
+`events` directly. Assertions and judges should read normalized projections
+through helpers such as `toolCalls(result)`, `userMessages(result)`,
 `assistantMessages(result)`, `toolMessages(result)`, and `spans(result)` instead
 of manually walking provider payloads. Return a full `HarnessRun` only when you
 need exact session, trace, or usage control.

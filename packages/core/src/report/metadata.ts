@@ -158,8 +158,8 @@ function normalizePersistedToolCall(input: unknown) {
   return { ...input, status: "ok" };
 }
 
-// This is only for persisted artifacts that used provider-style message
-// transport. Current harness runs must store `session.events`. Malformed or
+// This is only for persisted artifacts that used message transport. Current
+// harness runs must store `session.events`. Malformed or
 // empty message sets are left unchanged so the strict schema rejects the run
 // rather than surfacing an empty transcript.
 function normalizePersistedSession(input: unknown) {
@@ -172,7 +172,12 @@ function normalizePersistedSession(input: unknown) {
     return input;
   }
 
-  const events = messagesToTranscriptEvents(messages as never[]);
+  let events: ReturnType<typeof messagesToTranscriptEvents>;
+  try {
+    events = messagesToTranscriptEvents(messages as never[]);
+  } catch {
+    return input;
+  }
   if (events.length === 0) {
     return input;
   }

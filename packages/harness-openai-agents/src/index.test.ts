@@ -1105,6 +1105,66 @@ test("uses run item envelope ids to join captured tool results", async () => {
   ]);
 });
 
+test("normalizes Responses-style function call output items", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: async () => ({
+        finalOutput: "classified",
+        newItems: [
+          {
+            type: "tool_call_item",
+            rawItem: {
+              type: "function_call",
+              call_id: "call_lookup",
+              name: "lookupBottle",
+              arguments: JSON.stringify({
+                bottleId: "bt_123",
+              }),
+              status: "completed",
+            },
+          },
+          {
+            type: "tool_call_output_item",
+            rawItem: {
+              type: "function_call_output",
+              call_id: "call_lookup",
+              name: "lookupBottle",
+              output: {
+                bottleId: "bt_123",
+                family: "bourbon",
+              },
+              status: "completed",
+            },
+          },
+        ],
+      }),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupBottle",
+      arguments: {
+        bottleId: "bt_123",
+      },
+      result: {
+        bottleId: "bt_123",
+        family: "bourbon",
+      },
+      status: "ok",
+    },
+  ]);
+});
+
 test("preserves explicit null captured local tool results", async () => {
   const lookupBottle = {
     type: "function",

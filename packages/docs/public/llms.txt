@@ -314,7 +314,7 @@ Lightweight harness results must include one non-empty transcript input:
 
 - `output`: typed app-facing output
 - `events`: ordered transcript events, or
-- `messages`: provider-style messages that normalize into transcript events
+- `messages`: OpenAI/AI SDK-inspired messages that normalize into transcript events
 
 They can also include:
 - `usage`: stable usage units
@@ -428,12 +428,15 @@ functions that can return JSON-safe output, ordered events, usage, timings,
 artifacts, or errors without going through a supported SDK adapter.
 
 Return `output` for ordinary Vitest assertions and always return at least one
-ordered `events` item for the run transcript. Provider-style `messages` are
-accepted only at the custom harness input boundary and are normalized into
-events. Use `setArtifact(name, value)` for JSON-safe debug details that belong
-in reports but not in the app output contract. Return a full `HarnessRun` only
-when the app needs complete control over session events, usage, timings,
-artifacts, and errors.
+ordered `events` item for the run transcript. OpenAI/AI SDK-inspired
+`messages` are accepted only at the custom harness input boundary and are
+normalized into events, including OpenAI-style `tool_calls` and AI SDK-style
+`tool-call`/`tool-result` content parts. Other provider content blocks or item
+streams should adapt those records into `events` directly. Use
+`setArtifact(name, value)` for JSON-safe debug details that belong in reports
+but not in the app output contract. Return a full `HarnessRun` only when the app
+needs complete control over session events, usage, timings, artifacts, and
+errors.
 
 ## Judges
 

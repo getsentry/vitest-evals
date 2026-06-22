@@ -5,6 +5,7 @@ import {
   failedSpans,
   HarnessRunSchema,
   latestAssistantMessageContent,
+  messagesToTranscriptEvents,
   messagesByRole,
   parseVitestJsonReport,
   readEvalTaskMeta,
@@ -429,7 +430,7 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
-  test("drops provider-style tool messages without tool call ids", () => {
+  test("drops separated tool messages without tool call ids", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -726,6 +727,131 @@ describe("readEvalTaskMeta", () => {
     });
     expect(meta?.eval).not.toHaveProperty("estimatedCostUsd");
     expect(meta?.harness?.run?.usage).not.toHaveProperty("estimatedCostUsd");
+  });
+});
+
+describe("messagesToTranscriptEvents", () => {
+  test("accepts OpenAI-style chat tool call aliases", () => {
+    expect(
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: "Checking invoice",
+          tool_calls: [
+            {
+              id: "call_lookup",
+              type: "function",
+              function: {
+                name: "lookupInvoice",
+                arguments: JSON.stringify({
+                  invoiceId: "inv_123",
+                }),
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_lookup",
+          content: {
+            refundable: true,
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "message",
+        role: "assistant",
+        content: "Checking invoice",
+      },
+      {
+        type: "tool_call",
+        id: "call_lookup",
+        name: "lookupInvoice",
+        arguments: {
+          invoiceId: "inv_123",
+        },
+      },
+      {
+        type: "tool_result",
+        toolCallId: "call_lookup",
+        content: {
+          refundable: true,
+        },
+      },
+    ]);
+  });
+
+  test("accepts AI SDK-style content tool parts", () => {
+    expect(
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "Checking invoice",
+            },
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              output: {
+                refundable: true,
+              },
+            },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "message",
+        role: "assistant",
+        content: "Checking invoice",
+      },
+      {
+        type: "tool_call",
+        id: "call_lookup",
+        name: "lookupInvoice",
+        arguments: {
+          invoiceId: "inv_123",
+        },
+      },
+      {
+        type: "tool_result",
+        toolCallId: "call_lookup",
+        name: "lookupInvoice",
+        content: {
+          refundable: true,
+        },
+      },
+    ]);
+  });
+
+  test("requires separated tool result ids", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "tool",
+          content: {
+            refundable: true,
+          },
+        },
+      ]),
+    ).toThrow("Tool result messages must include toolCallId.");
   });
 });
 

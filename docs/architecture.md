@@ -67,13 +67,16 @@ event stream is flat:
 - `type: "tool_call"` for a tool request
 - `type: "tool_result"` for a completed or failed tool execution
 
-This is the reporter and judge contract. Provider-shaped messages are allowed
-only at harness input boundaries. For example, custom harnesses may return
-Chat Completions-style `messages` with assistant `toolCalls` and `role: "tool"`
-results, and first-party harnesses may consume provider message/run-item data,
-but those shapes are normalized into `session.events` before storage. Downstream
-code should not read both `messages` and `events`, and should not treat traces
-as a transcript fallback.
+This is the reporter and judge contract. OpenAI/AI SDK-inspired messages are
+allowed only at harness input boundaries. For example, custom harnesses may
+return Chat Completions-style `messages` with assistant `toolCalls` or
+`tool_calls` and `role: "tool"` results, or AI SDK-style content parts with
+`type: "tool-call"` and `type: "tool-result"`. First-party harnesses may
+consume provider message/run-item data, but those shapes are normalized into
+`session.events` before storage. Other provider content-block or item-stream
+payloads should adapt those records into `events` directly. Downstream code
+should not read both `messages` and `events`, and should not treat traces as a
+transcript fallback.
 
 Assertions and judges should use helper projections instead of inspecting raw
 event internals unless the test is explicitly about transcript ordering:
