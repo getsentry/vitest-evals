@@ -841,6 +841,44 @@ describe("messagesToTranscriptEvents", () => {
     ]);
   });
 
+  test("does not duplicate tool calls when content parts and aliases are both present", () => {
+    expect(
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+          toolCalls: [
+            {
+              id: "call_lookup",
+              name: "lookupInvoice",
+              arguments: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "tool_call",
+        id: "call_lookup",
+        name: "lookupInvoice",
+        arguments: {
+          invoiceId: "inv_123",
+        },
+      },
+    ]);
+  });
+
   test("requires separated tool result ids", () => {
     expect(() =>
       messagesToTranscriptEvents([

@@ -234,6 +234,9 @@ export function messagesToTranscriptEvents(
     }
 
     const partEvents = contentPartEvents(message);
+    const partEventsHaveToolCalls = partEvents?.some(
+      (event) => event.type === "tool_call",
+    );
     if (partEvents) {
       events.push(...partEvents);
     } else if (message.content !== undefined) {
@@ -246,6 +249,9 @@ export function messagesToTranscriptEvents(
     }
 
     if (message.role !== "assistant") {
+      continue;
+    }
+    if (partEventsHaveToolCalls) {
       continue;
     }
 
