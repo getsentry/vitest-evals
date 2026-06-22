@@ -465,6 +465,60 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
+  test("drops persisted message transport that converts to no events", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "message-transport",
+          run: {
+            session: {
+              messages: [{ role: "assistant" }],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).toEqual({
+      harness: {
+        name: "message-transport",
+      },
+    });
+  });
+
+  test("drops persisted message transport with non-object entries", () => {
+    expect(() =>
+      readEvalTaskMeta({
+        harness: {
+          name: "message-transport",
+          run: {
+            session: {
+              messages: [null, 123, "nope"],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).not.toThrow();
+
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "message-transport",
+          run: {
+            session: {
+              messages: [null, 123, "nope"],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).toEqual({
+      harness: {
+        name: "message-transport",
+      },
+    });
+  });
+
   test("defaults missing harness errors for persisted run metadata", () => {
     expect(
       readEvalTaskMeta({

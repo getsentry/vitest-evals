@@ -8,7 +8,6 @@ import {
   TranscriptMessageEventSchema,
   TranscriptToolCallEventSchema,
   TranscriptToolResultEventSchema,
-  TranscriptEventSchema,
   NormalizedTraceSchema,
   messagesToTranscriptEvents,
   TimingSummarySchema,
@@ -160,18 +159,23 @@ function normalizePersistedToolCall(input: unknown) {
 }
 
 // This is only for persisted artifacts that used provider-style message
-// transport. Current harness runs must store `session.events`.
+// transport. Current harness runs must store `session.events`. Malformed or
+// empty message sets are left unchanged so the strict schema rejects the run
+// rather than surfacing an empty transcript.
 function normalizePersistedSession(input: unknown) {
   if (!isJsonObject(input) || Array.isArray(input.events)) {
     return input;
   }
 
   const messages = input.messages;
-  if (!Array.isArray(messages)) {
+  if (!Array.isArray(messages) || !messages.every(isJsonObject)) {
     return input;
   }
 
   const events = messagesToTranscriptEvents(messages as never[]);
+  if (events.length === 0) {
+    return input;
+  }
   const eventResults = events.map((event) =>
     LenientTranscriptEventSchema.safeParse(event),
   );

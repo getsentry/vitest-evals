@@ -194,13 +194,6 @@ function normalizeJudgeHarnessResult(
     ? normalizeJudgeHarnessOutput(result.output)
     : normalizeJudgeHarnessOutput(result);
 
-  if (hasOutputField(result)) {
-    return {
-      output,
-      messages: createJudgeHarnessMessages(input, output),
-    };
-  }
-
   return {
     output,
     messages: createJudgeHarnessMessages(input, output),

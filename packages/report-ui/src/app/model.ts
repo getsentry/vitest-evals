@@ -412,7 +412,3 @@ function timestampMs(value: string | undefined) {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
-
-function hasTimestamp(value: string | undefined) {
-  return value !== undefined && Number.isFinite(Date.parse(value));
-}
