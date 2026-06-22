@@ -1,19 +1,20 @@
 import type {
   HarnessRun,
-  NormalizedMessage,
+  TranscriptMessageEvent,
   NormalizedSession,
   NormalizedSpan,
-  NormalizedToolResultMessage,
+  TranscriptToolResultEvent,
   NormalizedTrace,
   ToolCall,
 } from "./index";
 import type { JsonValue } from "../json";
+import { isToolCallEvent, isToolResultEvent } from "./transcript";
 
 /**
  * Returns every tool call observed in a normalized run or session.
  *
- * Tool results are joined from matching `role: "tool"` transcript messages
- * when the transcript contains a result for the call.
+ * Tool results are joined from matching `tool_result` transcript events when
+ * the transcript contains a result for the call.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -27,7 +28,7 @@ import type { JsonValue } from "../json";
 export function toolCalls(run: HarnessRun): ToolCall[];
 export function toolCalls(session: NormalizedSession): ToolCall[];
 export function toolCalls(source: HarnessRun | NormalizedSession): ToolCall[] {
-  const resultsById = new Map<string, NormalizedToolResultMessage>();
+  const resultsById = new Map<string, TranscriptToolResultEvent>();
   for (const message of toolResultsFromSource(source)) {
     if (!resultsById.has(message.toolCallId)) {
       resultsById.set(message.toolCallId, message);
@@ -35,7 +36,7 @@ export function toolCalls(source: HarnessRun | NormalizedSession): ToolCall[] {
   }
 
   return toolCallsFromSource(source).map((call) => {
-    const result = call.id ? resultsById.get(call.id) : undefined;
+    const result = resultsById.get(call.id);
     const normalizedCall = {
       name: call.name,
       ...(call.arguments ? { arguments: call.arguments } : {}),
@@ -138,7 +139,7 @@ export function failedSpans(
 }
 
 /**
- * Filters normalized session messages by role.
+ * Filters normalized session message events by role.
  *
  * @param source - Normalized run or session produced by a harness.
  * @param role - Message role to keep.
@@ -152,23 +153,24 @@ export function failedSpans(
  */
 export function messagesByRole(
   run: HarnessRun,
-  role: NormalizedMessage["role"],
-): NormalizedMessage[];
+  role: TranscriptMessageEvent["role"],
+): TranscriptMessageEvent[];
 export function messagesByRole(
   session: NormalizedSession,
-  role: NormalizedMessage["role"],
-): NormalizedMessage[];
+  role: TranscriptMessageEvent["role"],
+): TranscriptMessageEvent[];
 export function messagesByRole(
   source: HarnessRun | NormalizedSession,
-  role: NormalizedMessage["role"],
-): NormalizedMessage[] {
-  return sessionFrom(source).messages.filter(
-    (message) => message.role === role,
+  role: TranscriptMessageEvent["role"],
+): TranscriptMessageEvent[] {
+  return sessionFrom(source).events.filter(
+    (event): event is TranscriptMessageEvent =>
+      event.type === "message" && event.role === role,
   );
 }
 
 /**
- * Returns every normalized system message from a session.
+ * Returns every normalized system message event from a session.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -177,16 +179,18 @@ export function messagesByRole(
  * const systemPrompts = systemMessages(result);
  * ```
  */
-export function systemMessages(run: HarnessRun): NormalizedMessage[];
-export function systemMessages(session: NormalizedSession): NormalizedMessage[];
+export function systemMessages(run: HarnessRun): TranscriptMessageEvent[];
+export function systemMessages(
+  session: NormalizedSession,
+): TranscriptMessageEvent[];
 export function systemMessages(
   source: HarnessRun | NormalizedSession,
-): NormalizedMessage[] {
+): TranscriptMessageEvent[] {
   return messagesByRoleFromSource(source, "system");
 }
 
 /**
- * Returns every normalized user message from a session.
+ * Returns every normalized user message event from a session.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -195,16 +199,18 @@ export function systemMessages(
  * const firstPrompt = userMessages(result)[0]?.content;
  * ```
  */
-export function userMessages(run: HarnessRun): NormalizedMessage[];
-export function userMessages(session: NormalizedSession): NormalizedMessage[];
+export function userMessages(run: HarnessRun): TranscriptMessageEvent[];
+export function userMessages(
+  session: NormalizedSession,
+): TranscriptMessageEvent[];
 export function userMessages(
   source: HarnessRun | NormalizedSession,
-): NormalizedMessage[] {
+): TranscriptMessageEvent[] {
   return messagesByRoleFromSource(source, "user");
 }
 
 /**
- * Returns every normalized assistant message from a session.
+ * Returns every normalized assistant message event from a session.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -213,13 +219,13 @@ export function userMessages(
  * const finalAnswer = assistantMessages(result).at(-1)?.content;
  * ```
  */
-export function assistantMessages(run: HarnessRun): NormalizedMessage[];
+export function assistantMessages(run: HarnessRun): TranscriptMessageEvent[];
 export function assistantMessages(
   session: NormalizedSession,
-): NormalizedMessage[];
+): TranscriptMessageEvent[];
 export function assistantMessages(
   source: HarnessRun | NormalizedSession,
-): NormalizedMessage[] {
+): TranscriptMessageEvent[] {
   return messagesByRoleFromSource(source, "assistant");
 }
 
@@ -248,7 +254,7 @@ export function latestAssistantMessageContent(
 }
 
 /**
- * Returns every normalized tool message from a session.
+ * Returns every normalized tool-result event from a session.
  *
  * @param source - Normalized run or session produced by a harness.
  *
@@ -257,13 +263,13 @@ export function latestAssistantMessageContent(
  * const toolOutputs = toolMessages(result).map((message) => message.content);
  * ```
  */
-export function toolMessages(run: HarnessRun): NormalizedToolResultMessage[];
+export function toolMessages(run: HarnessRun): TranscriptToolResultEvent[];
 export function toolMessages(
   session: NormalizedSession,
-): NormalizedToolResultMessage[];
+): TranscriptToolResultEvent[];
 export function toolMessages(
   source: HarnessRun | NormalizedSession,
-): NormalizedToolResultMessage[] {
+): TranscriptToolResultEvent[] {
   return toolResultsFromSource(source);
 }
 
@@ -272,19 +278,11 @@ function sessionFrom(source: HarnessRun | NormalizedSession) {
 }
 
 function toolResultsFromSource(source: HarnessRun | NormalizedSession) {
-  return sessionFrom(source).messages.filter(isToolResultMessage);
+  return sessionFrom(source).events.filter(isToolResultEvent);
 }
 
 function toolCallsFromSource(source: HarnessRun | NormalizedSession) {
-  return sessionFrom(source).messages.flatMap((message) =>
-    message.role === "assistant" ? (message.toolCalls ?? []) : [],
-  );
-}
-
-function isToolResultMessage(
-  message: NormalizedMessage,
-): message is NormalizedToolResultMessage {
-  return message.role === "tool";
+  return sessionFrom(source).events.filter(isToolCallEvent);
 }
 
 function tracesFrom(
@@ -313,14 +311,15 @@ function isTraceList(
 
 function messagesByRoleFromSource(
   source: HarnessRun | NormalizedSession,
-  role: NormalizedMessage["role"],
+  role: TranscriptMessageEvent["role"],
 ) {
-  return sessionFrom(source).messages.filter(
-    (message) => message.role === role,
+  return sessionFrom(source).events.filter(
+    (event): event is TranscriptMessageEvent =>
+      event.type === "message" && event.role === role,
   );
 }
 
-function hasNonEmptyMessageContent(message: NormalizedMessage) {
+function hasNonEmptyMessageContent(message: TranscriptMessageEvent) {
   return (
     message.content !== undefined &&
     (typeof message.content !== "string" || message.content.trim().length > 0)

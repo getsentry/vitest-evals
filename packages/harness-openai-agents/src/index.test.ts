@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   describeEval,
   getHarnessRunFromError,
+  messagesToTranscriptEvents,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
@@ -30,9 +31,7 @@ type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   : never;
 
 function firstAssistantToolCall(session: NormalizedSession) {
-  return session.messages.flatMap((message) =>
-    message.role === "assistant" ? (message.toolCalls ?? []) : [],
-  )[0];
+  return session.events.find((event) => event.type === "tool_call");
 }
 
 const typedRunOutputHarness = openaiAgentsHarness({
@@ -333,29 +332,27 @@ describeEval(
         toolCalls: 1,
       });
       expect(result.session.model).toBe("gpt-4.1-mini");
-      expect(result.session.messages).toMatchObject([
+      expect(result.session.events).toMatchObject([
         {
+          type: "message",
           role: "user",
           content: "Classify bottle bt_123",
         },
         {
+          type: "message",
           role: "assistant",
           content: '{"status":"classified","category":"bourbon"}',
         },
         {
-          role: "assistant",
-          toolCalls: [
-            {
-              id: "call_lookup",
-              name: "lookupBottle",
-              arguments: {
-                bottleId: "bt_123",
-              },
-            },
-          ],
+          type: "tool_call",
+          id: "call_lookup",
+          name: "lookupBottle",
+          arguments: {
+            bottleId: "bt_123",
+          },
         },
         {
-          role: "tool",
+          type: "tool_result",
           toolCallId: "call_lookup",
           name: "lookupBottle",
           content: {
@@ -428,7 +425,7 @@ test("does not use OpenAI Agents output items as app output", async () => {
   );
 
   expect(result.output).toBeUndefined();
-  expect(result.session.messages).toEqual(
+  expect(result.session.events).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         role: "assistant",
@@ -461,7 +458,7 @@ test("does not use custom run raw OpenAI Agents output items as app output", asy
   );
 
   expect(result.output).toBeUndefined();
-  expect(result.session.messages).toEqual(
+  expect(result.session.events).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         role: "assistant",
@@ -584,7 +581,7 @@ test("supports custom app output mapping", async () => {
     label: "bourbon",
     confidence: 0.92,
   });
-  expect(result.session.messages).toEqual(
+  expect(result.session.events).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         role: "assistant",
@@ -1006,9 +1003,9 @@ test("prefers captured local tool results over model-visible output wrappers", a
       },
     },
   ]);
-  expect(result.session.messages).toContainEqual(
+  expect(result.session.events).toContainEqual(
     expect.objectContaining({
-      role: "tool",
+      type: "tool_result",
       content: {
         bottleId: "bt_123",
         family: "bourbon",

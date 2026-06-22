@@ -21,12 +21,12 @@ import type {
   HarnessContext,
   HarnessRun,
   JsonValue,
-  NormalizedMessage,
+  TranscriptToolCallEvent,
+  TranscriptEvent,
   NormalizedSpan,
   NormalizedSession,
   NormalizedTrace,
   TimingSummary,
-  ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import { generateObject, generateText, jsonSchema } from "ai";
@@ -562,16 +562,14 @@ async function runAiSdkHarness<
 ): Promise<HarnessRun<TOutput>> {
   const trace = createTraceRecorder(options.name ?? "ai-sdk");
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
-  const runtimeToolCalls: ToolCallRecord[] = [];
-  const runtimeMessages: NormalizedMessage[] = [];
+  const runtimeEvents: TranscriptEvent[] = [];
   const tools = createToolset({
     input,
     context,
     tools: options.tools,
     toolReplay: options.toolReplay,
     replayMetadataByToolCallId,
-    runtimeToolCalls,
-    runtimeMessages,
+    runtimeEvents,
   });
   const runtime = {
     tools,
@@ -639,9 +637,12 @@ async function runAiSdkHarness<
   } catch (error) {
     const finishedAt = new Date();
     const serializedError = serializeError(error);
+    const runtimeToolCallCount = runtimeEvents.filter(
+      (event) => event.type === "tool_call",
+    ).length;
     const usage =
-      runtimeToolCalls.length > 0 ? { toolCalls: runtimeToolCalls.length } : {};
-    const session = resolveFailureSession(input, runtimeMessages);
+      runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
+    const session = resolveFailureSession(input, runtimeEvents);
     const run = {
       session,
       output: undefined,
@@ -964,16 +965,14 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
   tools,
   toolReplay,
   replayMetadataByToolCallId,
-  runtimeToolCalls,
-  runtimeMessages,
+  runtimeEvents,
 }: {
   input: TInput;
   context: HarnessContext;
   tools: TTools | undefined;
   toolReplay: AiSdkToolReplayPolicies<TInput> | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
-  runtimeToolCalls: ToolCallRecord[];
-  runtimeMessages: NormalizedMessage[];
+  runtimeEvents: TranscriptEvent[];
 }) {
   return Object.fromEntries(
     Object.entries(tools ?? {}).map(([toolName, tool]) => {
@@ -998,17 +997,14 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
         ) => {
           const startedAt = new Date();
           const normalizedArgs = normalizeArguments(toolInput);
-          const call: ToolCallRecord = {
+          const call: TranscriptToolCallEvent = {
+            type: "tool_call",
             id: execution.toolCallId,
             name: toolName,
             ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
             startedAt: startedAt.toISOString(),
           };
-          runtimeToolCalls.push(call);
-          runtimeMessages.push({
-            role: "assistant",
-            toolCalls: [call],
-          });
+          runtimeEvents.push(call);
           const replayContext = {
             input,
             signal: context.signal,
@@ -1048,8 +1044,8 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
               call.metadata = replayMetadata;
             }
             const normalizedResult = toJsonValue(executionResult.result);
-            runtimeMessages.push({
-              role: "tool",
+            runtimeEvents.push({
+              type: "tool_result",
               toolCallId: execution.toolCallId,
               name: toolName,
               ...(normalizedResult !== undefined
@@ -1075,8 +1071,8 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
             if (replayMetadata) {
               call.metadata = replayMetadata;
             }
-            runtimeMessages.push({
-              role: "tool",
+            runtimeEvents.push({
+              type: "tool_result",
               toolCallId: execution.toolCallId,
               name: toolName,
               error: normalizeError(error),
@@ -1327,25 +1323,29 @@ function resolveSession(
   }
 
   const steps = resolveSteps(result);
-  const messages: NormalizedMessage[] = [
+  const events: TranscriptEvent[] = [
     {
+      type: "message",
       role: "user",
       content: normalizeContent(input),
     },
   ];
 
   for (const step of steps) {
-    messages.push(...normalizeStep(step, replayMetadataByToolCallId));
+    events.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
   if (
     output !== undefined &&
-    !messages.some(
-      (message) =>
-        message.role === "assistant" && message.content !== undefined,
+    !events.some(
+      (event) =>
+        event.type === "message" &&
+        event.role === "assistant" &&
+        event.content !== undefined,
     )
   ) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "assistant",
       content: output,
     });
@@ -1354,7 +1354,7 @@ function resolveSession(
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
 
   return {
-    messages,
+    events,
     provider: lastStep?.model.provider,
     model: lastStep?.model.modelId,
   };
@@ -1362,15 +1362,16 @@ function resolveSession(
 
 function resolveFailureSession(
   input: unknown,
-  runtimeMessages: NormalizedMessage[],
+  runtimeEvents: TranscriptEvent[],
 ): NormalizedSession {
   return {
-    messages: [
+    events: [
       {
+        type: "message",
         role: "user",
         content: normalizeContent(input),
       },
-      ...runtimeMessages,
+      ...runtimeEvents,
     ],
   };
 }
@@ -1399,7 +1400,7 @@ function resolveLanguageModelUsage(
 function normalizeStep(
   step: StepLike,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-): NormalizedMessage[] {
+): TranscriptEvent[] {
   const toolResultsById = new Map(
     (step.toolResults ?? []).map((toolResult) => [
       toolResult.toolCallId,
@@ -1425,24 +1426,26 @@ function normalizeStep(
     reasoningText: step.reasoningText,
     response: step.response,
   });
-  const messages: NormalizedMessage[] = [];
+  const events: TranscriptEvent[] = [];
 
-  if (step.text || normalizedCalls.length > 0 || assistantMetadata) {
-    messages.push({
+  if (step.text || assistantMetadata) {
+    events.push({
+      type: "message",
       role: "assistant",
       ...(step.text ? { content: step.text } : {}),
-      ...(normalizedCalls.length > 0 ? { toolCalls: normalizedCalls } : {}),
       ...(assistantMetadata ? { metadata: assistantMetadata } : {}),
     });
   }
+
+  events.push(...normalizedCalls);
 
   for (const toolResult of step.toolResults ?? []) {
     const content =
       toolResult.output === undefined
         ? undefined
         : normalizeContent(toolResult.output);
-    messages.push({
-      role: "tool",
+    events.push({
+      type: "tool_result",
       toolCallId: toolResult.toolCallId,
       name: toolResult.toolName,
       ...(content !== undefined ? { content } : {}),
@@ -1458,14 +1461,14 @@ function normalizeStep(
     });
   }
 
-  return messages;
+  return events;
 }
 
 function normalizeToolCall(
   toolCall: StepLike["toolCalls"][number],
   toolResultsById: Map<string, StepLike["toolResults"][number]>,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-): ToolCallRecord {
+): TranscriptToolCallEvent {
   const toolResult = toolResultsById.get(toolCall.toolCallId);
   const normalizedArguments = normalizeArguments(toolCall.input);
   const errorValue =
@@ -1477,6 +1480,7 @@ function normalizeToolCall(
   );
 
   return {
+    type: "tool_call",
     id: toolCall.toolCallId,
     name: toolCall.toolName,
     ...(normalizedArguments ? { arguments: normalizedArguments } : {}),

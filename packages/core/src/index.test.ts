@@ -5,7 +5,6 @@ import {
   failedSpans,
   latestAssistantMessageContent,
   messagesByRole,
-  NormalizedMessageSchema,
   parseVitestJsonReport,
   readEvalTaskMeta,
   spans,
@@ -14,6 +13,7 @@ import {
   toolCalls,
   toolMessages,
   traceSpans,
+  TranscriptToolResultEventSchema,
   UsageSummarySchema,
   userMessages,
   type VitestJsonReport,
@@ -83,26 +83,34 @@ const sampleJson: VitestJsonReport = {
                   totalMs: 4100,
                 },
                 session: {
-                  messages: [
+                  events: [
                     {
+                      type: "message",
                       role: "user",
                       content: "Refund invoice inv_404",
                     },
                     {
+                      type: "message",
                       role: "assistant",
                       content: "denied",
-                      toolCalls: [
-                        {
-                          name: "lookupInvoice",
-                          arguments: {
-                            invoiceId: "inv_404",
-                          },
-                          result: {
-                            refundable: false,
-                          },
-                          durationMs: 6,
-                        },
-                      ],
+                    },
+                    {
+                      type: "tool_call",
+                      id: "call_lookup",
+                      name: "lookupInvoice",
+                      arguments: {
+                        invoiceId: "inv_404",
+                      },
+                      durationMs: 6,
+                    },
+                    {
+                      type: "tool_result",
+                      toolCallId: "call_lookup",
+                      name: "lookupInvoice",
+                      content: {
+                        refundable: false,
+                      },
+                      durationMs: 6,
                     },
                   ],
                 },
@@ -253,7 +261,7 @@ describe("readEvalTaskMeta", () => {
           name: "legacy",
           run: {
             session: {
-              messages: [],
+              events: [],
             },
             usage: {
               totalTokens: 42,
@@ -281,7 +289,7 @@ describe("readEvalTaskMeta", () => {
           name: "partial",
           run: {
             session: {
-              messages: [{ role: "user", content: "hello" }],
+              events: [{ type: "message", role: "user", content: "hello" }],
             },
           },
         },
@@ -292,7 +300,7 @@ describe("readEvalTaskMeta", () => {
         run: {
           errors: [],
           session: {
-            messages: [{ role: "user", content: "hello" }],
+            events: [{ type: "message", role: "user", content: "hello" }],
           },
           usage: {},
         },
@@ -307,7 +315,7 @@ describe("readEvalTaskMeta", () => {
           name: "partial",
           run: {
             session: {
-              messages: [{ role: "user", content: "hello" }],
+              events: [{ type: "message", role: "user", content: "hello" }],
             },
             usage: {
               totalTokens: 42,
@@ -329,7 +337,7 @@ describe("readEvalTaskMeta", () => {
         name: "partial",
         run: {
           session: {
-            messages: [{ role: "user", content: "hello" }],
+            events: [{ type: "message", role: "user", content: "hello" }],
           },
           traces: [{ spans: [] }],
           usage: {
@@ -383,16 +391,13 @@ describe("readEvalTaskMeta", () => {
           extraRunField: true,
           session: {
             extraSessionField: true,
-            messages: [
+            events: [
               {
+                type: "tool_call",
                 extraMessageField: true,
-                role: "assistant",
-                toolCalls: [
-                  {
-                    name: "lookupInvoice",
-                    unexpected: true,
-                  },
-                ],
+                id: "call_lookup",
+                name: "lookupInvoice",
+                unexpected: true,
               },
             ],
           },
@@ -423,14 +428,11 @@ describe("readEvalTaskMeta", () => {
         run: {
           errors: [],
           session: {
-            messages: [
+            events: [
               {
-                role: "assistant",
-                toolCalls: [
-                  {
-                    name: "lookupInvoice",
-                  },
-                ],
+                type: "tool_call",
+                id: "call_lookup",
+                name: "lookupInvoice",
               },
             ],
           },
@@ -585,7 +587,14 @@ describe("normalized run helpers", () => {
     ]);
     expect(userMessages(run).map((message) => message.role)).toEqual(["user"]);
     expect(systemMessages(run)).toEqual([]);
-    expect(toolMessages(run)).toEqual([]);
+    expect(toolMessages(run)).toMatchObject([
+      {
+        type: "tool_result",
+        toolCallId: "call_lookup",
+        name: "lookupInvoice",
+        content: { refundable: false },
+      },
+    ]);
     expect(messagesByRole(run, "assistant")).toEqual(assistantMessages(run));
     expect(latestAssistantMessageContent(run)).toBe("denied");
     expect(spans(run).map((span) => span.id)).toEqual([
@@ -610,18 +619,15 @@ describe("normalized run helpers", () => {
     expect(failedSpans(run.traces)).toEqual([]);
   });
 
-  test("keeps idless tool calls pending when no matching result can be linked", () => {
+  test("keeps tool calls pending when no matching result can be linked", () => {
     expect(
       toolCalls({
-        messages: [
+        events: [
           {
-            role: "assistant",
-            toolCalls: [
-              {
-                name: "lookupInvoice",
-                arguments: { invoiceId: "inv_123" },
-              },
-            ],
+            type: "tool_call",
+            id: "call_1",
+            name: "lookupInvoice",
+            arguments: { invoiceId: "inv_123" },
           },
         ],
       }),
@@ -634,10 +640,10 @@ describe("normalized run helpers", () => {
     ]);
   });
 
-  test("requires tool result messages to reference a tool call id", () => {
+  test("requires tool result events to reference a tool call id", () => {
     expect(() =>
-      NormalizedMessageSchema.parse({
-        role: "tool",
+      TranscriptToolResultEventSchema.parse({
+        type: "tool_result",
         name: "lookupInvoice",
         content: { refundable: true },
       }),
@@ -647,30 +653,27 @@ describe("normalized run helpers", () => {
   test("uses tool ids to disambiguate out-of-order results when available", () => {
     expect(
       toolCalls({
-        messages: [
+        events: [
           {
-            role: "assistant",
-            toolCalls: [
-              {
-                id: "call_1",
-                name: "lookupInvoice",
-                arguments: { invoiceId: "inv_123" },
-              },
-              {
-                id: "call_2",
-                name: "lookupInvoice",
-                arguments: { invoiceId: "inv_456" },
-              },
-            ],
+            type: "tool_call",
+            id: "call_1",
+            name: "lookupInvoice",
+            arguments: { invoiceId: "inv_123" },
           },
           {
-            role: "tool",
+            type: "tool_call",
+            id: "call_2",
+            name: "lookupInvoice",
+            arguments: { invoiceId: "inv_456" },
+          },
+          {
+            type: "tool_result",
             toolCallId: "call_2",
             name: "lookupInvoice",
             content: { invoiceId: "inv_456" },
           },
           {
-            role: "tool",
+            type: "tool_result",
             toolCallId: "call_1",
             name: "lookupInvoice",
             content: { invoiceId: "inv_123" },
@@ -696,18 +699,14 @@ describe("normalized run helpers", () => {
   test("does not fall back to ordered matching when a result id is explicit", () => {
     expect(
       toolCalls({
-        messages: [
+        events: [
           {
-            role: "assistant",
-            toolCalls: [
-              {
-                id: "call_1",
-                name: "lookupInvoice",
-              },
-            ],
+            type: "tool_call",
+            id: "call_1",
+            name: "lookupInvoice",
           },
           {
-            role: "tool",
+            type: "tool_result",
             toolCallId: "call_missing",
             name: "lookupInvoice",
             content: { invoiceId: "inv_123" },

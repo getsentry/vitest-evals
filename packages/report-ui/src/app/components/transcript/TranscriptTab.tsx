@@ -27,7 +27,7 @@ export function TranscriptTab({ run }: { run: HarnessRun | undefined }) {
         {transcript.events.length > 0 ? (
           <TranscriptMessages events={transcript.events} />
         ) : (
-          <EmptyState>No transcript messages captured</EmptyState>
+          <EmptyState>No transcript captured</EmptyState>
         )}
       </DetailSection>
     </DetailContent>

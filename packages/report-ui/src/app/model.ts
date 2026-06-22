@@ -3,12 +3,12 @@ import {
   type HarnessRun,
   type JsonValue,
   type NormalizedError,
-  type NormalizedMessage,
   type NormalizedSpan,
-  type NormalizedToolResultMessage,
   type ReportCase,
   type ReportWorkspace,
-  type ToolCallRecord,
+  type TranscriptMessageEvent,
+  type TranscriptToolCallEvent,
+  type TranscriptToolResultEvent,
 } from "@vitest-evals/core";
 
 export type CaseStatusFilter = "all" | ReportCase["status"];
@@ -39,7 +39,7 @@ export type SpanNode = NormalizedSpan & {
 export type TranscriptMessage = {
   kind: "message";
   id: string;
-  role: NormalizedMessage["role"];
+  role: TranscriptMessageEvent["role"];
   content?: JsonValue;
 };
 
@@ -169,7 +169,7 @@ export function buildSpanTree(spans: NormalizedSpan[]) {
   return roots.sort(compareSpans);
 }
 
-/** Builds a readable transcript projection from normalized session messages. */
+/** Builds a readable transcript projection from normalized session events. */
 export function buildTranscript(run: HarnessRun): Transcript {
   return {
     events: sessionTranscriptEvents(run),
@@ -292,53 +292,50 @@ function workspaceDurationMs(runs: ReportWorkspace["runs"]) {
 function sessionTranscriptEvents(run: HarnessRun) {
   const events: TranscriptEvent[] = [];
   const pendingTools: Array<{
-    call: ToolCallRecord;
+    call: TranscriptToolCallEvent;
     event: TranscriptToolEvent;
   }> = [];
 
-  run.session.messages.forEach((message, messageIndex) => {
-    if (message.role === "tool") {
-      if (attachTranscriptToolResult(pendingTools, message)) {
+  run.session.events.forEach((event, eventIndex) => {
+    if (event.type === "tool_result") {
+      if (attachTranscriptToolResult(pendingTools, event)) {
         return;
       }
 
-      events.push(transcriptToolResultEvent(message, messageIndex));
+      events.push(transcriptToolResultEvent(event, eventIndex));
       return;
     }
 
-    if (message.content !== undefined) {
-      events.push({
-        content: message.content,
-        id: `message-${messageIndex}`,
-        kind: "message",
-        role: message.role,
-      });
+    if (event.type === "tool_call") {
+      const toolEvent: TranscriptToolEvent = {
+        arguments: event.arguments,
+        callId: event.id,
+        durationMs: event.durationMs,
+        id: event.id,
+        kind: "tool",
+        name: event.name,
+        status: "pending",
+      };
+      pendingTools.push({ call: event, event: toolEvent });
+      events.push(toolEvent);
+      return;
     }
 
-    events.push(
-      ...("toolCalls" in message ? (message.toolCalls ?? []) : []).map(
-        (call, toolIndex): TranscriptToolEvent => {
-          const event: TranscriptToolEvent = {
-            arguments: call.arguments,
-            callId: call.id,
-            durationMs: call.durationMs,
-            id: call.id ?? `message-${messageIndex}:tool-${toolIndex}`,
-            kind: "tool",
-            name: call.name,
-            status: "pending",
-          };
-          pendingTools.push({ call, event });
-          return event;
-        },
-      ),
-    );
+    if (event.content !== undefined) {
+      events.push({
+        content: event.content,
+        id: `message-${eventIndex}`,
+        kind: "message",
+        role: event.role,
+      });
+    }
   });
   return events;
 }
 
 function transcriptToolResultEvent(
-  result: NormalizedToolResultMessage,
-  messageIndex: number,
+  result: TranscriptToolResultEvent,
+  eventIndex: number,
 ): TranscriptToolEvent {
   return {
     callId: result.toolCallId,
@@ -346,7 +343,7 @@ function transcriptToolResultEvent(
       ? { durationMs: result.durationMs }
       : {}),
     ...(result.error ? { error: result.error } : {}),
-    id: `message-${messageIndex}:tool-result`,
+    id: `event-${eventIndex}:tool-result`,
     kind: "tool",
     name: result.name ?? result.toolCallId,
     ...(result.content !== undefined ? { result: result.content } : {}),
@@ -355,8 +352,8 @@ function transcriptToolResultEvent(
 }
 
 function attachTranscriptToolResult(
-  tools: Array<{ call: ToolCallRecord; event: TranscriptToolEvent }>,
-  result: NormalizedToolResultMessage,
+  tools: Array<{ call: TranscriptToolCallEvent; event: TranscriptToolEvent }>,
+  result: TranscriptToolResultEvent,
 ) {
   const match = findPendingTranscriptTool(
     tools,
@@ -375,8 +372,8 @@ function attachTranscriptToolResult(
 }
 
 function findPendingTranscriptTool(
-  tools: Array<{ call: ToolCallRecord; event: TranscriptToolEvent }>,
-  predicate: (call: ToolCallRecord) => boolean,
+  tools: Array<{ call: TranscriptToolCallEvent; event: TranscriptToolEvent }>,
+  predicate: (call: TranscriptToolCallEvent) => boolean,
 ) {
   return tools.find(
     ({ call, event }) => event.status === "pending" && predicate(call),

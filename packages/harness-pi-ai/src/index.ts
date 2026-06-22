@@ -4,12 +4,13 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedError,
-  NormalizedMessage,
   NormalizedSpan,
   NormalizedSession,
+  TranscriptEvent,
+  TranscriptMessageEvent,
+  TranscriptToolCallEvent,
   NormalizedTrace,
   TimingSummary,
-  ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import {
@@ -224,13 +225,13 @@ type NativeToolExecute<TInput> = PiAgentToolLike<TInput>["execute"] & {
 /** Replay mode alias used by the Pi AI harness package. */
 export type PiAiReplayMode = ReplayMode;
 
-/** Event sink for recording Pi AI transcript messages. */
+/** Event sink for recording Pi AI transcript events. */
 export interface PiAiEventSink {
-  message: (message: NormalizedMessage) => void;
+  message: (event: TranscriptEvent) => void;
   system: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   user: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   assistant: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
-  /** Records a tool result message linked to an assistant tool call by id. */
+  /** Records a tool-result event linked to an assistant tool call by id. */
   tool: (
     toolCallId: string,
     content: JsonValue,
@@ -622,8 +623,9 @@ export function piAiHarness<
           input,
           context,
         });
-        const messages: NormalizedMessage[] = [
+        const events: TranscriptEvent[] = [
           {
+            type: "message",
             role: "user",
             content: normalizeContent(input),
           },
@@ -636,7 +638,7 @@ export function piAiHarness<
             agent,
             input,
             context,
-            messages,
+            events,
             options.tools,
             inferredTools.nativeToolsets,
           );
@@ -647,7 +649,7 @@ export function piAiHarness<
           agent,
           input,
           context,
-          messages,
+          events,
           inferredTools.runtimeTools,
           inferredTools.nativeToolsets,
         );
@@ -713,7 +715,7 @@ async function executePiHarnessRun<
   agent: TAgent,
   input: TInput,
   context: HarnessContext,
-  messages: NormalizedMessage[],
+  events: TranscriptEvent[],
   runtimeTools: TTools | undefined,
   nativeToolsets?: Array<PiAgentToolLike<TInput>[]>,
 ): Promise<HarnessRun<TOutput>> {
@@ -725,7 +727,7 @@ async function executePiHarnessRun<
     tools: runtimeTools,
     toolReplay: options.toolReplay,
     executionState,
-    messages,
+    events,
   });
 
   try {
@@ -735,7 +737,7 @@ async function executePiHarnessRun<
       {
         input,
         context,
-        messages,
+        events,
         toolCalls: runtime.toolCalls,
         toolReplay: options.toolReplay,
         executionState,
@@ -770,7 +772,7 @@ async function executePiHarnessRun<
       ? await options.output(resultArgs)
       : (resolveOutput(normalizeResult) as TOutput | undefined);
     const usage = resolveUsage(normalizeResult, runtime.toolCalls.length);
-    const session = resolveSession(normalizeResult, messages, output, usage);
+    const session = resolveSession(normalizeResult, events, output, usage);
     const errors = resolveErrors(normalizeResult);
     const finishedAt = new Date();
 
@@ -794,7 +796,7 @@ async function executePiHarnessRun<
     } as HarnessRun<TOutput>;
   } catch (error) {
     const usage = resolveUsage(undefined, runtime.toolCalls.length);
-    const session = resolveSession(undefined, messages, undefined, usage);
+    const session = resolveSession(undefined, events, undefined, usage);
     const finishedAt = new Date();
     const serializedError = serializeError(error);
     const run = {
@@ -1151,8 +1153,8 @@ async function withInstrumentedAgentTools<TResult, TInput>(
   args: {
     input: TInput;
     context: HarnessContext;
-    messages: NormalizedMessage[];
-    toolCalls: ToolCallRecord[];
+    events: TranscriptEvent[];
+    toolCalls: TranscriptToolCallEvent[];
     toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
     executionState: PiToolExecutionState;
   },
@@ -1189,18 +1191,16 @@ async function withInstrumentedAgentTools<TResult, TInput>(
         args.executionState,
         tool.name,
       );
-      const call: ToolCallRecord = {
+      const call: TranscriptToolCallEvent = {
+        type: "tool_call",
         id: toolCallId,
         name: tool.name,
         arguments: rawArgs,
         startedAt: startedAt.toISOString(),
         metadata: normalizeReplayMetadata(undefined),
-      } satisfies ToolCallRecord;
+      } satisfies TranscriptToolCallEvent;
       args.toolCalls.push(call);
-      args.messages.push({
-        role: "assistant",
-        toolCalls: [call],
-      });
+      args.events.push(call);
 
       try {
         const execution = await executeNativeToolWithReplay({
@@ -1215,8 +1215,8 @@ async function withInstrumentedAgentTools<TResult, TInput>(
         call.finishedAt = finishedAt.toISOString();
         call.durationMs = finishedAt.getTime() - startedAt.getTime();
         call.metadata = normalizeReplayMetadata(execution.replay);
-        args.messages.push({
-          role: "tool",
+        args.events.push({
+          type: "tool_result",
           toolCallId,
           name: tool.name,
           content: execution.normalizedResult,
@@ -1232,8 +1232,8 @@ async function withInstrumentedAgentTools<TResult, TInput>(
         call.metadata = normalizeReplayMetadata(
           getReplayMetadataFromError(error),
         );
-        args.messages.push({
-          role: "tool",
+        args.events.push({
+          type: "tool_result",
           toolCallId,
           name: tool.name,
           error: serializeToolCallError(error),
@@ -1435,46 +1435,49 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
   tools,
   toolReplay,
   executionState,
-  messages,
+  events,
 }: {
   input: TInput;
   context: HarnessContext;
   tools: TTools | undefined;
   toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
   executionState: PiToolExecutionState;
-  messages: NormalizedMessage[];
+  events: TranscriptEvent[];
 }): PiAiRuntime<TTools, TInput> & {
-  toolCalls: ToolCallRecord[];
+  toolCalls: TranscriptToolCallEvent[];
 } {
-  const toolCalls: ToolCallRecord[] = [];
+  const toolCalls: TranscriptToolCallEvent[] = [];
   const eventSink: PiAiEventSink = {
-    message: (message) => {
-      messages.push(message);
+    message: (event) => {
+      events.push(event);
     },
     system: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "system",
         content,
         metadata,
       });
     },
     user: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "user",
         content,
         metadata,
       });
     },
     assistant: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "assistant",
         content,
         metadata,
       });
     },
     tool: (toolCallId, content, options) => {
-      messages.push({
-        role: "tool",
+      events.push({
+        type: "tool_result",
         toolCallId,
         ...(options?.name ? { name: options.name } : {}),
         content,
@@ -1499,20 +1502,18 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
           setArtifact: context.setArtifact,
         } satisfies PiAiToolContext<TInput>;
         const toolCallId = createRuntimeToolCallId(toolName, toolCalls.length);
-        const call: ToolCallRecord = {
+        const call: TranscriptToolCallEvent = {
+          type: "tool_call",
           id: toolCallId,
           name: toolName,
           arguments: args,
           startedAt: startedAt.toISOString(),
-        } satisfies ToolCallRecord;
+        } satisfies TranscriptToolCallEvent;
 
         try {
           if (!isNativeImplementationCall) {
             toolCalls.push(call);
-            messages.push({
-              role: "assistant",
-              toolCalls: [call],
-            });
+            events.push(call);
           }
 
           const execution = await executeToolWithReplay({
@@ -1533,8 +1534,8 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
           call.finishedAt = finishedAt.toISOString();
           call.durationMs = finishedAt.getTime() - startedAt.getTime();
           call.metadata = normalizeReplayMetadata(execution.replay);
-          messages.push({
-            role: "tool",
+          events.push({
+            type: "tool_result",
             toolCallId,
             name: toolName,
             content: execution.result,
@@ -1554,8 +1555,8 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
           call.metadata = normalizeReplayMetadata(
             getReplayMetadataFromError(error),
           );
-          messages.push({
-            role: "tool",
+          events.push({
+            type: "tool_result",
             toolCallId,
             name: toolName,
             error: serializeToolCallError(error),
@@ -1860,7 +1861,7 @@ function numberField(value: unknown) {
 
 function resolveSession(
   result: unknown,
-  messages: NormalizedMessage[],
+  events: TranscriptEvent[],
   output: JsonValue | undefined,
   usage: UsageSummary,
 ): NormalizedSession {
@@ -1872,22 +1873,25 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  const sessionMessages = [...messages];
+  const sessionEvents = [...events];
   if (
     output !== undefined &&
-    !sessionMessages.some(
-      (message) =>
-        message.role === "assistant" && message.content !== undefined,
+    !sessionEvents.some(
+      (event) =>
+        event.type === "message" &&
+        event.role === "assistant" &&
+        event.content !== undefined,
     )
   ) {
-    sessionMessages.push({
+    sessionEvents.push({
+      type: "message",
       role: "assistant",
       content: output,
     });
   }
 
   return {
-    messages: sessionMessages,
+    events: sessionEvents,
     provider:
       ((result as Record<string, unknown> | undefined)?.provider as
         | string

@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, test, vi } from "vitest";
-import type { NormalizedMessage } from "./harness";
+import { messagesToTranscriptEvents } from "./harness";
+import type { TranscriptEvent } from "./harness";
 import DefaultEvalReporter from "./reporter";
 
 type ReporterOptions = {
@@ -65,7 +66,7 @@ function createTestCase({
     run: {
       output?: Record<string, unknown> | string;
       session: {
-        messages: NormalizedMessage[];
+        events: TranscriptEvent[];
       };
       usage?: {
         totalTokens?: number;
@@ -212,7 +213,7 @@ describe("DefaultEvalReporter", () => {
               refundId: "rf_inv_123",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -232,7 +233,7 @@ describe("DefaultEvalReporter", () => {
                     refundable: true,
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -262,7 +263,7 @@ describe("DefaultEvalReporter", () => {
               refundId: "rf_inv_123",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -295,7 +296,7 @@ describe("DefaultEvalReporter", () => {
                     status: "submitted",
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -341,7 +342,7 @@ describe("DefaultEvalReporter", () => {
                 refundId: "rf_inv_123",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
@@ -361,7 +362,7 @@ describe("DefaultEvalReporter", () => {
                       refundable: true,
                     },
                   },
-                ],
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -396,7 +397,7 @@ describe("DefaultEvalReporter", () => {
                 status: "approved",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
@@ -418,7 +419,7 @@ describe("DefaultEvalReporter", () => {
                       invoiceId: "inv_123",
                     },
                   },
-                ],
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -455,7 +456,7 @@ describe("DefaultEvalReporter", () => {
                 status: "approved",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
@@ -474,7 +475,7 @@ describe("DefaultEvalReporter", () => {
                       invoiceId: "inv_123",
                     },
                   },
-                ],
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -506,7 +507,7 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -525,7 +526,7 @@ describe("DefaultEvalReporter", () => {
                     invoiceId: "inv_123",
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -553,7 +554,7 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -577,7 +578,7 @@ describe("DefaultEvalReporter", () => {
                     invoiceId: "inv_123",
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -609,7 +610,7 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -632,7 +633,7 @@ describe("DefaultEvalReporter", () => {
                     refundable: true,
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -670,7 +671,7 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
@@ -693,7 +694,7 @@ describe("DefaultEvalReporter", () => {
                     refundable: true,
                   },
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -737,12 +738,12 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,

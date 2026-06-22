@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   describeEval,
   getHarnessRunFromError,
+  messagesToTranscriptEvents,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
@@ -29,9 +30,7 @@ type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   : never;
 
 function firstAssistantToolCall(session: NormalizedSession) {
-  return session.messages.flatMap((message) =>
-    message.role === "assistant" ? (message.toolCalls ?? []) : [],
-  )[0];
+  return session.events.find((event) => event.type === "tool_call");
 }
 
 const typedRunOutputHarness = piAiHarness({
@@ -328,7 +327,7 @@ describeEval(
           },
         },
       ]);
-      expect(result.session.messages).toEqual(
+      expect(result.session.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             role: "assistant",
@@ -434,8 +433,8 @@ describeEval(
     }) => {
       const result = await run("Refund invoice inv_123");
 
-      expect(result.session.messages).toContainEqual({
-        role: "tool",
+      expect(result.session.events).toContainEqual({
+        type: "tool_result",
         toolCallId: "lookupInvoice",
         name: "lookupInvoice",
         content: {
@@ -1005,7 +1004,8 @@ test("supports a typed output selector", async () => {
   expect(result.output).toEqual({
     status: "approved",
   });
-  expect(result.session.messages).toContainEqual({
+  expect(result.session.events).toContainEqual({
+    type: "message",
     role: "assistant",
     content: {
       status: "approved",
@@ -1018,14 +1018,14 @@ test("applies output selectors to HarnessRun-shaped results", async () => {
     agent: () => ({ id: "refund-agent" }),
     run: async () => ({
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "assistant" as const,
             content: {
               status: "denied",
             },
           },
-        ],
+        ]),
       },
       output: {
         status: "denied",
@@ -1048,8 +1048,9 @@ test("applies output selectors to HarnessRun-shaped results", async () => {
   expect(result.output).toEqual({
     status: "approved",
   });
-  expect(result.session.messages).toEqual([
+  expect(result.session.events).toEqual([
     {
+      type: "message",
       role: "assistant",
       content: {
         status: "denied",

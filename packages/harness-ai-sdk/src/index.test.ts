@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   describeEval,
   getHarnessRunFromError,
+  messagesToTranscriptEvents,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
@@ -31,9 +32,7 @@ type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   : never;
 
 function firstAssistantToolCall(session: NormalizedSession) {
-  return session.messages.flatMap((message) =>
-    message.role === "assistant" ? (message.toolCalls ?? []) : [],
-  )[0];
+  return session.events.find((event) => event.type === "tool_call");
 }
 
 const typedRunOutputHarness = aiSdkHarness({
@@ -295,7 +294,7 @@ describeEval(
       });
       expect(result.session.provider).toBe("openai");
       expect(result.session.model).toBe("gpt-4o-mini");
-      expect(result.session.messages).toEqual(
+      expect(result.session.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             role: "assistant",
@@ -436,7 +435,7 @@ describeEval(
       expect(result.output).toEqual({
         status: "approved",
       });
-      expect(result.session.messages).toEqual(
+      expect(result.session.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             role: "assistant",
@@ -675,7 +674,7 @@ test("supports a typed output selector with inferred diagnostics", async () => {
   expect(result.output).toEqual({
     status: "approved",
   });
-  expect(result.session.messages).toMatchObject([
+  expect(result.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
@@ -739,22 +738,19 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
       },
     },
   ]);
-  expect(run?.session.messages).toMatchObject([
+  expect(run?.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
     },
     {
-      role: "tool",
+      type: "tool_result",
       toolCallId: "call_lookup",
       name: "lookupInvoice",
       content: {
@@ -861,22 +857,19 @@ test("omits empty runtime tool error content when custom run errors", async () =
       },
     },
   ]);
-  expect(run?.session.messages).toMatchObject([
+  expect(run?.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
     },
     {
-      role: "tool",
+      type: "tool_result",
       toolCallId: "call_lookup",
       name: "lookupInvoice",
       error: {
@@ -885,7 +878,7 @@ test("omits empty runtime tool error content when custom run errors", async () =
       },
     },
   ]);
-  expect(run?.session.messages[2]).not.toHaveProperty("content");
+  expect(run?.session.events[2]).not.toHaveProperty("content");
 });
 
 test("does not derive successful transcripts from runtime tool bookkeeping", async () => {
@@ -927,7 +920,7 @@ test("does not derive successful transcripts from runtime tool bookkeeping", asy
   expect(execute).toHaveBeenCalledTimes(1);
   expect(run.usage.toolCalls).toBeUndefined();
   expect(toolCalls(run.session)).toEqual([]);
-  expect(run.session.messages).toMatchObject([
+  expect(run.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
@@ -1014,23 +1007,24 @@ test("marks step-derived tool messages as errors when the tool call failed", asy
       },
     },
   ]);
-  expect(run.session.messages).toHaveLength(4);
-  expect(run.session.messages).toMatchObject([
+  expect(run.session.events).toHaveLength(5);
+  expect(run.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
     },
     {
-      role: "tool",
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      type: "tool_result",
       toolCallId: "call_lookup",
       name: "lookupInvoice",
       content: {
@@ -1041,6 +1035,7 @@ test("marks step-derived tool messages as errors when the tool call failed", asy
       },
     },
     {
+      type: "message",
       role: "assistant",
       content: "done",
     },
@@ -1116,7 +1111,7 @@ test("does not add app-side runtime calls to transcript when SDK steps are prese
   expect(execute).toHaveBeenCalledTimes(1);
   expect(run.usage.toolCalls).toBeUndefined();
   expect(toolCalls(run.session)).toEqual([]);
-  expect(run.session.messages).toMatchObject([
+  expect(run.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
@@ -1232,12 +1227,14 @@ test("normalizes domain results that resemble harness runs", async () => {
     status: "approved",
   });
   expect(output).toHaveBeenCalledTimes(1);
-  expect(run.session.messages).toEqual([
+  expect(run.session.events).toEqual([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
       content: {
         status: "approved",
@@ -1625,8 +1622,8 @@ test("omits undefined step-normalized arguments and results", async () => {
   });
   expect(toolCalls(run.session)[0]).not.toHaveProperty("arguments");
   expect(toolCalls(run.session)[0]).not.toHaveProperty("result");
-  const toolMessage = run.session.messages.find(
-    (message) => message.role === "tool",
+  const toolMessage = run.session.events.find(
+    (event) => event.type === "tool_result",
   );
   expect(toolMessage).toBeDefined();
   expect(toolMessage).not.toHaveProperty("content");

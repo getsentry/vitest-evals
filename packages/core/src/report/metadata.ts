@@ -2,17 +2,16 @@ import { z } from "zod";
 import {
   HarnessRunSchema,
   NormalizedErrorSchema,
-  NormalizedAssistantMessageSchema,
   NormalizedSessionSchema,
   NormalizedSpanEventSchema,
   NormalizedSpanSchema,
-  NormalizedSystemMessageSchema,
-  NormalizedToolResultMessageSchema,
+  TranscriptMessageEventSchema,
+  TranscriptToolCallEventSchema,
+  TranscriptToolResultEventSchema,
+  TranscriptEventSchema,
   NormalizedTraceSchema,
-  NormalizedUserMessageSchema,
   TimingSummarySchema,
   ToolCallSchema,
-  ToolCallRecordSchema,
   UsageSummarySchema,
 } from "../harness";
 import { JsonObjectSchema, JsonValueSchema } from "../json";
@@ -66,7 +65,6 @@ export const EvalTaskMetaSchema = z
 /** Combined eval and harness metadata stored on a Vitest assertion. */
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
-const LenientToolCallRecordSchema = ToolCallRecordSchema.strip();
 const LenientToolCallSchema = z.discriminatedUnion("status", [
   z
     .object({
@@ -92,16 +90,13 @@ const LenientToolCallSchema = z.discriminatedUnion("status", [
     })
     .strip(),
 ]);
-const LenientMessageSchema = z.union([
-  NormalizedSystemMessageSchema.strip(),
-  NormalizedUserMessageSchema.strip(),
-  NormalizedAssistantMessageSchema.extend({
-    toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
-  }).strip(),
-  NormalizedToolResultMessageSchema.strip(),
+const LenientTranscriptEventSchema = z.union([
+  TranscriptMessageEventSchema.strip(),
+  TranscriptToolCallEventSchema.strip(),
+  TranscriptToolResultEventSchema.strip(),
 ]);
 const LenientSessionSchema = NormalizedSessionSchema.extend({
-  messages: z.array(LenientMessageSchema).default([]).catch([]),
+  events: z.array(LenientTranscriptEventSchema).default([]).catch([]),
 }).strip();
 const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
 const LenientSpanSchema = NormalizedSpanSchema.extend({

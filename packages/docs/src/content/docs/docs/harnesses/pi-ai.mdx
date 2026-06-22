@@ -24,7 +24,7 @@ harness expects.
 ```ts title="src/questionAgent.ts"
 type PiRuntime = {
   events?: {
-    message(message: { role: "assistant"; content: string }): void;
+    assistant(content: string): void;
   };
 };
 
@@ -37,10 +37,7 @@ export function createQuestionAgent({
     async run(input: string, runtime: PiRuntime) {
       const output = await answerQuestion(input, { instructions });
 
-      runtime.events?.message({
-        role: "assistant",
-        content: output,
-      });
+      runtime.events?.assistant(output);
 
       return {
         output,

@@ -15,6 +15,7 @@ import {
   isHarnessRun,
   isNormalizedSession,
   latestAssistantMessageContent,
+  messagesToTranscriptEvents,
   normalizeContent,
   toolCalls,
   userMessages,
@@ -964,10 +965,11 @@ function createSyntheticJudgeSession<
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
 ): NormalizedSession {
-  const messages: NormalizedSession["messages"] = [];
+  const events: NormalizedSession["events"] = [];
   const userContent = normalizeJudgeJsonValue(options.input);
   if (userContent !== undefined) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "user",
       content: userContent,
     });
@@ -975,14 +977,15 @@ function createSyntheticJudgeSession<
 
   const assistantContent = normalizeJudgeJsonValue(received);
   if (assistantContent !== undefined) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "assistant",
       content: assistantContent,
     });
   }
 
   return {
-    messages,
+    events,
   };
 }
 
@@ -997,7 +1000,7 @@ function inferJudgeOutputValue(
   if (isNormalizedSession(received)) {
     return (
       resolveAssistantOutput(session) ??
-      normalizeJudgeJsonValue(received.messages)
+      normalizeJudgeJsonValue(received.events)
     );
   }
 
@@ -1193,6 +1196,7 @@ export {
   failedSpans,
   getHarnessRunFromError,
   latestAssistantMessageContent,
+  messagesToTranscriptEvents,
   messagesByRole,
   normalizeHarnessRun,
   normalizeSpanAttributes,
@@ -1223,23 +1227,27 @@ export {
   type JsonPrimitive,
   type JsonValue,
   type MaybePromise,
-  type NormalizedMessage,
   type NormalizedSession,
   type NormalizedSpan,
   type NormalizedSpanAttributes,
   type NormalizedSpanAttributeKey,
   type NormalizedSpanEvent,
-  type NormalizedToolResultMessage,
+  type TranscriptEvent,
+  type TranscriptMessageEvent,
+  type TranscriptMessageInput,
+  type TranscriptMessageToolCall,
+  type TranscriptToolCallEvent,
+  type TranscriptToolResultEvent,
   type NormalizedTrace,
   type OpenTelemetrySemanticAttributeKey,
   type OpenTelemetrySemanticAttributes,
   type SimpleHarnessResult,
   type SimpleSpanEvent,
   type SimpleSpanRecord,
+  type SimpleTranscriptInput,
   type SimpleTraceRecord,
   type TimingSummary,
   type ToolCall,
-  type ToolCallRecord,
   type UsageSummary,
 } from "./harness";
 

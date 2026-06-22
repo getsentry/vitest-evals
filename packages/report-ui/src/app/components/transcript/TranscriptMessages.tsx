@@ -184,8 +184,6 @@ function transcriptRoleLabel(role: TranscriptMessage["role"]): string {
       return "Assistant";
     case "system":
       return "System";
-    case "tool":
-      return "Tool";
     case "user":
       return "User";
   }
@@ -197,7 +195,6 @@ function transcriptMessageClass(role: TranscriptMessage["role"]): string {
     role === "assistant" && "border-l-trace bg-trace-soft pr-3 text-ink",
     role === "user" && "border-l-ink bg-panel pr-3 text-ink",
     role === "system" && "border-l-warn bg-panel pr-3 text-ink",
-    role === "tool" && "border-l-line text-muted-strong",
   );
 }
 
@@ -207,7 +204,6 @@ function transcriptRoleClass(role: TranscriptMessage["role"]): string {
     role === "assistant" && "text-trace",
     role === "user" && "text-ink",
     role === "system" && "text-warn",
-    role === "tool" && "text-muted-strong",
   );
 }
 
@@ -217,6 +213,5 @@ function transcriptRoleLabelClass(role: TranscriptMessage["role"]): string {
     role === "assistant" && "text-trace",
     role === "user" && "text-ink",
     role === "system" && "text-warn",
-    role === "tool" && "text-muted-strong",
   );
 }

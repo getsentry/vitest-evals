@@ -1,8 +1,9 @@
 import {
   collectReportWorkspace,
-  toolCalls,
   type HarnessRun,
   type ReportCase,
+  type TranscriptToolCallEvent,
+  type TranscriptToolResultEvent,
   type ToolCall,
 } from "@vitest-evals/core";
 import type {
@@ -131,7 +132,22 @@ function collectToolCalls(reportCase: ReportCase) {
 }
 
 function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
-  return session ? toolCalls(session).map(toToolCallSummary) : [];
+  if (!session) {
+    return [];
+  }
+
+  const resultsById = new Map<string, TranscriptToolResultEvent>();
+  for (const event of session.events) {
+    if (event.type === "tool_result" && !resultsById.has(event.toolCallId)) {
+      resultsById.set(event.toolCallId, event);
+    }
+  }
+
+  return session.events.flatMap((event) =>
+    event.type === "tool_call"
+      ? [toSessionToolCallSummary(event, resultsById.get(event.id))]
+      : [],
+  );
 }
 
 function toToolCallSummary(call: ToolCall): ToolCallSummary {
@@ -139,6 +155,27 @@ function toToolCallSummary(call: ToolCall): ToolCallSummary {
     name: call.name,
     status: call.status,
     error: call.status === "error" ? getToolCallError(call.error) : undefined,
+  };
+}
+
+function toSessionToolCallSummary(
+  call: TranscriptToolCallEvent,
+  result: TranscriptToolResultEvent | undefined,
+): ToolCallSummary {
+  if (!result) {
+    return {
+      name: call.name,
+      status: "pending",
+      ...(call.durationMs !== undefined ? { durationMs: call.durationMs } : {}),
+    };
+  }
+
+  const durationMs = result.durationMs ?? call.durationMs;
+  return {
+    name: call.name,
+    status: result.error ? "error" : "ok",
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(result.error ? { error: getToolCallError(result.error) } : {}),
   };
 }
 

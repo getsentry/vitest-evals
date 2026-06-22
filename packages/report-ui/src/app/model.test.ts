@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import {
   buildSpanTree,
@@ -59,17 +60,18 @@ const workspace: ReportWorkspace = {
             toolCalls: 1,
           },
           session: {
-            messages: [
+            events: messagesToTranscriptEvents([
               {
                 role: "assistant",
                 toolCalls: [
                   {
+                    id: "call_lookup",
                     name: "lookupInvoice",
                     durationMs: 6,
                   },
                 ],
               },
-            ],
+            ]),
           },
           traces: [
             {
@@ -294,29 +296,29 @@ describe("case helpers", () => {
     });
   });
 
-  test("joins session tool result messages into transcript tool events by id", () => {
+  test("joins session tool result events into transcript tool events by id", () => {
     const testCase = structuredClone(workspace.cases[0]!);
     const run = testCase.harness!.run!;
     run.traces = [];
-    const assistantMessage = run.session.messages.find(
-      (message) => message.role === "assistant",
-    );
-    assistantMessage!.toolCalls![0] = {
-      id: "call_lookup",
+    run.session.events.push({
+      type: "tool_call",
+      id: "call_lookup_join",
       name: "lookupInvoice",
       arguments: { invoiceId: "inv_123" },
       durationMs: 6,
-    };
-    run.session.messages.push({
-      role: "tool",
-      toolCallId: "call_lookup",
+    });
+    run.session.events.push({
+      type: "tool_result",
+      toolCallId: "call_lookup_join",
       name: "lookupInvoice",
       content: { refundable: false },
       durationMs: 8,
     });
 
     expect(
-      buildTranscript(run).events.find((event) => event.kind === "tool"),
+      buildTranscript(run).events.find(
+        (event) => event.kind === "tool" && event.callId === "call_lookup_join",
+      ),
     ).toMatchObject({
       arguments: { invoiceId: "inv_123" },
       durationMs: 8,
@@ -331,14 +333,14 @@ describe("case helpers", () => {
     const transcript = buildTranscript({
       errors: [],
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "tool",
             toolCallId: "call_timeout",
             name: "lookupInvoice",
             error: { message: "Tool timed out", type: "TimeoutError" },
           },
-        ],
+        ]),
       },
       usage: {},
     });
@@ -347,7 +349,7 @@ describe("case helpers", () => {
       {
         callId: "call_timeout",
         error: { message: "Tool timed out", type: "TimeoutError" },
-        id: "message-0:tool-result",
+        id: "event-0:tool-result",
         kind: "tool",
         name: "lookupInvoice",
         status: "error",
@@ -358,10 +360,9 @@ describe("case helpers", () => {
   test("does not let usage undercount recorded session tool calls", () => {
     const testCase = structuredClone(workspace.cases[0]!);
     testCase.harness!.run!.usage.toolCalls = 1;
-    const assistantMessage = testCase.harness!.run!.session.messages.find(
-      (message) => message.role === "assistant",
-    );
-    assistantMessage!.toolCalls!.push({
+    testCase.harness!.run!.session.events.push({
+      type: "tool_call",
+      id: "call_create",
       name: "createRefund",
     });
 
@@ -381,14 +382,14 @@ describe("case helpers", () => {
     expect(scoreTone(0.2)).toBe("bad");
   });
 
-  test("builds transcripts from session messages, not traces", () => {
+  test("builds transcripts from session events, not traces", () => {
     const transcript = buildTranscript({
       errors: [],
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           { role: "user", content: "Refund invoice inv_123" },
           { role: "assistant", content: "Checking the invoice." },
-        ],
+        ]),
       },
       usage: {},
       traces: [
@@ -454,7 +455,7 @@ describe("case helpers", () => {
     ];
     const transcript = buildTranscript({
       errors: [],
-      session: { messages: [] },
+      session: { events: messagesToTranscriptEvents([]) },
       usage: {},
       traces: [
         {
@@ -470,11 +471,11 @@ describe("case helpers", () => {
     ]);
   });
 
-  test("keeps session tool results when traces provide their own messages", () => {
+  test("keeps session tool results when traces provide their own events", () => {
     const transcript = buildTranscript({
       errors: [],
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "assistant",
             toolCalls: [
@@ -492,7 +493,7 @@ describe("case helpers", () => {
             content: { refundable: true },
             durationMs: 7,
           },
-        ],
+        ]),
       },
       usage: {},
       traces: [
@@ -529,10 +530,10 @@ describe("case helpers", () => {
     const transcript = buildTranscript({
       errors: [],
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           { role: "user", content: "Refund invoice inv_123" },
           { role: "assistant", content: "Approved" },
-        ],
+        ]),
       },
       usage: {},
       traces: [

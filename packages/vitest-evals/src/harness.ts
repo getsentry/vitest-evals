@@ -3,9 +3,12 @@ import {
   failedSpans,
   latestAssistantMessageContent,
   messagesByRole,
+  messagesToTranscriptEvents,
+  NormalizedSessionSchema,
   spans,
   spansByKind,
   systemMessages,
+  TranscriptEventSchema,
   toolCalls,
   toolMessages,
   userMessages,
@@ -17,16 +20,17 @@ import type {
   NormalizedError,
   JsonPrimitive,
   JsonValue,
-  NormalizedMessage,
+  TranscriptMessageEvent,
   NormalizedSession,
   NormalizedSpan,
   NormalizedSpanAttributes,
   NormalizedSpanEvent,
-  NormalizedToolResultMessage,
+  TranscriptEvent,
   NormalizedTrace,
   TimingSummary,
   ToolCall,
-  ToolCallRecord,
+  TranscriptMessageInput,
+  TranscriptMessageToolCall,
   UsageSummary,
 } from "@vitest-evals/core";
 
@@ -35,6 +39,7 @@ export {
   failedSpans,
   latestAssistantMessageContent,
   messagesByRole,
+  messagesToTranscriptEvents,
   spans,
   spansByKind,
   systemMessages,
@@ -55,19 +60,22 @@ export type {
   NormalizedError,
   JsonPrimitive,
   JsonValue,
-  NormalizedMessage,
+  TranscriptMessageEvent,
   NormalizedSession,
   NormalizedSpan,
   NormalizedSpanAttributeKey,
   NormalizedSpanAttributes,
   NormalizedSpanEvent,
-  NormalizedToolResultMessage,
+  TranscriptToolCallEvent,
+  TranscriptToolResultEvent,
+  TranscriptEvent,
   NormalizedTrace,
   OpenTelemetrySemanticAttributeKey,
   OpenTelemetrySemanticAttributes,
   TimingSummary,
   ToolCall,
-  ToolCallRecord,
+  TranscriptMessageInput,
+  TranscriptMessageToolCall,
   UsageSummary,
 } from "@vitest-evals/core";
 
@@ -105,7 +113,7 @@ export type HarnessMetadata = Record<string, unknown>;
  *
  *     return {
  *       output: undefined,
- *       session: { messages: [{ role: "user", content: input }] },
+ *       session: { events: [{ type: "message", role: "user", content: input }] },
  *       usage: {},
  *       errors: [],
  *     };
@@ -175,6 +183,19 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
   spans: SimpleSpanRecord[];
 };
 
+/** Lightweight transcript input accepted by `createHarness(...)` results. */
+export type SimpleTranscriptInput =
+  | {
+      /** Ordered normalized transcript events for the application run. */
+      events: TranscriptEvent[];
+      messages?: never;
+    }
+  | {
+      /** Provider-style messages normalized into ordered transcript events. */
+      messages: TranscriptMessageInput[];
+      events?: never;
+    };
+
 /**
  * Lightweight result shape normalized by `createHarness(...)`.
  *
@@ -182,9 +203,9 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
  * ```ts
  * const result: SimpleHarnessResult<{ status: "approved" }> = {
  *   output: { status: "approved" },
- *   messages: [
- *     { role: "user", content: "Refund invoice inv_123" },
- *     { role: "assistant", content: { status: "approved" } },
+ *   events: [
+ *     { type: "message", role: "user", content: "Refund invoice inv_123" },
+ *     { type: "message", role: "assistant", content: { status: "approved" } },
  *   ],
  *   usage: { totalTokens: 260 },
  * };
@@ -192,22 +213,21 @@ export type SimpleTraceRecord = Omit<NormalizedTrace, "metadata" | "spans"> & {
  */
 export type SimpleHarnessResult<
   TOutput extends JsonValue | undefined = JsonValue | undefined,
-> = OutputField<TOutput> & {
-  /** Ordered normalized transcript messages for the application run. */
-  messages: NormalizedMessage[];
-  /** Usage summary to attach to the run. */
-  usage?: UsageSummary;
-  /** Timing summary to attach to the run. */
-  timings?: TimingSummary;
-  /** Raw artifact values to normalize and merge into the run. */
-  artifacts?: Record<string, unknown>;
-  /** Lightweight traces and spans to normalize into the run. */
-  traces?: SimpleTraceRecord[];
-  /** Raw session metadata to normalize into the session. */
-  metadata?: Record<string, unknown>;
-  /** Raw errors to normalize into the run. */
-  errors?: unknown[];
-};
+> = OutputField<TOutput> &
+  SimpleTranscriptInput & {
+    /** Usage summary to attach to the run. */
+    usage?: UsageSummary;
+    /** Timing summary to attach to the run. */
+    timings?: TimingSummary;
+    /** Raw artifact values to normalize and merge into the run. */
+    artifacts?: Record<string, unknown>;
+    /** Lightweight traces and spans to normalize into the run. */
+    traces?: SimpleTraceRecord[];
+    /** Raw session metadata to normalize into the session. */
+    metadata?: Record<string, unknown>;
+    /** Raw errors to normalize into the run. */
+    errors?: unknown[];
+  };
 
 /** Either a complete normalized run or a lightweight result to normalize. */
 export type HarnessResultLike<
@@ -235,7 +255,7 @@ export type CreateHarnessRunArgs<TInput> = {
  *   name: "refund-agent",
  *   run: async ({ input }) => ({
  *     output: await classifyRefund(input),
- *     messages: [{ role: "user", content: input }],
+ *     events: [{ type: "message", role: "user", content: input }],
  *   }),
  * };
  * ```
@@ -390,25 +410,21 @@ export function normalizeContent(value: unknown): JsonValue {
  *
  *     return {
  *       output,
- *       messages: [
- *         { role: "user", content: input },
+ *       events: [
+ *         { type: "message", role: "user", content: input },
  *         {
- *           role: "assistant",
- *           toolCalls: [
- *             {
- *               id: "call_lookup",
- *               name: "lookupInvoice",
- *               arguments: { invoiceId: result.invoiceId },
- *             },
- *           ],
+ *           type: "tool_call",
+ *           id: "call_lookup",
+ *           name: "lookupInvoice",
+ *           arguments: { invoiceId: result.invoiceId },
  *         },
  *         {
- *           role: "tool",
+ *           type: "tool_result",
  *           toolCallId: "call_lookup",
  *           name: "lookupInvoice",
  *           content: { refundable: result.refundable },
  *         },
- *         { role: "assistant", content: output },
+ *         { type: "message", role: "assistant", content: output },
  *       ],
  *       usage: { provider: "openai", model: "gpt-4o-mini" },
  *     };
@@ -489,20 +505,16 @@ export function createHarness<
  * ```ts
  * const run = normalizeHarnessRun("Refund invoice inv_123", {
  *   output: { status: "approved" },
- *   messages: [
- *     { role: "user", content: "Refund invoice inv_123" },
+ *   events: [
+ *     { type: "message", role: "user", content: "Refund invoice inv_123" },
  *     {
- *       role: "assistant",
- *       toolCalls: [
- *         {
- *           id: "call_lookup",
- *           name: "lookupInvoice",
- *           arguments: { invoiceId: "inv_123" },
- *         },
- *       ],
+ *       type: "tool_call",
+ *       id: "call_lookup",
+ *       name: "lookupInvoice",
+ *       arguments: { invoiceId: "inv_123" },
  *     },
  *     {
- *       role: "tool",
+ *       type: "tool_result",
  *       toolCallId: "call_lookup",
  *       name: "lookupInvoice",
  *       content: { refundable: true },
@@ -539,18 +551,18 @@ export function normalizeHarnessRun<
 
   if ("toolCalls" in result) {
     throw new TypeError(
-      'createHarness results no longer accept top-level toolCalls. Return messages with assistant toolCalls and role: "tool" results linked by toolCallId instead.',
+      'createHarness results do not accept top-level toolCalls. Return ordered session events with type: "tool_call" and type: "tool_result" entries instead.',
     );
   }
 
   const output = result.output;
   const usage = result.usage ?? {};
-  if (!Array.isArray(result.messages)) {
+  const events = normalizeTranscriptInput(result);
+  if (!events) {
     throw new TypeError(
-      "createHarness results must include ordered messages. Return a full HarnessRun or a lightweight result with messages.",
+      "createHarness results must include ordered events or messages. Return a full HarnessRun or a lightweight result with events/messages.",
     );
   }
-  const messages = result.messages;
   const metadata = result.metadata
     ? normalizeMetadata(result.metadata)
     : undefined;
@@ -562,7 +574,7 @@ export function normalizeHarnessRun<
 
   return {
     session: {
-      messages,
+      events,
       ...(usage.provider ? { provider: usage.provider } : {}),
       ...(usage.model ? { model: usage.model } : {}),
       ...(metadata ? { metadata } : {}),
@@ -574,6 +586,22 @@ export function normalizeHarnessRun<
     ...(traces ? { traces } : {}),
     errors: normalizeSimpleErrors(result.errors),
   } as HarnessRun<TOutput>;
+}
+
+function normalizeTranscriptInput(
+  result: HarnessResultLike,
+): TranscriptEvent[] | undefined {
+  if ("events" in result && Array.isArray(result.events)) {
+    return result.events.map((event) => TranscriptEventSchema.parse(event));
+  }
+
+  if ("messages" in result && Array.isArray(result.messages)) {
+    return messagesToTranscriptEvents(result.messages).map((event) =>
+      TranscriptEventSchema.parse(event),
+    );
+  }
+
+  return undefined;
 }
 
 /**
@@ -592,8 +620,9 @@ export function createFailedHarnessRun(
 
   return {
     session: {
-      messages: [
+      events: [
         {
+          type: "message",
           role: "user",
           content: normalizeContent(input),
         },
@@ -948,13 +977,7 @@ export function isHarnessRun(value: unknown): value is HarnessRun {
 export function isNormalizedSession(
   value: unknown,
 ): value is NormalizedSession {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    value !== null &&
-    "messages" in value &&
-    Array.isArray((value as { messages?: unknown }).messages)
-  );
+  return NormalizedSessionSchema.safeParse(value).success;
 }
 
 /** Reuses pre-normalized harness errors when a runtime already returns them. */

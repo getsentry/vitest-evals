@@ -5,6 +5,7 @@ import {
   createJudgeHarness,
   describeEval,
   FactualityJudge,
+  messagesToTranscriptEvents,
   type CreateJudgeHarnessOptions,
   type HarnessRun,
   type JsonValue,
@@ -457,7 +458,7 @@ test("FactualityJudge skips blank assistant transcript output", async () => {
   const run = {
     output: undefined,
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "user",
           content: "What is the capital of France?",
@@ -470,7 +471,7 @@ test("FactualityJudge skips blank assistant transcript output", async () => {
           role: "assistant",
           content: "   ",
         },
-      ],
+      ]),
     },
     usage: {},
     errors: [],
@@ -613,12 +614,12 @@ function createRun<TOutput extends JsonValue | undefined>(
   return {
     output,
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "assistant",
           content: output,
         },
-      ],
+      ]),
     },
     usage: {},
     errors: [],

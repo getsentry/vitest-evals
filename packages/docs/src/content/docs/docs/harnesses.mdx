@@ -6,7 +6,7 @@ editUrl: false
 
 A harness is the boundary between production behavior and eval infrastructure.
 It should be thin: call the same app entrypoint you use in production, then
-return the output, ordered transcript messages, optional traces, and usage that
+return the output, ordered transcript events, optional traces, and usage that
 tests and judges need. Tool-call helpers derive their results from the
 transcript.
 
@@ -43,7 +43,7 @@ same shape regardless of runtime:
 | Field | Purpose |
 | --- | --- |
 | `output` | The domain value your tests usually assert on. |
-| `session.messages` | Ordered conversation transcript, including assistant tool-call requests and `role: "tool"` results. |
+| `session.events` | Ordered transcript events, including messages, tool-call requests, and tool results. |
 | `toolCalls(result)` | Deterministic tool-call projection for tool judges and replay checks. |
 | `traces` | Operation spans for runs, model calls, tools, guardrails, handoffs, or custom work. |
 | `usage` | Stable usage units such as provider, model, tokens, tools, and retries. |

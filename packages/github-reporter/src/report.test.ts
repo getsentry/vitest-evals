@@ -79,29 +79,26 @@ const sampleJson: VitestJsonReport = {
                   totalMs: 4100,
                 },
                 session: {
-                  messages: [
+                  events: [
                     {
-                      role: "assistant",
-                      toolCalls: [
-                        {
-                          id: "call_lookup",
-                          name: "lookupInvoice",
-                          durationMs: 6,
-                        },
-                        {
-                          id: "call_refund",
-                          name: "createRefund",
-                        },
-                      ],
+                      type: "tool_call",
+                      id: "call_lookup",
+                      name: "lookupInvoice",
+                      durationMs: 6,
                     },
                     {
-                      role: "tool",
+                      type: "tool_call",
+                      id: "call_refund",
+                      name: "createRefund",
+                    },
+                    {
+                      type: "tool_result",
                       toolCallId: "call_lookup",
                       name: "lookupInvoice",
                       durationMs: 6,
                     },
                     {
-                      role: "tool",
+                      type: "tool_result",
                       toolCallId: "call_refund",
                       name: "createRefund",
                       error: {
@@ -165,6 +162,17 @@ describe("collectEvalReport", () => {
         judgeName: "StructuredOutputJudge",
         score: 0.2,
       },
+      toolCalls: [
+        {
+          name: "lookupInvoice",
+          durationMs: 6,
+          status: "ok",
+        },
+        {
+          name: "createRefund",
+          status: "error",
+        },
+      ],
     });
   });
 
@@ -318,7 +326,7 @@ describe("mergeEvalReports", () => {
                 totalMs: 2000,
               },
               session: {
-                messages: [{ role: "assistant", toolCalls: [] }],
+                events: [],
               },
               errors: [],
             },
@@ -458,7 +466,9 @@ describe("publishEvalReport", () => {
     evalMeta.output = {
       value: "abcdefghijklmnopqrstuvwxyz",
     };
-    harnessRun.session.messages[0].toolCalls.push({
+    harnessRun.session.events.push({
+      type: "tool_call",
+      id: "call_notify",
       name: "notifyCustomer",
       durationMs: 4,
     });
@@ -793,13 +803,22 @@ describe("buildCheckAnnotations", () => {
     const json = structuredClone(sampleJson);
     const harnessRun = (json.testResults[0]?.assertionResults[0]?.meta as any)
       .harness.run;
-    harnessRun.session.messages[0].toolCalls.push({
+    harnessRun.session.events.push({
+      type: "tool_call",
+      id: "call_email",
       name: "emailCustomer",
+      durationMs: 4,
     });
     const report = collectEvalReport(json, {
       workspace: "/repo",
     });
 
+    const toolCalls = report.failures[0]?.toolCalls ?? [];
+    expect(toolCalls[toolCalls.length - 1]).toMatchObject({
+      name: "emailCustomer",
+      durationMs: 4,
+      status: "pending",
+    });
     expect(buildCheckAnnotations(report)[0]?.raw_details).toContain(
       "- emailCustomer: pending",
     );

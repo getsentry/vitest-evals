@@ -11,9 +11,9 @@ custom judges through `ctx.session` and `ctx.toolCalls`.
 
 Use `toolCalls(result)` for the flattened tool history. It returns assistant
 tool-call requests with `status`, `result`, and `error` filled from matching
-`role: "tool"` result messages that reference the call id. Calls without a
-matching result have `status: "pending"`. The helpers also accept a normalized
-session when that is the only value available.
+`type: "tool_result"` transcript events that reference the call id. Calls
+without a matching result have `status: "pending"`. The helpers also accept a
+normalized session when that is the only value available.
 
 ```ts title="evals/refund.eval.ts"
 import { expect } from "vitest";
@@ -55,14 +55,15 @@ expect(messagesByRole(result, "assistant")).toEqual(
 );
 ```
 
-Read `result.session.messages` directly when order across roles matters.
+Read `result.session.events` directly when order across messages and tool
+activity matters.
 
 ```ts title="evals/refund.eval.ts"
-expect(result.session.messages.map((message) => message.role)).toEqual([
-  "user",
-  "assistant",
-  "tool",
-  "assistant",
+expect(result.session.events.map((event) => event.type)).toEqual([
+  "message",
+  "tool_call",
+  "tool_result",
+  "message",
 ]);
 ```
 

@@ -222,8 +222,10 @@ Important root types include:
 - `Harness`
 - `HarnessRun`
 - `NormalizedSession`
-- `NormalizedMessage`
-- `ToolCallRecord`
+- `TranscriptEvent`
+- `TranscriptMessageEvent`
+- `TranscriptToolCallEvent`
+- `TranscriptToolResultEvent`
 - `UsageSummary`
 - `TimingSummary`
 - `JsonValue`
@@ -308,11 +310,11 @@ export const qaHarness = createHarness<string, string>({
 });
 ```
 
-Lightweight harness results must include:
+Lightweight harness results must include one transcript input:
 
 - `output`: typed app-facing output
-- `messages`: ordered normalized transcript messages, including assistant
-  tool-call requests and `role: "tool"` results
+- `events`: ordered transcript events, or
+- `messages`: provider-style messages that are normalized into transcript events
 
 They can also include:
 - `usage`: stable usage units
@@ -328,18 +330,19 @@ and reporters:
 
 ```ts
 type NormalizedSession = {
-  messages: NormalizedMessage[];
+  events: TranscriptEvent[];
   provider?: string;
   model?: string;
   metadata?: Record<string, JsonValue>;
 };
 ```
 
-Messages have `role`, optional `content`, optional assistant `toolCalls`, and
-optional metadata. Assistant tool calls have `name`, optional `id`, JSON-safe
-`arguments`, timings, duration, and metadata. Tool result messages have
-`role: "tool"`, required `toolCallId`, optional `name`, JSON-safe `content`,
-optional normalized `error`, timings, duration, and metadata.
+Transcript events are flat and ordered. Message events have `type: "message"`,
+`role`, optional `content`, and optional metadata. Tool-call events have
+`type: "tool_call"`, required `id`, `name`, JSON-safe `arguments`, timings,
+duration, and metadata. Tool-result events have `type: "tool_result"`, required
+`toolCallId`, optional `name`, JSON-safe `content`, optional normalized
+`error`, timings, duration, and metadata.
 
 `UsageSummary` intentionally contains stable usage units:
 
@@ -388,7 +391,7 @@ import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
 ```
 
 Use it when the system under test uses the OpenAI Agents SDK. The adapter runs
-agents or runners, captures transcript messages, supports local tool replay
+agents or runners, captures transcript events, supports local tool replay
 metadata, preserves app-facing output separately from native output item
 records, and can attach partial runs when execution fails.
 
@@ -407,7 +410,7 @@ import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 ```
 
 Use it when the system under test uses Pi agents. The adapter captures
-transcript messages, inferred or configured toolsets, usage, and replay
+transcript events, inferred or configured toolsets, usage, and replay
 metadata for opt-in tools.
 
 Compatible apps expose a Pi agent, a `toolset`, or a `run(input, runtime)`
@@ -683,7 +686,7 @@ high-cardinality data.
 Harnesses can attach partial runs to thrown errors with
 `attachHarnessRunToError(...)`. Reporters and matchers can recover the run with
 `getHarnessRunFromError(...)`. First-party harnesses use this pattern to expose
-transcript messages, usage, and partial output when execution fails.
+transcript events, usage, and partial output when execution fails.
 
 ## Practical recommendations
 
