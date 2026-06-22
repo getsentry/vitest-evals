@@ -108,8 +108,9 @@ describeEval("refund agent", {
 
 The adapter infers:
 
-- normalized session and tool-call traces from AI SDK `steps`
-- usage diagnostics from `totalUsage` / `usage`
+- normalized session transcripts and tool calls from AI SDK `steps`
+- usage diagnostics from `totalUsage`, aggregated `steps[].usage`, or
+  top-level `usage` for non-step results
 - typed `run.output` from explicit `run()` results that return `output`, from
   common AI SDK provider fields such as `object` and `text`, or from a typed
   `output` selector when the app deliberately returns a raw provider result
@@ -117,6 +118,11 @@ The adapter infers:
   fields, primitive raw results, and non-JSON values require an explicit
   `output` selector
 - replay/cassette metadata for local tools configured with `toolReplay`
+
+Successful custom `run` entrypoints that do not return AI SDK `steps` use
+normalized transcript events for local tool executions. Output-only custom runs
+still get synthesized input/output messages; return a normalized `session` when
+evals need exact transcript control beyond that.
 
 See the workspace demo app in `apps/demo-ai-sdk` and the RFC notes in
 `docs/harness-first-rfc.md`.

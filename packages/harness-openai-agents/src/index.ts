@@ -3,19 +3,20 @@ import type {
   HarnessContext,
   HarnessRun,
   JsonValue,
-  NormalizedMessage,
+  NormalizedError,
   NormalizedSpan,
   NormalizedSession,
+  TranscriptToolCallEvent,
+  TranscriptToolResultEvent,
+  TranscriptEvent,
   NormalizedTrace,
   TimingSummary,
-  ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import {
   attachHarnessRunToError,
   createFailedHarnessRun,
   createGenAiUsageAttributes,
-  createToolCallSpans,
   ensureRunTrace,
   getHarnessRunFromError,
   hasCallableMethod,
@@ -29,7 +30,6 @@ import {
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
-  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import {
   executeWithReplay,
@@ -600,7 +600,22 @@ type OpenAiAgentsHarnessRunnerOptionsWithoutOutput<
 };
 
 type RuntimeToolCapture = {
-  calls: ToolCallRecord[];
+  events: TranscriptEvent[];
+};
+
+// Mirrors the public @openai/agents 0.8 RunResultData contract closely enough
+// to avoid treating arbitrary app fields named `history` as provider transcript.
+type OpenAiAgentsRunResultLike = {
+  input?: unknown;
+  history?: unknown;
+  newItems: unknown[];
+  output?: unknown[];
+  rawResponses: unknown[];
+};
+
+type OpenAiAgentsInitialEventSource = {
+  events: TranscriptEvent[];
+  usesProviderTranscript: boolean;
 };
 
 /** Adapts an `@openai/agents` Runner workflow into a normalized harness. */
@@ -775,7 +790,7 @@ async function executeOpenAiAgentsHarness<
   const startedAt = Date.now();
   const trace = createTraceRecorder(options.name ?? "openai-agents");
   const capture: RuntimeToolCapture = {
-    calls: [],
+    events: [],
   };
 
   return withInstrumentedAgentTools(
@@ -868,10 +883,23 @@ async function executeOpenAiAgentsHarness<
           : (resolveOutput(normalizeResult, {
               allowOutputField: Boolean(options.run),
             }) as TOutput | undefined);
-        const usage = resolveUsage(normalizeResult, capture.calls.length);
-        const session = resolveSession(input, normalizeResult, output, usage, {
-          runtimeToolCalls: capture.calls,
-        });
+        const baseUsage = resolveUsage(normalizeResult);
+        const session = resolveSession(
+          input,
+          normalizeResult,
+          output,
+          baseUsage,
+          {
+            runtimeEvents: capture.events,
+          },
+        );
+        const sessionToolCallCount = countToolCallEvents(session.events);
+        const usage = {
+          ...baseUsage,
+          ...(sessionToolCallCount > 0
+            ? { toolCalls: sessionToolCallCount }
+            : {}),
+        };
         const errors = resolveHarnessRunErrors(normalizeResult);
         const finishedAt = new Date();
 
@@ -897,11 +925,10 @@ async function executeOpenAiAgentsHarness<
         } as HarnessRun<TOutput>;
       } catch (error) {
         const finishedAt = new Date();
+        const runtimeToolCallCount = countToolCallEvents(capture.events);
         const usage =
-          capture.calls.length > 0 ? { toolCalls: capture.calls.length } : {};
-        const session = resolveSession(input, undefined, undefined, usage, {
-          runtimeToolCalls: capture.calls,
-        });
+          runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
+        const session = resolveFailureSession(input, capture.events);
         const serializedError = serializeError(error);
         const run = {
           session,
@@ -1255,12 +1282,6 @@ function finishOpenAiAgentsTrace(
     options.result,
     options.usage,
   );
-  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
-    traceId: trace.id,
-    parentId: trace.rootSpanId,
-    spanIdPrefix: `${trace.id}:tool`,
-  });
-
   return {
     id: trace.id,
     name: trace.name,
@@ -1270,7 +1291,7 @@ function finishOpenAiAgentsTrace(
     metadata: {
       source: "harness-openai-agents",
     },
-    spans: [rootSpan, ...modelSpans, ...toolSpans],
+    spans: [rootSpan, ...modelSpans],
   };
 }
 
@@ -1519,8 +1540,19 @@ async function executeInstrumentedTool<TInput>({
   execute: () => MaybePromise<unknown>;
 }) {
   const startedAt = new Date();
-  const toolCallId = resolveToolCallId(runContext, rawInput, details);
+  const toolCallId = resolveToolCallId(details);
+  const resolvedToolCallId =
+    toolCallId ??
+    createRuntimeToolCallId(toolName, countToolCallEvents(capture.events));
   const normalizedArgs = normalizeArguments(rawInput);
+  const call: TranscriptToolCallEvent = {
+    type: "tool_call",
+    id: resolvedToolCallId,
+    name: toolName,
+    ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
+    startedAt: startedAt.toISOString(),
+  };
+  capture.events.push(call);
   const replayContext = {
     input,
     signal: context.signal,
@@ -1545,35 +1577,35 @@ async function executeInstrumentedTool<TInput>({
           replay: undefined,
         };
     const finishedAt = new Date();
-    const normalizedResult = normalizeToolResult(execution.result);
-    const call = {
-      ...(toolCallId ? { id: toolCallId } : {}),
+    call.finishedAt = finishedAt.toISOString();
+    call.durationMs = finishedAt.getTime() - startedAt.getTime();
+    call.metadata = normalizeReplayMetadata(execution.replay);
+    const normalizedResult = normalizeContent(execution.result);
+    capture.events.push({
+      type: "tool_result",
+      toolCallId: resolvedToolCallId,
       name: toolName,
-      ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
-      ...(normalizedResult !== undefined ? { result: normalizedResult } : {}),
-      startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
-      durationMs: finishedAt.getTime() - startedAt.getTime(),
-      metadata: normalizeReplayMetadata(execution.replay),
-    } satisfies ToolCallRecord;
-
-    capture.calls.push(call);
+      ...(normalizedResult !== undefined ? { content: normalizedResult } : {}),
+      startedAt: call.startedAt,
+      finishedAt: call.finishedAt,
+      durationMs: call.durationMs,
+    });
     return execution.result;
   } catch (error) {
     const finishedAt = new Date();
     const replay = getReplayMetadataFromError(error);
-    const call = {
-      ...(toolCallId ? { id: toolCallId } : {}),
+    call.finishedAt = finishedAt.toISOString();
+    call.durationMs = finishedAt.getTime() - startedAt.getTime();
+    call.metadata = normalizeReplayMetadata(replay);
+    capture.events.push({
+      type: "tool_result",
+      toolCallId: resolvedToolCallId,
       name: toolName,
-      ...(normalizedArgs !== undefined ? { arguments: normalizedArgs } : {}),
       error: normalizeError(error),
-      startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
-      durationMs: finishedAt.getTime() - startedAt.getTime(),
-      metadata: normalizeReplayMetadata(replay),
-    } satisfies ToolCallRecord;
-
-    capture.calls.push(call);
+      startedAt: call.startedAt,
+      finishedAt: call.finishedAt,
+      durationMs: call.durationMs,
+    });
     throw error;
   }
 }
@@ -1587,26 +1619,9 @@ function resolveToolName(tool: unknown) {
   );
 }
 
-function resolveToolCallId(
-  runContext: unknown,
-  rawInput: unknown,
-  details: unknown,
-) {
-  return (
-    findStringAtPath(details, ["toolCallId"]) ??
-    findStringAtPath(details, ["tool_call_id"]) ??
-    findStringAtPath(details, ["callId"]) ??
-    findStringAtPath(details, ["call_id"]) ??
-    findStringAtPath(details, ["toolCall", "callId"]) ??
-    findStringAtPath(details, ["toolCall", "call_id"]) ??
-    findStringAtPath(details, ["rawItem", "callId"]) ??
-    findStringAtPath(details, ["rawItem", "call_id"]) ??
-    findStringAtPath(runContext, ["toolCallId"]) ??
-    findStringAtPath(runContext, ["tool_call_id"]) ??
-    findStringAtPath(runContext, ["toolCall", "callId"]) ??
-    findStringAtPath(rawInput, ["toolCallId"]) ??
-    findStringAtPath(rawInput, ["tool_call_id"])
-  );
+function resolveToolCallId(details: unknown) {
+  const toolCall = getObjectProperty(details, "toolCall");
+  return stringProperty(toolCall, "callId");
 }
 
 function resolveOutput(
@@ -1632,8 +1647,15 @@ function resolveOutput(
   return undefined;
 }
 
-function isOpenAiAgentsRunResult(result: object) {
-  return "newItems" in result && "rawResponses" in result;
+function isOpenAiAgentsRunResult(
+  result: unknown,
+): result is OpenAiAgentsRunResultLike {
+  return Boolean(
+    result &&
+      typeof result === "object" &&
+      Array.isArray((result as { newItems?: unknown }).newItems) &&
+      Array.isArray((result as { rawResponses?: unknown }).rawResponses),
+  );
 }
 
 // Keep this adapter-local rather than exporting a core helper. Core
@@ -1689,7 +1711,7 @@ function toOutputValue(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown, runtimeToolCallCount: number) {
+function resolveUsage(result: unknown) {
   const usage =
     getObjectProperty(getObjectProperty(result, "state"), "usage") ??
     getObjectProperty(getObjectProperty(result, "runContext"), "usage") ??
@@ -1698,11 +1720,8 @@ function resolveUsage(result: unknown, runtimeToolCallCount: number) {
     usage && typeof usage === "object"
       ? (usage as Record<string, unknown>)
       : undefined;
-  const toolCallCount =
-    countToolCallsFromResult(result) || runtimeToolCallCount || undefined;
-
   if (!usageRecord) {
-    return toolCallCount ? { toolCalls: toolCallCount } : {};
+    return {};
   }
 
   return {
@@ -1712,7 +1731,6 @@ function resolveUsage(result: unknown, runtimeToolCallCount: number) {
     outputTokens: numberProperty(usageRecord, "outputTokens"),
     reasoningTokens: numberProperty(usageRecord, "reasoningTokens"),
     totalTokens: numberProperty(usageRecord, "totalTokens"),
-    toolCalls: toolCallCount,
     retries: numberProperty(usageRecord, "retries"),
     metadata: normalizeMetadata({
       requests: usageRecord.requests,
@@ -1728,7 +1746,7 @@ function resolveSession(
   output: JsonValue | undefined,
   usage: UsageSummary,
   options: {
-    runtimeToolCalls: ToolCallRecord[];
+    runtimeEvents: TranscriptEvent[];
   },
 ): NormalizedSession {
   if (
@@ -1739,42 +1757,40 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
+  const runItems = readOpenAiAgentsRunItems(result);
+  const initialSource = createInitialSessionEventSource(
+    input,
+    result,
+    runItems,
+  );
+  const events = initialSource.events;
+
+  if (runItems) {
+    events.push(...normalizeRunItems(runItems, options.runtimeEvents));
+  } else if (!initialSource.usesProviderTranscript) {
+    // Custom entrypoints may execute instrumented local tools without returning
+    // provider run items; in that case runtime capture is the transcript source.
+    events.push(...options.runtimeEvents);
   }
-
-  const newItems = arrayProperty(result, "newItems");
-  const outputItems = arrayProperty(result, "output");
-  const messages =
-    newItems && newItems.length > 0
-      ? normalizeInputMessages(getObjectProperty(result, "input") ?? input)
-      : normalizeHistoryMessages(result, input);
-
-  if (newItems && newItems.length > 0) {
-    messages.push(...normalizeRunItems(newItems, options.runtimeToolCalls));
-  } else if (outputItems && outputItems.length > 0) {
-    messages.push(...normalizeRunItems(outputItems, options.runtimeToolCalls));
-  }
-
-  appendUnmatchedRuntimeToolCalls(messages, options.runtimeToolCalls);
 
   if (
     output !== undefined &&
-    !messages.some(
-      (message) =>
-        message.role === "assistant" && message.content !== undefined,
+    !events.some(
+      (event) =>
+        event.type === "message" &&
+        event.role === "assistant" &&
+        event.content !== undefined,
     )
   ) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "assistant",
       content: output,
     });
   }
 
   return {
-    messages,
+    events,
     provider: resolveProvider(result) ?? usage.provider,
     model: resolveModel(result) ?? usage.model,
     metadata: normalizeMetadata({
@@ -1802,42 +1818,84 @@ function resolveSession(
   };
 }
 
-function normalizeHistoryMessages(
-  result: unknown,
-  fallbackInput: unknown,
-): NormalizedMessage[] {
-  const history = arrayProperty(result, "history");
-  if (!history || history.length === 0) {
-    return normalizeInputMessages(
-      getObjectProperty(result, "input") ?? fallbackInput,
-    );
-  }
-
-  const messages: NormalizedMessage[] = [];
-  for (const item of history) {
-    const normalized = normalizeModelMessage(item);
-    if (normalized) {
-      messages.push(normalized);
-    }
-  }
-
-  return messages.length > 0
-    ? messages
-    : normalizeInputMessages(
-        getObjectProperty(result, "input") ?? fallbackInput,
-      );
+function resolveFailureSession(
+  input: unknown,
+  runtimeEvents: TranscriptEvent[],
+): NormalizedSession {
+  return {
+    events: [...normalizeInputMessages(input), ...runtimeEvents],
+  };
 }
 
-function normalizeInputMessages(input: unknown): NormalizedMessage[] {
-  if (Array.isArray(input)) {
-    const messages = input
-      .map((item) => normalizeModelMessage(item))
-      .filter((message): message is NormalizedMessage => Boolean(message));
+function readOpenAiAgentsRunItems(result: unknown): unknown[] | undefined {
+  const newItems = arrayProperty(result, "newItems");
+  if (newItems && newItems.length > 0 && hasOpenAiAgentsRunItem(newItems)) {
+    return newItems;
+  }
 
-    return messages.length > 0
-      ? messages
+  const outputItems = arrayProperty(result, "output");
+  if (
+    outputItems &&
+    outputItems.length > 0 &&
+    hasOpenAiAgentsRunItem(outputItems)
+  ) {
+    return outputItems;
+  }
+
+  return undefined;
+}
+
+/** Selects the provider transcript source before runtime events are considered. */
+function createInitialSessionEventSource(
+  input: unknown,
+  result: unknown,
+  runItems: unknown[] | undefined,
+): OpenAiAgentsInitialEventSource {
+  if (runItems) {
+    return {
+      events: normalizeInputMessages(
+        getObjectProperty(result, "input") ?? input,
+      ),
+      usesProviderTranscript: true,
+    };
+  }
+
+  if (isOpenAiAgentsRunResult(result) && "input" in result) {
+    const history = arrayProperty(result, "history");
+    if (history && history.length > 0) {
+      return {
+        events: normalizeProviderItems(history),
+        usesProviderTranscript: true,
+      };
+    }
+
+    return {
+      events: normalizeInputMessages(result.input),
+      usesProviderTranscript: false,
+    };
+  }
+
+  return {
+    events: normalizeInputMessages(input),
+    usesProviderTranscript: false,
+  };
+}
+
+function normalizeProviderItems(items: unknown[]): TranscriptEvent[] {
+  return normalizeRunItems(items, []);
+}
+
+function normalizeInputMessages(input: unknown): TranscriptEvent[] {
+  if (Array.isArray(input)) {
+    const events = input
+      .map((item) => normalizeModelMessage(item))
+      .filter((event): event is TranscriptEvent => Boolean(event));
+
+    return events.length > 0
+      ? events
       : [
           {
+            type: "message",
             role: "user",
             content: normalizeContent(input),
           },
@@ -1846,6 +1904,7 @@ function normalizeInputMessages(input: unknown): NormalizedMessage[] {
 
   return [
     {
+      type: "message",
       role: "user",
       content: normalizeContent(input),
     },
@@ -1854,21 +1913,22 @@ function normalizeInputMessages(input: unknown): NormalizedMessage[] {
 
 function normalizeRunItems(
   items: unknown[],
-  runtimeToolCalls: ToolCallRecord[],
-): NormalizedMessage[] {
-  const messages: NormalizedMessage[] = [];
+  runtimeEvents: TranscriptEvent[],
+): TranscriptEvent[] {
+  const events: TranscriptEvent[] = [];
   const outputItemsByCallId = new Map<string, unknown>();
   const runtimeCallsById = new Map(
-    runtimeToolCalls
-      .filter((call): call is ToolCallRecord & { id: string } =>
-        Boolean(call.id),
-      )
-      .map((call) => [call.id, call]),
+    runtimeEvents.filter(isToolCallEvent).map((event) => [event.id, event]),
+  );
+  const runtimeResultsById = new Map(
+    runtimeEvents
+      .filter(isToolResultEvent)
+      .map((event) => [event.toolCallId, event]),
   );
 
   for (const item of items) {
     const rawItem = getRunItemRawItem(item);
-    const callId = resolveRawToolCallId(rawItem);
+    const callId = resolveRunItemToolCallId(item, rawItem);
     if (callId && isToolCallOutputItem(item, rawItem)) {
       outputItemsByCallId.set(callId, item);
     }
@@ -1877,8 +1937,27 @@ function normalizeRunItems(
   for (const item of items) {
     const rawItem = getRunItemRawItem(item);
 
+    if (isToolCallOutputItem(item, rawItem)) {
+      const message = normalizeToolResultMessage(
+        item,
+        rawItem,
+        runtimeResultsById,
+      );
+      if (message) {
+        events.push(message);
+      }
+      continue;
+    }
+
+    const message = normalizeModelMessage(item);
+    if (message) {
+      events.push(message);
+      continue;
+    }
+
     if (isAssistantMessageItem(item, rawItem)) {
-      messages.push({
+      events.push({
+        type: "message",
         role: "assistant",
         content: normalizeMessageContent(rawItem, item),
         metadata: normalizeRunItemMetadata(item, rawItem),
@@ -1887,79 +1966,69 @@ function normalizeRunItems(
     }
 
     if (isToolCallItem(item, rawItem)) {
-      const callId = resolveRawToolCallId(rawItem);
+      const callId = resolveRunItemToolCallId(item, rawItem);
+      if (!callId) {
+        continue;
+      }
       const runtimeCall = callId ? runtimeCallsById.get(callId) : undefined;
       const call = normalizeToolCallItem(
         item,
         rawItem,
-        outputItemsByCallId.get(callId ?? ""),
+        callId,
+        callId ? outputItemsByCallId.get(callId) : undefined,
         runtimeCall,
       );
-      messages.push({
-        role: "assistant",
-        toolCalls: [call],
-        metadata: normalizeRunItemMetadata(item, rawItem),
+      const metadata = normalizeRunItemMetadata(item, rawItem);
+      events.push({
+        ...call,
+        ...(metadata
+          ? { metadata: mergeMetadata(call.metadata, metadata) }
+          : {}),
       });
-      continue;
-    }
-
-    if (isToolCallOutputItem(item, rawItem)) {
-      messages.push(normalizeToolResultMessage(item, rawItem));
       continue;
     }
 
     const metadata = normalizeRunItemMetadata(item, rawItem);
     if (metadata) {
-      messages.push({
+      events.push({
+        type: "message",
         role: "assistant",
         metadata,
       });
     }
   }
 
-  return messages;
+  return events;
 }
 
-function appendUnmatchedRuntimeToolCalls(
-  messages: NormalizedMessage[],
-  runtimeToolCalls: ToolCallRecord[],
-) {
-  const seenIds = new Set(
-    messages.flatMap((message) =>
-      (message.toolCalls ?? [])
-        .map((call) => call.id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const unmatched = runtimeToolCalls.filter(
-    (call) => !call.id || !seenIds.has(call.id),
-  );
-
-  for (const call of unmatched) {
-    messages.push({
-      role: "assistant",
-      toolCalls: [call],
-    });
-
-    if (call.result !== undefined || call.error) {
-      messages.push({
-        role: "tool",
-        ...(call.result !== undefined
-          ? { content: call.result }
-          : call.error && call.error.message.length > 0
-            ? { content: call.error.message }
-            : {}),
-        metadata: normalizeMetadata({
-          name: call.name,
-          toolCallId: call.id,
-          isError: Boolean(call.error),
-        }),
-      });
-    }
-  }
+function hasOpenAiAgentsRunItem(items: unknown[]) {
+  return items.some((item) => {
+    const rawItem = getRunItemRawItem(item);
+    return (
+      isAssistantMessageItem(item, rawItem) ||
+      isToolCallItem(item, rawItem) ||
+      isToolCallOutputItem(item, rawItem)
+    );
+  });
 }
 
-function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
+function isToolCallEvent(
+  event: TranscriptEvent,
+): event is TranscriptToolCallEvent {
+  return event.type === "tool_call";
+}
+
+function isToolResultEvent(
+  event: TranscriptEvent,
+): event is TranscriptToolResultEvent {
+  return event.type === "tool_result";
+}
+
+function countToolCallEvents(events: readonly TranscriptEvent[]) {
+  return events.filter(isToolCallEvent).length;
+}
+
+function normalizeModelMessage(item: unknown): TranscriptEvent | undefined {
   if (!item || typeof item !== "object") {
     return undefined;
   }
@@ -1976,7 +2045,23 @@ function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
   }
 
   const content = normalizeMessageContent(rawItem, item);
+  if (role === "tool") {
+    const toolCallId = resolveRunItemToolCallId(item, rawItem);
+    if (!toolCallId) {
+      return undefined;
+    }
+
+    return {
+      type: "tool_result",
+      toolCallId,
+      name: resolveRawToolName(rawItem),
+      ...(content !== undefined ? { content } : {}),
+      metadata: normalizeRunItemMetadata(item, rawItem),
+    };
+  }
+
   return {
+    type: "message",
     role,
     ...(content !== undefined ? { content } : {}),
     metadata: normalizeRunItemMetadata(item, rawItem),
@@ -1986,9 +2071,10 @@ function normalizeModelMessage(item: unknown): NormalizedMessage | undefined {
 function normalizeToolCallItem(
   item: unknown,
   rawItem: unknown,
+  toolCallId: string,
   outputItem: unknown,
-  runtimeCall: ToolCallRecord | undefined,
-): ToolCallRecord {
+  runtimeCall: TranscriptToolCallEvent | undefined,
+): TranscriptToolCallEvent {
   const rawOutputItem = getRunItemRawItem(outputItem);
   const output =
     getObjectProperty(outputItem, "output") ??
@@ -1996,26 +2082,21 @@ function normalizeToolCallItem(
   const outputStatus = stringProperty(rawOutputItem, "status");
   const outputError =
     outputStatus === "failed" ? normalizeToolOutputError(output) : undefined;
-  const normalizedResult =
-    output !== undefined ? normalizeToolResult(output) : undefined;
   const call = {
-    id: resolveRawToolCallId(rawItem),
+    type: "tool_call",
+    id: toolCallId,
     name: resolveRawToolName(rawItem),
     arguments: normalizeArguments(getObjectProperty(rawItem, "arguments")),
-    ...(outputError
-      ? { error: outputError }
-      : normalizedResult !== undefined
-        ? { result: normalizedResult }
-        : {}),
     metadata: normalizeMetadata({
       status: getObjectProperty(rawItem, "status"),
       outputStatus,
+      ...(outputError ? { outputError } : {}),
       namespace: getObjectProperty(rawItem, "namespace"),
       providerData: getObjectProperty(rawItem, "providerData"),
       itemType: getObjectProperty(item, "type"),
       rawType: getObjectProperty(rawItem, "type"),
     }),
-  } satisfies ToolCallRecord;
+  } satisfies TranscriptToolCallEvent;
 
   return mergeToolCalls(call, runtimeCall);
 }
@@ -2023,19 +2104,38 @@ function normalizeToolCallItem(
 function normalizeToolResultMessage(
   item: unknown,
   rawItem: unknown,
-): NormalizedMessage {
+  runtimeResultsById: Map<string, TranscriptToolResultEvent>,
+): TranscriptToolResultEvent | undefined {
+  const toolCallId = resolveRunItemToolCallId(item, rawItem);
+  if (!toolCallId) {
+    return undefined;
+  }
+
+  const runtimeResult = runtimeResultsById.get(toolCallId);
+  if (runtimeResult) {
+    return {
+      ...runtimeResult,
+      name: runtimeResult.name ?? resolveRawToolName(rawItem),
+      metadata: mergeMetadata(
+        normalizeRunItemMetadata(item, rawItem),
+        runtimeResult.metadata,
+      ),
+    };
+  }
+
   const output =
     getObjectProperty(item, "output") ?? getObjectProperty(rawItem, "output");
   const status = stringProperty(rawItem, "status");
-  const isError = status === "failed";
+  const error =
+    status === "failed" ? normalizeToolOutputError(output) : undefined;
 
   return {
-    role: "tool",
+    type: "tool_result",
+    toolCallId,
+    name: resolveRawToolName(rawItem),
     ...(output !== undefined ? { content: normalizeContent(output) } : {}),
+    ...(error ? { error } : {}),
     metadata: normalizeMetadata({
-      name: resolveRawToolName(rawItem),
-      toolCallId: resolveRawToolCallId(rawItem),
-      isError,
       status,
       namespace: getObjectProperty(rawItem, "namespace"),
       providerData: getObjectProperty(rawItem, "providerData"),
@@ -2045,48 +2145,40 @@ function normalizeToolResultMessage(
   };
 }
 
+function mergeMetadata(
+  providerMetadata: Record<string, JsonValue> | undefined,
+  runtimeMetadata: Record<string, JsonValue> | undefined,
+) {
+  return normalizeMetadata({
+    ...(providerMetadata ?? {}),
+    ...(runtimeMetadata ?? {}),
+  });
+}
+
 function mergeToolCalls(
-  call: ToolCallRecord,
-  runtimeCall: ToolCallRecord | undefined,
-): ToolCallRecord {
+  call: TranscriptToolCallEvent,
+  runtimeCall: TranscriptToolCallEvent | undefined,
+): TranscriptToolCallEvent {
   if (!runtimeCall) {
     return call;
   }
 
-  const error = runtimeCall.error ?? call.error;
-  const hasRuntimeResult = hasOwnObjectProperty(runtimeCall, "result");
-  const hasCallResult = hasOwnObjectProperty(call, "result");
-  const result = hasRuntimeResult ? runtimeCall.result : call.result;
-
-  const merged = {
+  return {
     ...runtimeCall,
     ...call,
     id: call.id ?? runtimeCall.id,
-    name: call.name ?? runtimeCall.name,
+    name: call.name,
     arguments: call.arguments ?? runtimeCall.arguments,
     metadata: normalizeMetadata({
       ...(runtimeCall.metadata ?? {}),
       ...(call.metadata ?? {}),
     }),
   };
+}
 
-  if (error) {
-    const { result: _result, ...withoutResult } = merged;
-    return {
-      ...withoutResult,
-      error,
-    };
-  }
-
-  const { error: _error, result: _result, ...withoutOutcome } = merged;
-  if (hasRuntimeResult || hasCallResult) {
-    return {
-      ...withoutOutcome,
-      result,
-    };
-  }
-
-  return withoutOutcome;
+/** Creates a runtime-local id used on both assistant tool calls and tool results. */
+function createRuntimeToolCallId(toolName: string, index: number) {
+  return `runtime:${toolName}:${index + 1}`;
 }
 
 function normalizeMessageContent(
@@ -2121,6 +2213,7 @@ function isToolCallItem(item: unknown, rawItem: unknown) {
   return (
     itemType === "tool_call_item" ||
     rawType === "function_call" ||
+    rawType === "custom_tool_call" ||
     rawType === "hosted_tool_call" ||
     rawType === "tool_search_call" ||
     rawType === "shell_call" ||
@@ -2135,9 +2228,12 @@ function isToolCallOutputItem(item: unknown, rawItem: unknown) {
 
   return (
     itemType === "tool_call_output_item" ||
+    rawType === "function_call_output" ||
     rawType === "function_call_result" ||
+    rawType === "custom_tool_call_output" ||
     rawType === "tool_search_output" ||
     rawType === "shell_call_output" ||
+    rawType === "computer_call_output" ||
     rawType === "computer_call_result" ||
     rawType === "apply_patch_call_output"
   );
@@ -2166,6 +2262,15 @@ function resolveRawToolCallId(rawItem: unknown) {
   );
 }
 
+function resolveRunItemToolCallId(item: unknown, rawItem: unknown) {
+  return (
+    resolveRawToolCallId(rawItem) ??
+    stringProperty(item, "callId") ??
+    stringProperty(item, "call_id") ??
+    stringProperty(item, "id")
+  );
+}
+
 function resolveRawToolName(rawItem: unknown) {
   const rawType = stringProperty(rawItem, "type");
   if (rawType === "tool_search_call" || rawType === "tool_search_output") {
@@ -2179,33 +2284,6 @@ function resolveRawToolName(rawItem: unknown) {
     rawType ??
     "unknown"
   );
-}
-
-function countToolCallsFromResult(result: unknown): number {
-  const newItems = arrayProperty(result, "newItems");
-  const items =
-    newItems && newItems.length > 0
-      ? newItems
-      : (arrayProperty(result, "output") ?? []);
-  const seenCallIds = new Set<string>();
-
-  return items.reduce<number>((count, item) => {
-    const rawItem = getRunItemRawItem(item);
-    if (!isToolCallItem(item, rawItem)) {
-      return count;
-    }
-
-    const callId = resolveRawToolCallId(rawItem);
-    if (callId) {
-      if (seenCallIds.has(callId)) {
-        return count;
-      }
-
-      seenCallIds.add(callId);
-    }
-
-    return count + 1;
-  }, 0);
 }
 
 function normalizeArguments(
@@ -2226,18 +2304,7 @@ function normalizeReplayToolInput(value: unknown): JsonValue {
   return toReplayJsonValue(parsed, "OpenAI Agents tool input");
 }
 
-function normalizeToolResult(value: unknown): JsonValue | undefined {
-  const normalized = toJsonValue(value);
-  if (normalized !== undefined) {
-    return normalized;
-  }
-
-  return value === undefined ? undefined : String(value);
-}
-
-function normalizeToolOutputError(
-  output: unknown,
-): NonNullable<ToolCallRecord["error"]> {
+function normalizeToolOutputError(output: unknown): NormalizedError {
   return {
     message: resolveToolOutputErrorMessage(output),
   };
@@ -2275,7 +2342,7 @@ function parseMaybeJson(value: unknown) {
   }
 }
 
-function normalizeError(error: unknown): NonNullable<ToolCallRecord["error"]> {
+function normalizeError(error: unknown): NormalizedError {
   const serialized = serializeError(error);
   const { message, type, ...details } = serialized;
 
@@ -2369,10 +2436,6 @@ function getObjectProperty(value: unknown, key: string): unknown {
     : undefined;
 }
 
-function hasOwnObjectProperty(value: object, key: keyof ToolCallRecord) {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
 function stringProperty(value: unknown, key: string): string | undefined {
   const property = getObjectProperty(value, key);
   return typeof property === "string" ? property : undefined;
@@ -2386,15 +2449,6 @@ function numberProperty(value: unknown, key: string): number | undefined {
 function arrayProperty(value: unknown, key: string): unknown[] | undefined {
   const property = getObjectProperty(value, key);
   return Array.isArray(property) ? property : undefined;
-}
-
-function findStringAtPath(value: unknown, path: string[]) {
-  let current = value;
-  for (const key of path) {
-    current = getObjectProperty(current, key);
-  }
-
-  return typeof current === "string" ? current : undefined;
 }
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {

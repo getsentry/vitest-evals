@@ -2,16 +2,33 @@ import { z } from "zod";
 import type { NormalizedSpanAttributes } from "../genai";
 import { JsonObjectSchema, JsonValueSchema, type JsonValue } from "../json";
 import { FiniteNumberSchema } from "../schema-utils";
+import { NormalizedErrorSchema, type NormalizedError } from "./errors";
+import { TranscriptEventSchema, type TranscriptEvent } from "./transcript";
 
-/** Normalized error attached to tool calls and spans. */
-export type NormalizedError = {
-  /** Human-readable failure message. */
-  message: string;
-  /** Optional provider or runtime error type. */
-  type?: string;
-  /** Extra JSON-safe error metadata. */
-  [key: string]: JsonValue | undefined;
-};
+export { NormalizedErrorSchema } from "./errors";
+export type { NormalizedError } from "./errors";
+export {
+  isMessageEvent,
+  isToolCallEvent,
+  isToolResultEvent,
+  messagesToTranscriptEvents,
+  TranscriptMessageEventSchema,
+  TranscriptToolCallEventSchema,
+  TranscriptToolResultEventSchema,
+  TranscriptEventSchema,
+} from "./transcript";
+export type {
+  TranscriptMessageEvent,
+  TranscriptToolCallEvent,
+  TranscriptToolResultEvent,
+  TranscriptEvent,
+  TranscriptMessageInput,
+  TranscriptMessageContentPart,
+  TranscriptMessageTextPart,
+  TranscriptMessageToolCallPart,
+  TranscriptMessageToolCall,
+  TranscriptMessageToolResultPart,
+} from "./transcript";
 
 /** Usage values normalized by vitest-evals harnesses. */
 export const UsageSummarySchema = z
@@ -66,77 +83,58 @@ export type TimingSummary = {
   metadata?: Record<string, JsonValue>;
 };
 
-/** Normalized error object captured in a tool call or trace span. */
-export const NormalizedErrorSchema = z
+const ToolCallBaseSchema = z
   .object({
-    message: z.string(),
-    type: z.string().optional(),
-  })
-  .catchall(JsonValueSchema);
-
-/** Normalized tool call captured in a harness session. */
-export const ToolCallRecordSchema = z
-  .object({
-    id: z.string().optional(),
     name: z.string(),
     arguments: JsonObjectSchema.optional(),
-    result: JsonValueSchema.optional(),
-    error: NormalizedErrorSchema.optional(),
-    startedAt: z.string().optional(),
-    finishedAt: z.string().optional(),
-    durationMs: FiniteNumberSchema.optional(),
-    metadata: JsonObjectSchema.optional(),
   })
   .strict();
 
-/** Normalized tool call captured in a harness session. */
-export type ToolCallRecord = {
-  /** Provider or runtime tool-call id when one is available. */
-  id?: string;
+/** Tool call observed in a normalized session, with result status when known. */
+export const ToolCallSchema = z.discriminatedUnion("status", [
+  ToolCallBaseSchema.extend({
+    status: z.literal("pending"),
+  }).strict(),
+  ToolCallBaseSchema.extend({
+    status: z.literal("ok"),
+    result: JsonValueSchema.optional(),
+  }).strict(),
+  ToolCallBaseSchema.extend({
+    status: z.literal("error"),
+    error: NormalizedErrorSchema,
+  }).strict(),
+]);
+
+type ToolCallBase = {
   /** Tool name as exposed to the agent or application runtime. */
   name: string;
   /** JSON-safe tool arguments after provider/runtime normalization. */
   arguments?: Record<string, JsonValue>;
-  /** JSON-safe tool result returned by the application tool. */
-  result?: JsonValue;
-  /** Normalized tool error when execution failed. */
-  error?: NormalizedError;
-  /** ISO timestamp for the start of tool execution. */
-  startedAt?: string;
-  /** ISO timestamp for the end of tool execution. */
-  finishedAt?: string;
-  /** Tool execution duration in milliseconds. */
-  durationMs?: number;
-  /** Extra JSON-safe tool metadata for reporters and custom judges. */
-  metadata?: Record<string, JsonValue>;
 };
 
-/** Normalized transcript message captured in a harness session. */
-export const NormalizedMessageSchema = z
-  .object({
-    role: z.enum(["system", "user", "assistant", "tool"]),
-    content: JsonValueSchema.optional(),
-    toolCalls: z.array(ToolCallRecordSchema).optional(),
-    metadata: JsonObjectSchema.optional(),
-  })
-  .strict();
-
-/** Normalized transcript message captured in a harness session. */
-export type NormalizedMessage = {
-  /** Transcript role for the normalized message. */
-  role: "system" | "user" | "assistant" | "tool";
-  /** JSON-safe message content. */
-  content?: JsonValue;
-  /** Tool calls associated with this message. */
-  toolCalls?: ToolCallRecord[];
-  /** Extra JSON-safe message metadata. */
-  metadata?: Record<string, JsonValue>;
-};
+/** Tool call observed in a normalized session, with result status when known. */
+export type ToolCall =
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call without a matching result event. */
+      status: "pending";
+    })
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call with a successful result event. */
+      status: "ok";
+      /** JSON-safe tool result content when execution produced content. */
+      result?: JsonValue;
+    })
+  | (ToolCallBase & {
+      /** Lifecycle status for a tool call with an error result event. */
+      status: "error";
+      /** Normalized tool error captured by the result event. */
+      error: NormalizedError;
+    });
 
 /** Normalized transcript produced by an application harness. */
 export const NormalizedSessionSchema = z
   .object({
-    messages: z.array(NormalizedMessageSchema).default([]),
+    events: z.array(TranscriptEventSchema),
     provider: z.string().optional(),
     model: z.string().optional(),
     metadata: JsonObjectSchema.optional(),
@@ -145,8 +143,8 @@ export const NormalizedSessionSchema = z
 
 /** Normalized transcript produced by an application harness. */
 export type NormalizedSession = {
-  /** Ordered normalized transcript messages. */
-  messages: NormalizedMessage[];
+  /** Ordered normalized transcript events. */
+  events: TranscriptEvent[];
   /** Provider that produced the session when known. */
   provider?: string;
   /** Model that produced the session when known. */
@@ -241,7 +239,7 @@ export const NormalizedTraceSchema = z
     finishedAt: z.string().optional(),
     durationMs: FiniteNumberSchema.optional(),
     metadata: JsonObjectSchema.optional(),
-    spans: z.array(NormalizedSpanSchema).default([]),
+    spans: z.array(NormalizedSpanSchema),
   })
   .strict();
 
@@ -272,7 +270,7 @@ export const HarnessRunSchema = z
     timings: TimingSummarySchema.optional(),
     artifacts: JsonObjectSchema.optional(),
     traces: z.array(NormalizedTraceSchema).optional(),
-    errors: z.array(JsonObjectSchema).default([]),
+    errors: z.array(JsonObjectSchema),
   })
   .strict();
 
@@ -287,9 +285,9 @@ type OutputField<TOutput extends JsonValue | undefined> =
  * const run: HarnessRun<{ status: "approved" }> = {
  *   output: { status: "approved" },
  *   session: {
- *     messages: [
- *       { role: "user", content: "Refund invoice inv_123" },
- *       { role: "assistant", content: { status: "approved" } },
+ *     events: [
+ *       { type: "message", role: "user", content: "Refund invoice inv_123" },
+ *       { type: "message", role: "assistant", content: { status: "approved" } },
  *     ],
  *   },
  *   usage: { totalTokens: 260 },

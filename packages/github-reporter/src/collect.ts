@@ -2,7 +2,9 @@ import {
   collectReportWorkspace,
   type HarnessRun,
   type ReportCase,
-  type ToolCallRecord,
+  type TranscriptToolCallEvent,
+  type TranscriptToolResultEvent,
+  type ToolCall,
 } from "@vitest-evals/core";
 import type {
   CollectOptions,
@@ -130,27 +132,50 @@ function collectToolCalls(reportCase: ReportCase) {
 }
 
 function collectSessionToolCalls(session: HarnessRun["session"] | undefined) {
-  const messages = session?.messages ?? [];
-  const toolCalls: ToolCallSummary[] = [];
+  if (!session) {
+    return [];
+  }
 
-  for (const message of messages) {
-    if (!Array.isArray(message.toolCalls)) {
-      continue;
-    }
-
-    for (const call of message.toolCalls) {
-      toolCalls.push(toToolCallSummary(call));
+  const resultsById = new Map<string, TranscriptToolResultEvent>();
+  for (const event of session.events) {
+    if (event.type === "tool_result" && !resultsById.has(event.toolCallId)) {
+      resultsById.set(event.toolCallId, event);
     }
   }
 
-  return toolCalls;
+  return session.events.flatMap((event) =>
+    event.type === "tool_call"
+      ? [toSessionToolCallSummary(event, resultsById.get(event.id))]
+      : [],
+  );
 }
 
-function toToolCallSummary(call: ToolCallRecord): ToolCallSummary {
+function toToolCallSummary(call: ToolCall): ToolCallSummary {
   return {
     name: call.name,
-    error: getToolCallError(call.error),
-    durationMs: numberField(call.durationMs),
+    status: call.status,
+    error: call.status === "error" ? getToolCallError(call.error) : undefined,
+  };
+}
+
+function toSessionToolCallSummary(
+  call: TranscriptToolCallEvent,
+  result: TranscriptToolResultEvent | undefined,
+): ToolCallSummary {
+  if (!result) {
+    return {
+      name: call.name,
+      status: "pending",
+      ...(call.durationMs !== undefined ? { durationMs: call.durationMs } : {}),
+    };
+  }
+
+  const durationMs = result.durationMs ?? call.durationMs;
+  return {
+    name: call.name,
+    status: result.error ? "error" : "ok",
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(result.error ? { error: getToolCallError(result.error) } : {}),
   };
 }
 

@@ -222,8 +222,10 @@ Important root types include:
 - `Harness`
 - `HarnessRun`
 - `NormalizedSession`
-- `NormalizedMessage`
-- `ToolCallRecord`
+- `TranscriptEvent`
+- `TranscriptMessageEvent`
+- `TranscriptToolCallEvent`
+- `TranscriptToolResultEvent`
 - `UsageSummary`
 - `TimingSummary`
 - `JsonValue`
@@ -295,6 +297,10 @@ export const qaHarness = createHarness<string, string>({
 
     return {
       output,
+      messages: [
+        { role: "user", content: input },
+        { role: "assistant", content: output },
+      ],
       usage: {
         provider: "openai",
         model: "gpt-4o-mini",
@@ -304,11 +310,13 @@ export const qaHarness = createHarness<string, string>({
 });
 ```
 
-Lightweight harness results can include:
+Lightweight harness results must include one non-empty transcript input:
 
 - `output`: typed app-facing output
-- `messages`: normalized messages
-- `toolCalls`: lightweight tool-call records
+- `events`: ordered transcript events, or
+- `messages`: strict camelCase message transport that normalizes into transcript events
+
+They can also include:
 - `usage`: stable usage units
 - `timings`: timing summary
 - `artifacts`: extra JSON-safe debug/report data
@@ -322,17 +330,19 @@ and reporters:
 
 ```ts
 type NormalizedSession = {
-  messages: NormalizedMessage[];
+  events: TranscriptEvent[];
   provider?: string;
   model?: string;
   metadata?: Record<string, JsonValue>;
 };
 ```
 
-Messages have `role`, optional `content`, optional `toolCalls`, and optional
-metadata. Tool calls have `name`, optional `id`, JSON-safe `arguments`,
-JSON-safe `result`, optional normalized `error`, timings, duration, and
-metadata.
+Transcript events are flat and ordered. Message events have `type: "message"`,
+`role`, optional `content`, and optional metadata. Tool-call events have
+`type: "tool_call"`, required `id`, `name`, JSON-safe `arguments`, timings,
+duration, and metadata. Tool-result events have `type: "tool_result"`, required
+`toolCallId`, optional `name`, JSON-safe `content`, optional normalized
+`error`, timings, duration, and metadata.
 
 `UsageSummary` intentionally contains stable usage units:
 
@@ -362,8 +372,8 @@ import { aiSdkHarness } from "@vitest-evals/harness-ai-sdk";
 Use it when the system under test uses the AI SDK. The adapter understands AI
 SDK result shapes, steps, usage, tool calls, runtime tools, and custom
 entrypoints. It can infer app output from JSON-safe `output`, `object`, or
-`text` fields depending on the result shape, and it keeps normalized messages
-and tool activity for judges/reporters.
+`text` fields depending on the result shape, and it keeps transcript events and
+tool activity for judges/reporters.
 
 Compatible apps usually expose `run(input, runtime)` or
 `generate(input, runtime)`. Read local tools from `runtime.tools` so the harness
@@ -381,7 +391,7 @@ import { openaiAgentsHarness } from "@vitest-evals/harness-openai-agents";
 ```
 
 Use it when the system under test uses the OpenAI Agents SDK. The adapter runs
-agents or runners, captures messages and tool calls, supports local tool replay
+agents or runners, captures transcript events, supports local tool replay
 metadata, preserves app-facing output separately from native output item
 records, and can attach partial runs when execution fails.
 
@@ -400,7 +410,7 @@ import { piAiHarness } from "@vitest-evals/harness-pi-ai";
 ```
 
 Use it when the system under test uses Pi agents. The adapter captures
-messages, inferred or configured toolsets, native tool calls, usage, and replay
+transcript events, inferred or configured toolsets, usage, and replay
 metadata for opt-in tools.
 
 Compatible apps expose a Pi agent, a `toolset`, or a `run(input, runtime)`
@@ -414,14 +424,20 @@ Key `toolReplay` by the Pi tool name.
 
 Use `createHarness<Input, Output>(...)` when the first-party adapters do not
 fit. This is appropriate for workflow engines, RAG pipelines, CLIs, or service
-functions that can return JSON-safe output, messages, tool calls, usage,
-timings, artifacts, or errors without going through a supported SDK adapter.
+functions that can return JSON-safe output, ordered events, usage, timings,
+artifacts, or errors without going through a supported SDK adapter.
 
-Return `output` for ordinary Vitest assertions and `toolCalls` for deterministic
-tool judges. Use `setArtifact(name, value)` for JSON-safe debug details that
-belong in reports but not in the app output contract. Return a full
-`HarnessRun` only when the app needs complete control over normalized messages,
-usage, timings, artifacts, and errors.
+Return `output` for ordinary Vitest assertions and always return at least one
+ordered `events` item for the run transcript. Message-shaped `messages` are
+accepted only at the custom harness input boundary and are normalized into
+events, including assistant `toolCalls`, `role: "tool"` results keyed by
+`toolCallId`, and AI SDK-style `tool-call`/`tool-result` content parts. Other
+provider content blocks or item streams should adapt those records into
+`events` directly. Use
+`setArtifact(name, value)` for JSON-safe debug details that belong in reports
+but not in the app output contract. Return a full `HarnessRun` only when the app
+needs complete control over session events, usage, timings, artifacts, and
+errors.
 
 ## Judges
 
@@ -554,7 +570,7 @@ pnpm exec vitest-evals serve eval-results/
 
 The command accepts JSON files, simple globs, and directories. It opens a local
 React report viewer for run summaries, eval cases, scores, harness sessions,
-tool calls, trace-backed transcripts, span details, and raw case metadata.
+tool calls, session transcripts, trace span details, and raw case metadata.
 
 Use the same JSON artifacts for local investigation and GitHub reporting.
 
@@ -676,7 +692,7 @@ high-cardinality data.
 Harnesses can attach partial runs to thrown errors with
 `attachHarnessRunToError(...)`. Reporters and matchers can recover the run with
 `getHarnessRunFromError(...)`. First-party harnesses use this pattern to expose
-tool calls, messages, usage, and partial output when execution fails.
+transcript events, usage, and partial output when execution fails.
 
 ## Practical recommendations
 

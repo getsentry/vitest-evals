@@ -3,19 +3,20 @@ import type {
   HarnessContext,
   HarnessRun,
   JsonValue,
-  NormalizedMessage,
+  NormalizedError,
   NormalizedSpan,
   NormalizedSession,
+  TranscriptEvent,
+  TranscriptMessageEvent,
+  TranscriptToolCallEvent,
   NormalizedTrace,
   TimingSummary,
-  ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import {
   attachHarnessRunToError,
   createFailedHarnessRun,
   createGenAiUsageAttributes,
-  createToolCallSpans,
   ensureRunTrace,
   getHarnessRunFromError,
   isHarnessRun,
@@ -27,7 +28,6 @@ import {
   resolveHarnessRunErrors,
   serializeError,
   toJsonValue,
-  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import {
   executeWithReplay,
@@ -225,16 +225,21 @@ type NativeToolExecute<TInput> = PiAgentToolLike<TInput>["execute"] & {
 /** Replay mode alias used by the Pi AI harness package. */
 export type PiAiReplayMode = ReplayMode;
 
-/** Event sink for recording Pi AI transcript messages. */
+/** Event sink for recording Pi AI transcript events. */
 export interface PiAiEventSink {
-  message: (message: NormalizedMessage) => void;
+  message: (event: TranscriptMessageEvent) => void;
   system: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   user: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   assistant: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
+  /** Records a tool-result event linked to an assistant tool call by id. */
   tool: (
-    name: string,
+    toolCallId: string,
     content: JsonValue,
-    metadata?: Record<string, JsonValue>,
+    options?: {
+      name?: string;
+      error?: NormalizedError;
+      metadata?: Record<string, JsonValue>;
+    },
   ) => void;
 }
 
@@ -618,8 +623,9 @@ export function piAiHarness<
           input,
           context,
         });
-        const messages: NormalizedMessage[] = [
+        const events: TranscriptEvent[] = [
           {
+            type: "message",
             role: "user",
             content: normalizeContent(input),
           },
@@ -632,7 +638,7 @@ export function piAiHarness<
             agent,
             input,
             context,
-            messages,
+            events,
             options.tools,
             inferredTools.nativeToolsets,
           );
@@ -643,7 +649,7 @@ export function piAiHarness<
           agent,
           input,
           context,
-          messages,
+          events,
           inferredTools.runtimeTools,
           inferredTools.nativeToolsets,
         );
@@ -709,7 +715,7 @@ async function executePiHarnessRun<
   agent: TAgent,
   input: TInput,
   context: HarnessContext,
-  messages: NormalizedMessage[],
+  events: TranscriptEvent[],
   runtimeTools: TTools | undefined,
   nativeToolsets?: Array<PiAgentToolLike<TInput>[]>,
 ): Promise<HarnessRun<TOutput>> {
@@ -721,7 +727,7 @@ async function executePiHarnessRun<
     tools: runtimeTools,
     toolReplay: options.toolReplay,
     executionState,
-    messages,
+    events,
   });
 
   try {
@@ -731,8 +737,7 @@ async function executePiHarnessRun<
       {
         input,
         context,
-        messages,
-        toolCalls: runtime.toolCalls,
+        events,
         toolReplay: options.toolReplay,
         executionState,
       },
@@ -765,8 +770,8 @@ async function executePiHarnessRun<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(normalizeResult) as TOutput | undefined);
-    const usage = resolveUsage(normalizeResult, runtime.toolCalls.length);
-    const session = resolveSession(normalizeResult, messages, output, usage);
+    const usage = resolveUsage(normalizeResult, countToolCallEvents(events));
+    const session = resolveSession(normalizeResult, events, output, usage);
     const errors = resolveErrors(normalizeResult);
     const finishedAt = new Date();
 
@@ -789,8 +794,8 @@ async function executePiHarnessRun<
       ],
     } as HarnessRun<TOutput>;
   } catch (error) {
-    const usage = resolveUsage(undefined, runtime.toolCalls.length);
-    const session = resolveSession(undefined, messages, undefined, usage);
+    const usage = resolveUsage(undefined, countToolCallEvents(events));
+    const session = resolveSession(undefined, events, undefined, usage);
     const finishedAt = new Date();
     const serializedError = serializeError(error);
     const run = {
@@ -920,15 +925,7 @@ function finishPiAiTrace(
     }),
   };
   const modelSpan = createUsageModelSpan(trace, options.usage);
-  const spans = [
-    rootSpan,
-    ...(modelSpan ? [modelSpan] : []),
-    ...createToolCallSpans(collectToolCalls(options.session), {
-      traceId: trace.id,
-      parentId: trace.rootSpanId,
-      spanIdPrefix: `${trace.id}:tool`,
-    }),
-  ];
+  const spans = [rootSpan, ...(modelSpan ? [modelSpan] : [])];
 
   return {
     id: trace.id,
@@ -1155,8 +1152,7 @@ async function withInstrumentedAgentTools<TResult, TInput>(
   args: {
     input: TInput;
     context: HarnessContext;
-    messages: NormalizedMessage[];
-    toolCalls: ToolCallRecord[];
+    events: TranscriptEvent[];
     toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
     executionState: PiToolExecutionState;
   },
@@ -1193,6 +1189,15 @@ async function withInstrumentedAgentTools<TResult, TInput>(
         args.executionState,
         tool.name,
       );
+      const call: TranscriptToolCallEvent = {
+        type: "tool_call",
+        id: toolCallId,
+        name: tool.name,
+        arguments: rawArgs,
+        startedAt: startedAt.toISOString(),
+        metadata: normalizeReplayMetadata(undefined),
+      } satisfies TranscriptToolCallEvent;
+      args.events.push(call);
 
       try {
         const execution = await executeNativeToolWithReplay({
@@ -1204,45 +1209,34 @@ async function withInstrumentedAgentTools<TResult, TInput>(
           context: toolContext,
         });
         const finishedAt = new Date();
-        const call = {
-          id: toolCallId,
+        call.finishedAt = finishedAt.toISOString();
+        call.durationMs = finishedAt.getTime() - startedAt.getTime();
+        call.metadata = normalizeReplayMetadata(execution.replay);
+        args.events.push({
+          type: "tool_result",
+          toolCallId,
           name: tool.name,
-          arguments: rawArgs,
-          result: execution.normalizedResult,
-          startedAt: startedAt.toISOString(),
-          finishedAt: finishedAt.toISOString(),
-          durationMs: finishedAt.getTime() - startedAt.getTime(),
-          metadata: normalizeReplayMetadata(execution.replay),
-        } satisfies ToolCallRecord;
-        args.toolCalls.push(call);
-        args.messages.push({
-          role: "assistant",
-          toolCalls: [call],
-        });
-        args.messages.push({
-          role: "tool",
           content: execution.normalizedResult,
-          metadata: {
-            name: tool.name,
-          },
+          startedAt: call.startedAt,
+          finishedAt: call.finishedAt,
+          durationMs: call.durationMs,
         });
         return execution.result;
       } catch (error) {
         const finishedAt = new Date();
-        const call = {
-          id: toolCallId,
+        call.finishedAt = finishedAt.toISOString();
+        call.durationMs = finishedAt.getTime() - startedAt.getTime();
+        call.metadata = normalizeReplayMetadata(
+          getReplayMetadataFromError(error),
+        );
+        args.events.push({
+          type: "tool_result",
+          toolCallId,
           name: tool.name,
-          arguments: rawArgs,
           error: serializeToolCallError(error),
-          startedAt: startedAt.toISOString(),
-          finishedAt: finishedAt.toISOString(),
-          durationMs: finishedAt.getTime() - startedAt.getTime(),
-          metadata: normalizeReplayMetadata(getReplayMetadataFromError(error)),
-        } satisfies ToolCallRecord;
-        args.toolCalls.push(call);
-        args.messages.push({
-          role: "assistant",
-          toolCalls: [call],
+          startedAt: call.startedAt,
+          finishedAt: call.finishedAt,
+          durationMs: call.durationMs,
         });
         throw error;
       } finally {
@@ -1328,9 +1322,7 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
   );
 }
 
-function serializeToolCallError(
-  error: unknown,
-): NonNullable<ToolCallRecord["error"]> {
+function serializeToolCallError(error: unknown): NormalizedError {
   const serialized = serializeError(error);
   const { message, type, ...details } = serialized;
 
@@ -1339,6 +1331,11 @@ function serializeToolCallError(
     message: typeof message === "string" ? message : String(message),
     ...(typeof type === "string" ? { type } : {}),
   };
+}
+
+/** Creates a runtime-local id used on both assistant tool calls and tool results. */
+function createRuntimeToolCallId(toolName: string, index: number) {
+  return `runtime:${toolName}:${index + 1}`;
 }
 
 function getNativeToolExecuteOrigin<TInput>(
@@ -1435,51 +1432,51 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
   tools,
   toolReplay,
   executionState,
-  messages,
+  events,
 }: {
   input: TInput;
   context: HarnessContext;
   tools: TTools | undefined;
   toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
   executionState: PiToolExecutionState;
-  messages: NormalizedMessage[];
-}): PiAiRuntime<TTools, TInput> & {
-  toolCalls: ToolCallRecord[];
-} {
-  const toolCalls: ToolCallRecord[] = [];
+  events: TranscriptEvent[];
+}): PiAiRuntime<TTools, TInput> {
   const eventSink: PiAiEventSink = {
-    message: (message) => {
-      messages.push(message);
+    message: (event) => {
+      events.push(event);
     },
     system: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "system",
         content,
         metadata,
       });
     },
     user: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "user",
         content,
         metadata,
       });
     },
     assistant: (content, metadata) => {
-      messages.push({
+      events.push({
+        type: "message",
         role: "assistant",
         content,
         metadata,
       });
     },
-    tool: (name, content, metadata) => {
-      messages.push({
-        role: "tool",
+    tool: (toolCallId, content, options) => {
+      events.push({
+        type: "tool_result",
+        toolCallId,
+        ...(options?.name ? { name: options.name } : {}),
         content,
-        metadata: {
-          name,
-          ...(metadata ?? {}),
-        },
+        ...(options?.error ? { error: options.error } : {}),
+        ...(options?.metadata ? { metadata: options.metadata } : {}),
       });
     },
   };
@@ -1498,8 +1495,23 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
           signal: context.signal,
           setArtifact: context.setArtifact,
         } satisfies PiAiToolContext<TInput>;
+        const toolCallId = createRuntimeToolCallId(
+          toolName,
+          countToolCallEvents(events),
+        );
+        const call: TranscriptToolCallEvent = {
+          type: "tool_call",
+          id: toolCallId,
+          name: toolName,
+          arguments: args,
+          startedAt: startedAt.toISOString(),
+        } satisfies TranscriptToolCallEvent;
 
         try {
+          if (!isNativeImplementationCall) {
+            events.push(call);
+          }
+
           const execution = await executeToolWithReplay({
             toolName,
             tool,
@@ -1515,26 +1527,17 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
             return execution.result;
           }
 
-          const call = {
+          call.finishedAt = finishedAt.toISOString();
+          call.durationMs = finishedAt.getTime() - startedAt.getTime();
+          call.metadata = normalizeReplayMetadata(execution.replay);
+          events.push({
+            type: "tool_result",
+            toolCallId,
             name: toolName,
-            arguments: args,
-            result: execution.result,
-            startedAt: startedAt.toISOString(),
-            finishedAt: finishedAt.toISOString(),
-            durationMs: finishedAt.getTime() - startedAt.getTime(),
-            metadata: normalizeReplayMetadata(execution.replay),
-          } satisfies ToolCallRecord;
-          toolCalls.push(call);
-          messages.push({
-            role: "assistant",
-            toolCalls: [call],
-          });
-          messages.push({
-            role: "tool",
             content: execution.result,
-            metadata: {
-              name: toolName,
-            },
+            startedAt: call.startedAt,
+            finishedAt: call.finishedAt,
+            durationMs: call.durationMs,
           });
           return execution.result;
         } catch (error) {
@@ -1543,21 +1546,19 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
             throw error;
           }
 
-          const call = {
+          call.finishedAt = finishedAt.toISOString();
+          call.durationMs = finishedAt.getTime() - startedAt.getTime();
+          call.metadata = normalizeReplayMetadata(
+            getReplayMetadataFromError(error),
+          );
+          events.push({
+            type: "tool_result",
+            toolCallId,
             name: toolName,
-            arguments: args,
             error: serializeToolCallError(error),
-            startedAt: startedAt.toISOString(),
-            finishedAt: finishedAt.toISOString(),
-            durationMs: finishedAt.getTime() - startedAt.getTime(),
-            metadata: normalizeReplayMetadata(
-              getReplayMetadataFromError(error),
-            ),
-          } satisfies ToolCallRecord;
-          toolCalls.push(call);
-          messages.push({
-            role: "assistant",
-            toolCalls: [call],
+            startedAt: call.startedAt,
+            finishedAt: call.finishedAt,
+            durationMs: call.durationMs,
           });
           throw error;
         }
@@ -1569,7 +1570,6 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
     tools: runtimeTools,
     events: eventSink,
     signal: context.signal,
-    toolCalls,
   };
 }
 
@@ -1775,6 +1775,10 @@ function isLegacyNativeToolReplayMarker(
   );
 }
 
+function countToolCallEvents(events: readonly TranscriptEvent[]) {
+  return events.filter((event) => event.type === "tool_call").length;
+}
+
 function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {
   if (!result || typeof result !== "object") {
     return toolCallCount > 0 ? { toolCalls: toolCallCount } : {};
@@ -1856,7 +1860,7 @@ function numberField(value: unknown) {
 
 function resolveSession(
   result: unknown,
-  messages: NormalizedMessage[],
+  events: TranscriptEvent[],
   output: JsonValue | undefined,
   usage: UsageSummary,
 ): NormalizedSession {
@@ -1868,28 +1872,25 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
-  }
-
-  const sessionMessages = [...messages];
+  const sessionEvents = [...events];
   if (
     output !== undefined &&
-    !sessionMessages.some(
-      (message) =>
-        message.role === "assistant" && message.content !== undefined,
+    !sessionEvents.some(
+      (event) =>
+        event.type === "message" &&
+        event.role === "assistant" &&
+        event.content !== undefined,
     )
   ) {
-    sessionMessages.push({
+    sessionEvents.push({
+      type: "message",
       role: "assistant",
       content: output,
     });
   }
 
   return {
-    messages: sessionMessages,
+    events: sessionEvents,
     provider:
       ((result as Record<string, unknown> | undefined)?.provider as
         | string

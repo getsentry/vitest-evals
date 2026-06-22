@@ -52,7 +52,7 @@ For `pi-ai` or `ai-sdk`, that means the harness is responsible for:
 
 - executing the application through its normal runtime
 - installing instrumented tool wrappers so replay/VCR policy can apply
-- observing framework events, messages, steps, tool calls, tool results, and
+- observing framework events, transcript items, steps, tool activity, and
   errors
 - normalizing those events into a JSON-serializable session shape
 - extracting usage, timings, retry counts, cache hits, and other diagnostics
@@ -85,7 +85,7 @@ sound more magical than it really is.
 The spec should distinguish between:
 
 - `run.output`: the application-facing result the test author wants to assert on
-- the normalized assistant/session trace: the canonical record used for
+- the normalized assistant/session transcript: the canonical record used for
   reporting, tool assertions, replay metadata, and generic judges
 
 This matters for real apps because many agents do not naturally return a single

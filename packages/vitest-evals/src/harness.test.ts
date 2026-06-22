@@ -5,7 +5,6 @@ import {
   createJudge,
   createJudgeHarness,
   createHarness,
-  createToolCallSpans,
   describeEval,
   failedSpans,
   type GenAiSemanticAttributeKey,
@@ -16,6 +15,7 @@ import {
   type JudgeAssessorOptions,
   type JudgeHarness,
   type NormalizedSpanAttributes,
+  messagesToTranscriptEvents,
   normalizeSpanError,
   StructuredOutputJudge,
   spans,
@@ -87,10 +87,14 @@ void invalidStringJudgeRunOptions;
 
 const outputSecondHarness = createHarness<string, RefundOutput>({
   name: "output-second",
-  run: async () => ({
+  run: async ({ input }) => ({
     output: {
       status: "approved",
     },
+    messages: [
+      { role: "user", content: input },
+      { role: "assistant", content: { status: "approved" } },
+    ],
   }),
 });
 type _CreateHarnessUsesOutputAsSecondGeneric = Expect<
@@ -169,7 +173,7 @@ const runSpy = vi.fn(
 
     return {
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "user",
             content: input,
@@ -179,6 +183,7 @@ const runSpy = vi.fn(
             content: "approved",
             toolCalls: [
               {
+                id: "call_lookup",
                 name: "lookupInvoice",
                 arguments: {
                   invoiceId: "inv_123",
@@ -186,7 +191,7 @@ const runSpy = vi.fn(
               },
             ],
           },
-        ],
+        ]),
         provider: "pi-ai",
         model: "pi-test",
       },
@@ -270,13 +275,28 @@ describeEval(
           output: {
             status: "approved",
           },
-          toolCalls: [
+          messages: [
             {
+              role: "user",
+              content: input,
+            },
+            {
+              role: "assistant",
+              toolCalls: [
+                {
+                  id: "call_lookup",
+                  name: "lookupInvoice",
+                  arguments: {
+                    invoiceId: "inv_123",
+                  },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              toolCallId: "call_lookup",
               name: "lookupInvoice",
-              arguments: {
-                invoiceId: "inv_123",
-              },
-              result: {
+              content: {
                 refundable: true,
               },
             },
@@ -307,27 +327,27 @@ describeEval(
         metadata: {
           scenario: "refund",
         },
-        messages: [
+        events: [
           {
+            type: "message",
             role: "user",
             content: "Refund invoice inv_123",
           },
           {
-            role: "assistant",
-            content: {
-              status: "approved",
+            type: "tool_call",
+            id: "call_lookup",
+            name: "lookupInvoice",
+            arguments: {
+              invoiceId: "inv_123",
             },
-            toolCalls: [
-              {
-                name: "lookupInvoice",
-                arguments: {
-                  invoiceId: "inv_123",
-                },
-                result: {
-                  refundable: true,
-                },
-              },
-            ],
+          },
+          {
+            type: "tool_result",
+            toolCallId: "call_lookup",
+            name: "lookupInvoice",
+            content: {
+              refundable: true,
+            },
           },
         ],
       });
@@ -338,38 +358,77 @@ describeEval(
   },
 );
 
-test("createHarness drops non-normalized lightweight tool call fields", async () => {
+test("createHarness rejects removed top-level tool call shortcut", async () => {
   const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () =>
+      ({
+        output: "approved",
+        toolCalls: [
+          {
+            name: "lookupInvoice",
+            arguments: "invoice inv_123",
+            result: undefined,
+            error: undefined,
+            metadata: {
+              replay: "recorded",
+            },
+          },
+        ],
+      }) as any,
+  });
+
+  await expect(
+    lightweightHarness.run("Refund invoice inv_123", {
+      artifacts: {},
+      setArtifact: vi.fn(),
+    }),
+  ).rejects.toThrow("do not accept top-level toolCalls");
+});
+
+test("createHarness requires explicit lightweight transcript input", async () => {
+  const lightweightHarness = createHarness({
+    name: "custom-app",
+    run: async () =>
+      ({
+        output: "approved",
+      }) as any,
+  });
+
+  await expect(
+    lightweightHarness.run("Refund invoice inv_123", {
+      artifacts: {},
+      setArtifact: vi.fn(),
+    }),
+  ).rejects.toThrow("must include ordered events or messages");
+});
+
+test("createHarness rejects empty lightweight transcript input", async () => {
+  const eventsHarness = createHarness({
     name: "custom-app",
     run: async () => ({
       output: "approved",
-      toolCalls: [
-        {
-          name: "lookupInvoice",
-          arguments: "invoice inv_123",
-          result: undefined,
-          error: undefined,
-          metadata: {
-            replay: "recorded",
-          },
-        },
-      ],
+      events: [],
     }),
   });
-
-  const result = await lightweightHarness.run("Refund invoice inv_123", {
+  const messagesHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      messages: [],
+    }),
+  });
+  const context = {
     artifacts: {},
     setArtifact: vi.fn(),
-  });
+  };
 
-  expect(toolCalls(result.session)).toEqual([
-    {
-      name: "lookupInvoice",
-      metadata: {
-        replay: "recorded",
-      },
-    },
-  ]);
+  await expect(
+    eventsHarness.run("Refund invoice inv_123", context),
+  ).rejects.toThrow("at least one transcript event");
+  await expect(
+    messagesHarness.run("Refund invoice inv_123", context),
+  ).rejects.toThrow("at least one transcript event");
 });
 
 test("createHarness attaches fallback traces to direct runs", async () => {
@@ -377,13 +436,22 @@ test("createHarness attaches fallback traces to direct runs", async () => {
     name: "custom-app",
     run: async () => ({
       output: "approved",
-      toolCalls: [
+      messages: [
         {
-          id: "call_lookup",
-          name: "lookupInvoice",
-          arguments: {
-            invoiceId: "inv_123",
-          },
+          role: "user",
+          content: "Refund invoice inv_123",
+        },
+        {
+          role: "assistant",
+          toolCalls: [
+            {
+              id: "call_lookup",
+              name: "lookupInvoice",
+              arguments: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
         },
       ],
     }),
@@ -405,17 +473,7 @@ test("createHarness attaches fallback traces to direct runs", async () => {
       },
     },
   ]);
-  expect(spansByKind(result, "tool")).toMatchObject([
-    {
-      id: expect.not.stringMatching(/^call_lookup$/),
-      name: "lookupInvoice",
-      kind: "tool",
-      attributes: {
-        "gen_ai.tool.call.id": "call_lookup",
-        "gen_ai.tool.name": "lookupInvoice",
-      },
-    },
-  ]);
+  expect(spansByKind(result, "tool")).toEqual([]);
 });
 
 test("createHarness attaches failed runs and traces to thrown errors", async () => {
@@ -451,10 +509,20 @@ test("createHarness preserves typed lightweight output values", async () => {
   const output = {
     status: "approved",
   };
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, typeof output>({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output,
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: output,
+        },
+      ],
     }),
   });
 
@@ -464,12 +532,14 @@ test("createHarness preserves typed lightweight output values", async () => {
   });
 
   expect(result.output).toBe(output);
-  expect(result.session.messages).toEqual([
+  expect(result.session.events).toEqual([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
       content: output,
     },
@@ -477,10 +547,20 @@ test("createHarness preserves typed lightweight output values", async () => {
 });
 
 test("createHarness preserves null lightweight output in the session", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, null>({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: null,
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: null,
+        },
+      ],
     }),
   });
 
@@ -490,12 +570,14 @@ test("createHarness preserves null lightweight output in the session", async () 
   });
 
   expect(result.output).toBeNull();
-  expect(result.session.messages).toEqual([
+  expect(result.session.events).toEqual([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
       content: null,
     },
@@ -503,10 +585,20 @@ test("createHarness preserves null lightweight output in the session", async () 
 });
 
 test("createHarness serializes Error objects in lightweight errors", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, "denied">({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: "denied",
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: "denied",
+        },
+      ],
       errors: [new TypeError("agent failed")],
     }),
   });
@@ -525,10 +617,20 @@ test("createHarness serializes Error objects in lightweight errors", async () =>
 });
 
 test("createHarness normalizes lightweight traces", async () => {
-  const lightweightHarness = createHarness({
+  const lightweightHarness = createHarness<string, "approved">({
     name: "custom-app",
-    run: async () => ({
+    run: async ({ input }) => ({
       output: "approved",
+      messages: [
+        {
+          role: "user",
+          content: input,
+        },
+        {
+          role: "assistant",
+          content: "approved",
+        },
+      ],
       traces: [
         {
           id: "trace_123",
@@ -626,7 +728,7 @@ test("createHarness normalizes lightweight traces", async () => {
   ]);
 });
 
-test("span helpers preserve object-shaped errors and internal span ids", () => {
+test("span helpers preserve object-shaped errors", () => {
   expect(
     normalizeSpanError({
       type: "ToolError",
@@ -638,31 +740,6 @@ test("span helpers preserve object-shaped errors and internal span ids", () => {
     message: "tool failed",
     retryable: false,
   });
-
-  expect(
-    createToolCallSpans(
-      [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
-      {
-        traceId: "trace_123",
-        parentId: "trace_123:run",
-        spanIdPrefix: "trace_123:tool",
-      },
-    ),
-  ).toMatchObject([
-    {
-      id: "trace_123:tool:1",
-      traceId: "trace_123",
-      parentId: "trace_123:run",
-      attributes: {
-        "gen_ai.tool.call.id": "call_lookup",
-      },
-    },
-  ]);
 });
 
 test("JSON normalization drops non-finite numbers and circular references", () => {
@@ -708,6 +785,7 @@ describeEval("harness mode", { harness }, (it) => {
         arguments: {
           invoiceId: "inv_123",
         },
+        status: "pending",
       },
     ]);
     expect(spansByKind(result, "run")).toMatchObject([
@@ -720,17 +798,7 @@ describeEval("harness mode", { harness }, (it) => {
         },
       },
     ]);
-    expect(spansByKind(result, "tool")).toMatchObject([
-      {
-        name: "lookupInvoice",
-        kind: "tool",
-        status: "ok",
-        attributes: {
-          "gen_ai.operation.name": "execute_tool",
-          "gen_ai.tool.name": "lookupInvoice",
-        },
-      },
-    ]);
+    expect(spansByKind(result, "tool")).toEqual([]);
     expect(EvalTaskMetaSchema.safeParse(task.meta).success).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(runSpy).toHaveBeenCalledWith(
@@ -786,6 +854,7 @@ describeEval(
             arguments: {
               invoiceId: "inv_123",
             },
+            status: "pending",
           },
         ],
       });
@@ -869,6 +938,7 @@ describeEval(
             arguments: {
               invoiceId: "inv_123",
             },
+            status: "pending",
           },
         ],
       });
@@ -939,6 +1009,7 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
           arguments: {
             invoiceId: "inv_123",
           },
+          status: "pending",
         },
       ],
     });
@@ -1012,6 +1083,7 @@ describeEval("harness mode with explicit judge matcher", { harness }, (it) => {
             arguments: {
               invoiceId: "inv_123",
             },
+            status: "pending",
           },
         ],
       }),
@@ -1055,7 +1127,7 @@ describeEval(
         .fn<(input: string, context: HarnessContext) => Promise<HarnessRun>>()
         .mockResolvedValueOnce({
           session: {
-            messages: [],
+            events: messagesToTranscriptEvents([]),
           },
           usage: {},
           errors: [],
@@ -1077,12 +1149,12 @@ describeEval(
         name: "flaky-harness",
         run: {
           session: {
-            messages: [
+            events: messagesToTranscriptEvents([
               {
                 role: "user",
                 content: "Refund invoice inv_404",
               },
-            ],
+            ]),
           },
           usage: {},
           errors: [
@@ -1151,6 +1223,7 @@ test("toSatisfyJudge reuses normalized harness run data", async () => {
           arguments: {
             invoiceId: "inv_123",
           },
+          status: "pending",
         },
       ],
     }),
@@ -1207,7 +1280,10 @@ test("toSatisfyJudge accepts explicit harness context for raw values", async () 
 test("toSatisfyJudge uses plain input to seed synthetic sessions", async () => {
   const sessionJudgeSpy = vi.fn(async (opts: JudgeContext) => ({
     score:
-      opts.session.messages[0]?.content === "Refund invoice inv_123" ? 1 : 0,
+      opts.session.events[0]?.type === "message" &&
+      opts.session.events[0].content === "Refund invoice inv_123"
+        ? 1
+        : 0,
   }));
   const sessionJudge = createJudge("SyntheticSessionJudge", sessionJudgeSpy);
 
@@ -1221,7 +1297,7 @@ test("toSatisfyJudge uses plain input to seed synthetic sessions", async () => {
     expect.objectContaining({
       input: "Refund invoice inv_123",
       session: expect.objectContaining({
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "user",
             content: "Refund invoice inv_123",
@@ -1232,7 +1308,7 @@ test("toSatisfyJudge uses plain input to seed synthetic sessions", async () => {
               status: "approved",
             },
           },
-        ],
+        ]),
       }),
     }),
   );
@@ -1271,7 +1347,7 @@ test("toSatisfyJudge builds a synthetic run for raw output values", async () => 
         },
       }),
       session: expect.objectContaining({
-        messages: [
+        events: messagesToTranscriptEvents([
           {
             role: "user",
             content: "Refund invoice inv_123",
@@ -1283,7 +1359,7 @@ test("toSatisfyJudge builds a synthetic run for raw output values", async () => 
               refundId: "rf_inv_123",
             },
           },
-        ],
+        ]),
       }),
     }),
   );
@@ -1327,12 +1403,12 @@ test("toSatisfyJudge preserves structured harness output when text is also prese
 
   await expect({
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "assistant",
           content: "approved",
         },
-      ],
+      ]),
     },
     output: {
       status: "approved",
@@ -1367,12 +1443,12 @@ test("toSatisfyJudge preserves structured harness output when text is blank", as
 
   await expect({
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "assistant",
           content: "   ",
         },
-      ],
+      ]),
     },
     output: {
       status: "approved",
@@ -1402,8 +1478,9 @@ test("toSatisfyJudge uses assistant message content on normalized sessions", asy
   );
 
   await expect({
-    messages: [
+    events: [
       {
+        type: "message",
         role: "assistant",
         content: "approved",
       },
@@ -1427,12 +1504,14 @@ test("toSatisfyJudge skips whitespace-only assistant content on normalized sessi
   );
 
   await expect({
-    messages: [
+    events: [
       {
+        type: "message",
         role: "assistant",
         content: "approved",
       },
       {
+        type: "message",
         role: "assistant",
         content: "   ",
       },
@@ -1520,20 +1599,22 @@ test("ToolCallJudge accepts string expected tools", async () => {
     toolCalls: [
       {
         name: "lookupInvoice",
+        status: "pending",
       },
       {
         name: "createRefund",
+        status: "pending",
       },
     ],
     run: {
       session: {
-        messages: [],
+        events: messagesToTranscriptEvents([]),
       },
       usage: {},
       errors: [],
     },
     session: {
-      messages: [],
+      events: messagesToTranscriptEvents([]),
     },
     harness: undefined,
   });
@@ -1550,7 +1631,7 @@ test("StructuredOutputJudge reads expected fields from judge options", async () 
     toolCalls: [],
     run: {
       session: {
-        messages: [],
+        events: messagesToTranscriptEvents([]),
       },
       output: {
         status: "approved",
@@ -1560,7 +1641,7 @@ test("StructuredOutputJudge reads expected fields from judge options", async () 
       errors: [],
     },
     session: {
-      messages: [],
+      events: messagesToTranscriptEvents([]),
     },
     expected: {
       status: "approved",
@@ -1573,7 +1654,7 @@ test("StructuredOutputJudge reads expected fields from judge options", async () 
 
 test("normalized session helpers expose common access paths", () => {
   const session: HarnessRun["session"] = {
-    messages: [
+    events: messagesToTranscriptEvents([
       {
         role: "system",
         content: "You are a refund agent.",
@@ -1590,42 +1671,39 @@ test("normalized session helpers expose common access paths", () => {
         role: "assistant",
         toolCalls: [
           {
+            id: "call_lookup",
             name: "lookupInvoice",
           },
         ],
       },
       {
         role: "tool",
+        toolCallId: "call_lookup",
         content: {
           invoiceId: "inv_123",
         },
       },
-    ],
+    ]),
   };
 
   expect(userMessages(session)).toEqual([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
   ]);
   expect(assistantMessages(session)).toEqual([
     {
+      type: "message",
       role: "assistant",
       content: "Checking the invoice.",
-    },
-    {
-      role: "assistant",
-      toolCalls: [
-        {
-          name: "lookupInvoice",
-        },
-      ],
     },
   ]);
   expect(toolMessages(session)).toEqual([
     {
-      role: "tool",
+      type: "tool_result",
+      toolCallId: "call_lookup",
       content: {
         invoiceId: "inv_123",
       },
@@ -1634,6 +1712,10 @@ test("normalized session helpers expose common access paths", () => {
   expect(toolCalls(session)).toEqual([
     {
       name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+      },
+      status: "ok",
     },
   ]);
 });

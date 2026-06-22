@@ -78,6 +78,7 @@ describeEval("@ai/sdk ToolCallScorer", {
         .map((call) => ({
           name: call.toolName,
           arguments: call.input as Record<string, any>,
+          status: "ok" as const,
         })),
     };
   },
@@ -154,6 +155,7 @@ describeEval("@ai/sdk ToolCallScorer (No stopWhen)", {
         .map((call) => ({
           name: call.toolName,
           arguments: call.input as Record<string, any>,
+          status: "ok" as const,
         })),
     };
   },

@@ -5,10 +5,16 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   describeEval,
   getHarnessRunFromError,
+  messagesToTranscriptEvents,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
-import type { Harness, HarnessContext, JsonValue } from "vitest-evals/harness";
+import type {
+  Harness,
+  HarnessContext,
+  JsonValue,
+  NormalizedSession,
+} from "vitest-evals/harness";
 import { z } from "zod";
 import { aiSdkHarness, type AiSdkToolset } from "./index";
 
@@ -24,6 +30,10 @@ type Expect<T extends true> = T;
 type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
   ? TOutput
   : never;
+
+function firstAssistantToolCall(session: NormalizedSession) {
+  return session.events.find((event) => event.type === "tool_call");
+}
 
 const typedRunOutputHarness = aiSdkHarness({
   run: async (): Promise<{ output: RefundDecision }> => ({
@@ -284,7 +294,7 @@ describeEval(
       });
       expect(result.session.provider).toBe("openai");
       expect(result.session.model).toBe("gpt-4o-mini");
-      expect(result.session.messages).toEqual(
+      expect(result.session.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             role: "assistant",
@@ -295,7 +305,6 @@ describeEval(
       );
       expect(toolCalls(result.session)).toMatchObject([
         {
-          id: "call_lookup",
           name: "lookupInvoice",
           arguments: {
             invoiceId: "inv_123",
@@ -306,7 +315,6 @@ describeEval(
           },
         },
         {
-          id: "call_refund",
           name: "createRefund",
           arguments: {
             invoiceId: "inv_123",
@@ -346,24 +354,7 @@ describeEval(
           },
         },
       ]);
-      expect(spansByKind(result, "tool")).toMatchObject([
-        {
-          id: expect.not.stringMatching(/^call_lookup$/),
-          name: "lookupInvoice",
-          attributes: {
-            "gen_ai.operation.name": "execute_tool",
-            "gen_ai.tool.call.id": "call_lookup",
-            "gen_ai.tool.name": "lookupInvoice",
-          },
-        },
-        {
-          id: expect.not.stringMatching(/^call_refund$/),
-          name: "createRefund",
-          attributes: {
-            "gen_ai.tool.call.id": "call_refund",
-          },
-        },
-      ]);
+      expect(spansByKind(result, "tool")).toEqual([]);
     });
   },
 );
@@ -444,7 +435,7 @@ describeEval(
       expect(result.output).toEqual({
         status: "approved",
       });
-      expect(result.session.messages).toEqual(
+      expect(result.session.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             role: "assistant",
@@ -581,15 +572,7 @@ test("default agent run receives wrapped runtime tools", async () => {
       },
     },
   ]);
-  expect(spansByKind(result, "tool")).toMatchObject([
-    {
-      name: "lookupInvoice",
-      status: "ok",
-      attributes: {
-        "gen_ai.tool.name": "lookupInvoice",
-      },
-    },
-  ]);
+  expect(spansByKind(result, "tool")).toEqual([]);
 });
 
 test("supports run as the custom entrypoint", async () => {
@@ -691,7 +674,7 @@ test("supports a typed output selector with inferred diagnostics", async () => {
   expect(result.output).toEqual({
     status: "approved",
   });
-  expect(result.session.messages).toMatchObject([
+  expect(result.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
@@ -704,6 +687,266 @@ test("supports a typed output selector with inferred diagnostics", async () => {
     },
   ]);
   expect(result.usage.totalTokens).toBe(7);
+});
+
+test("attaches runtime tool calls when custom run succeeds without SDK steps", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      const toolResult = await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        object: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+  expect(result.session.events).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      role: "assistant",
+      content: {
+        status: "approved",
+      },
+    },
+  ]);
+});
+
+test("ignores app-owned steps fields that are not AI SDK steps", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        object: {
+          status: "approved",
+        },
+        steps: [
+          {
+            label: "domain workflow step",
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+});
+
+test("does not count runtime tool calls when custom run returns an explicit session", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const session = {
+    events: [
+      {
+        type: "message",
+        role: "user",
+        content: "Refund invoice inv_123",
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: {
+          status: "approved",
+        },
+      },
+    ],
+  } satisfies NormalizedSession;
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      const toolResult = await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+      const invoiceId =
+        toolResult && !(Symbol.asyncIterator in toolResult)
+          ? toolResult.invoiceId
+          : undefined;
+
+      return {
+        session,
+        object: {
+          status: "approved",
+          invoiceId,
+        },
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.output).toEqual({
+    status: "approved",
+    invoiceId: "inv_123",
+  });
+  expect(result.usage.toolCalls).toBeUndefined();
+  expect(result.session).toEqual(session);
+  expect(toolCalls(result.session)).toEqual([]);
+});
+
+test("counts explicit session tool calls when custom run also returns steps", async () => {
+  const session = {
+    events: [
+      {
+        type: "message",
+        role: "user",
+        content: "Refund invoice inv_123",
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: {
+          status: "approved",
+        },
+      },
+    ],
+  } satisfies NormalizedSession;
+  const harness = aiSdkHarness({
+    run: async () => ({
+      session,
+      object: {
+        status: "approved",
+      },
+      steps: [
+        {
+          content: [],
+          toolCalls: [
+            {
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+          toolResults: [],
+          usage: {
+            inputTokens: 5,
+            outputTokens: 2,
+            totalTokens: 7,
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage).toMatchObject({
+    inputTokens: 5,
+    outputTokens: 2,
+    totalTokens: 7,
+  });
+  expect(result.usage.toolCalls).toBeUndefined();
+  expect(result.session).toEqual(session);
+  expect(toolCalls(result.session)).toEqual([]);
 });
 
 test("attaches partial runtime tool calls when custom run errors", async () => {
@@ -745,7 +988,6 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
   expect(run?.usage.toolCalls).toBe(1);
   expect(toolCalls(run!.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupInvoice",
       arguments: {
         invoiceId: "inv_123",
@@ -756,30 +998,24 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
       },
     },
   ]);
-  expect(run?.session.messages).toMatchObject([
+  expect(run?.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
     },
     {
-      role: "tool",
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
       content: {
         invoiceId: "inv_123",
         refundable: true,
-      },
-      metadata: {
-        name: "lookupInvoice",
-        toolCallId: "call_lookup",
-        isError: false,
       },
     },
   ]);
@@ -791,16 +1027,7 @@ test("attaches partial runtime tool calls when custom run errors", async () => {
       },
     },
   ]);
-  expect(spansByKind(run!, "tool")).toMatchObject([
-    {
-      id: expect.not.stringMatching(/^call_lookup$/),
-      name: "lookupInvoice",
-      status: "ok",
-      attributes: {
-        "gen_ai.tool.call.id": "call_lookup",
-      },
-    },
-  ]);
+  expect(spansByKind(run!, "tool")).toEqual([]);
 });
 
 test("attaches a failed run when agent setup fails", async () => {
@@ -883,7 +1110,6 @@ test("omits empty runtime tool error content when custom run errors", async () =
   expect(run).toBeDefined();
   expect(toolCalls(run!.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupInvoice",
       error: {
         message: "",
@@ -891,40 +1117,39 @@ test("omits empty runtime tool error content when custom run errors", async () =
       },
     },
   ]);
-  expect(run?.session.messages).toMatchObject([
+  expect(run?.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
     },
     {
-      role: "tool",
-      metadata: {
-        name: "lookupInvoice",
-        toolCallId: "call_lookup",
-        isError: true,
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
+      error: {
+        message: "",
+        type: "Error",
       },
     },
   ]);
-  expect(run?.session.messages[2]).not.toHaveProperty("content");
+  expect(run?.session.events[2]).not.toHaveProperty("content");
 });
 
-test("preserves explicit null runtime tool results", async () => {
+test("attaches successful runtime tool calls from custom runs", async () => {
+  const execute = vi.fn(async () => null);
   const harness = aiSdkHarness({
     tools: {
       lookupInvoice: {
         inputSchema: z.object({
           invoiceId: z.string(),
         }),
-        execute: async () => null,
+        execute,
       },
     } satisfies AiSdkToolset<string>,
     run: async ({ runtime }) => {
@@ -952,35 +1177,32 @@ test("preserves explicit null runtime tool results", async () => {
     createHarnessContext({}),
   );
 
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(run.usage.toolCalls).toBe(1);
   expect(toolCalls(run.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
       result: null,
     },
   ]);
-  expect(run.session.messages).toMatchObject([
+  expect(run.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
     },
     {
-      role: "tool",
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
       content: null,
-      metadata: {
-        name: "lookupInvoice",
-        toolCallId: "call_lookup",
-        isError: false,
-      },
     },
     {
       role: "assistant",
@@ -1058,47 +1280,48 @@ test("marks step-derived tool messages as errors when the tool call failed", asy
 
   expect(toolCalls(run.session)).toMatchObject([
     {
-      id: "call_lookup",
       name: "lookupInvoice",
       error: {
         message: "missing invoice context",
       },
     },
   ]);
-  expect(run.session.messages).toHaveLength(4);
-  expect(run.session.messages).toMatchObject([
+  expect(run.session.events).toHaveLength(5);
+  expect(run.session.events).toMatchObject([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
-      toolCalls: [
-        {
-          id: "call_lookup",
-          name: "lookupInvoice",
-        },
-      ],
     },
     {
-      role: "tool",
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
       content: {
         message: "missing invoice context",
       },
-      metadata: {
-        name: "lookupInvoice",
-        toolCallId: "call_lookup",
-        isError: true,
+      error: {
+        message: "missing invoice context",
       },
     },
     {
+      type: "message",
       role: "assistant",
       content: "done",
     },
   ]);
 });
 
-test("keeps runtime-only tool calls when SDK steps are also present", async () => {
+test("does not add app-side runtime calls to transcript when SDK steps are present", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
     invoiceId,
     refundable: true,
@@ -1165,20 +1388,9 @@ test("keeps runtime-only tool calls when SDK steps are also present", async () =
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(run.session)).toMatchObject([
-    {
-      id: "call_prefetch",
-      name: "lookupInvoice",
-      arguments: {
-        invoiceId: "inv_prefetch",
-      },
-      result: {
-        invoiceId: "inv_prefetch",
-        refundable: true,
-      },
-    },
-  ]);
-  expect(run.session.messages).toMatchObject([
+  expect(run.usage.toolCalls).toBeUndefined();
+  expect(toolCalls(run.session)).toEqual([]);
+  expect(run.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
@@ -1186,27 +1398,6 @@ test("keeps runtime-only tool calls when SDK steps are also present", async () =
     {
       role: "assistant",
       content: "approved",
-    },
-    {
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call_prefetch",
-          name: "lookupInvoice",
-        },
-      ],
-    },
-    {
-      role: "tool",
-      content: {
-        invoiceId: "inv_prefetch",
-        refundable: true,
-      },
-      metadata: {
-        name: "lookupInvoice",
-        toolCallId: "call_prefetch",
-        isError: false,
-      },
     },
   ]);
 });
@@ -1315,12 +1506,14 @@ test("normalizes domain results that resemble harness runs", async () => {
     status: "approved",
   });
   expect(output).toHaveBeenCalledTimes(1);
-  expect(run.session.messages).toEqual([
+  expect(run.session.events).toEqual([
     {
+      type: "message",
       role: "user",
       content: "Refund invoice inv_123",
     },
     {
+      type: "message",
       role: "assistant",
       content: {
         status: "approved",
@@ -1334,6 +1527,11 @@ test("aggregates per-step usage when total usage is missing", async () => {
   const harness = aiSdkHarness({
     run: async () => ({
       text: "approved",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 100,
+        totalTokens: 200,
+      },
       steps: [
         {
           stepNumber: 0,
@@ -1411,6 +1609,54 @@ test("aggregates per-step usage when total usage is missing", async () => {
       cacheReadTokens: 3,
     },
   });
+});
+
+test("handles step-like results without model metadata", async () => {
+  const harness = aiSdkHarness({
+    run: async () => ({
+      text: "approved",
+      steps: [
+        {
+          text: "approved",
+          usage: {
+            inputTokens: 3,
+            outputTokens: 4,
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(run.session.provider).toBeUndefined();
+  expect(run.session.model).toBeUndefined();
+  expect(run.usage).toMatchObject({
+    inputTokens: 3,
+    outputTokens: 4,
+    totalTokens: 7,
+  });
+});
+
+test("ignores malformed AI SDK usage fields", async () => {
+  const harness = aiSdkHarness({
+    run: async () => ({
+      text: "approved",
+      usage: {
+        inputTokens: "3",
+      },
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(run.usage).toEqual({});
 });
 
 test("normalizes arrays and empty objects without dropping positions", async () => {
@@ -1643,12 +1889,12 @@ test("uses invalid tool call details as the normalized error", async () => {
   );
 
   expect(toolCalls(run.session)[0]).toMatchObject({
+    name: "lookupInvoice",
+    status: "pending",
+  });
+  expect(firstAssistantToolCall(run.session)).toMatchObject({
     id: "call_invalid",
     name: "lookupInvoice",
-    error: {
-      type: "ZodError",
-      message: "Expected string, received number",
-    },
     metadata: {
       invalid: {
         type: "ZodError",
@@ -1704,13 +1950,12 @@ test("omits undefined step-normalized arguments and results", async () => {
   );
 
   expect(toolCalls(run.session)[0]).toMatchObject({
-    id: "call_lookup",
     name: "lookupInvoice",
   });
   expect(toolCalls(run.session)[0]).not.toHaveProperty("arguments");
   expect(toolCalls(run.session)[0]).not.toHaveProperty("result");
-  const toolMessage = run.session.messages.find(
-    (message) => message.role === "tool",
+  const toolMessage = run.session.events.find(
+    (event) => event.type === "tool_result",
   );
   expect(toolMessage).toBeDefined();
   expect(toolMessage).not.toHaveProperty("content");
@@ -1825,13 +2070,13 @@ test("records and replays opt-in tools in auto mode", async () => {
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
-  const firstCall = toolCalls(firstRun.session)[0];
-  expect(firstCall.metadata?.replay).toMatchObject({
+  const firstCall = firstAssistantToolCall(firstRun.session);
+  expect(firstCall?.metadata?.replay).toMatchObject({
     status: "recorded",
   });
 
   const recordingPath = (
-    firstCall.metadata?.replay as { recordingPath: string }
+    firstCall?.metadata?.replay as { recordingPath: string }
   ).recordingPath;
   expect(recordingPath).toMatch(/^\.tmp-ai-sdk-replay-/);
   const recording = JSON.parse(
@@ -1858,7 +2103,8 @@ test("records and replays opt-in tools in auto mode", async () => {
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(secondRun.session)[0].metadata?.replay).toMatchObject({
+  const secondCall = firstAssistantToolCall(secondRun.session);
+  expect(secondCall?.metadata?.replay).toMatchObject({
     status: "replayed",
   });
 });
@@ -1906,7 +2152,8 @@ test("does not opt into replay from tool definitions", async () => {
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(toolCalls(run.session)[0].metadata?.replay).toBeUndefined();
+  const call = firstAssistantToolCall(run.session);
+  expect(call?.metadata?.replay).toBeUndefined();
 });
 
 test("rejects async iterable replay outputs after awaiting execute", async () => {

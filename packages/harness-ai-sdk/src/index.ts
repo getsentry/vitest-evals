@@ -2,7 +2,6 @@ import {
   attachHarnessRunToError,
   createFailedHarnessRun,
   createGenAiUsageAttributes,
-  createToolCallSpans,
   ensureRunTrace,
   getHarnessRunFromError,
   hasCallableMethod,
@@ -16,19 +15,18 @@ import {
   normalizeSpanAttributes,
   normalizeSpanError,
   toJsonValue,
-  toolCalls as collectToolCalls,
 } from "vitest-evals/harness";
 import type {
   Harness,
   HarnessContext,
   HarnessRun,
   JsonValue,
-  NormalizedMessage,
+  TranscriptToolCallEvent,
+  TranscriptEvent,
   NormalizedSpan,
   NormalizedSession,
   NormalizedTrace,
   TimingSummary,
-  ToolCallRecord,
   UsageSummary,
 } from "vitest-evals/harness";
 import { generateObject, generateText, jsonSchema } from "ai";
@@ -219,7 +217,6 @@ type AiSdkLikeResult = {
   object?: unknown;
   text?: string;
   session?: NormalizedSession;
-  trace?: NormalizedSession;
   errors?: Array<Record<string, JsonValue>>;
 };
 
@@ -565,14 +562,14 @@ async function runAiSdkHarness<
 ): Promise<HarnessRun<TOutput>> {
   const trace = createTraceRecorder(options.name ?? "ai-sdk");
   const replayMetadataByToolCallId = new Map<string, ReplayMetadata>();
-  const runtimeToolCalls: ToolCallRecord[] = [];
+  const runtimeEvents: TranscriptEvent[] = [];
   const tools = createToolset({
     input,
     context,
     tools: options.tools,
     toolReplay: options.toolReplay,
     replayMetadataByToolCallId,
-    runtimeToolCalls,
+    runtimeEvents,
   });
   const runtime = {
     tools,
@@ -608,13 +605,20 @@ async function runAiSdkHarness<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(result) as TOutput | undefined);
-    const usage = resolveUsage(result, runtimeToolCalls.length);
+    const explicitSession = getResultSession(result);
+    const useRuntimeEvents = shouldUseRuntimeEvents(result);
+    const usage = resolveUsage(
+      result,
+      useRuntimeEvents ? runtimeEvents : [],
+      explicitSession,
+    );
     const session = resolveSession(
       input,
       result,
       output,
       replayMetadataByToolCallId,
-      runtimeToolCalls,
+      runtimeEvents,
+      explicitSession,
     );
     const errors = resolveHarnessRunErrors(result);
     const finishedAt = new Date();
@@ -641,15 +645,12 @@ async function runAiSdkHarness<
   } catch (error) {
     const finishedAt = new Date();
     const serializedError = serializeError(error);
+    const runtimeToolCallCount = runtimeEvents.filter(
+      (event) => event.type === "tool_call",
+    ).length;
     const usage =
-      runtimeToolCalls.length > 0 ? { toolCalls: runtimeToolCalls.length } : {};
-    const session = resolveSession(
-      input,
-      undefined,
-      undefined,
-      replayMetadataByToolCallId,
-      runtimeToolCalls,
-    );
+      runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
+    const session = resolveFailureSession(input, runtimeEvents);
     const run = {
       session,
       output: undefined,
@@ -861,11 +862,6 @@ function finishAiSdkTrace(
     options.result,
     options.usage,
   );
-  const toolSpans = createToolCallSpans(collectToolCalls(options.session), {
-    traceId: trace.id,
-    parentId: trace.rootSpanId,
-    spanIdPrefix: `${trace.id}:tool`,
-  });
   const finishedAt = options.finishedAt;
   const durationMs = finishedAt.getTime() - trace.startedAt.getTime();
   const rootError = options.errors?.[0]
@@ -887,7 +883,7 @@ function finishAiSdkTrace(
       ...createGenAiUsageAttributes(options.usage),
     }),
   };
-  const spans = [rootSpan, ...modelSpans, ...toolSpans];
+  const spans = [rootSpan, ...modelSpans];
 
   return {
     id: trace.id,
@@ -907,7 +903,7 @@ function createAiSdkModelSpans(
   result: unknown,
   usage: UsageSummary | undefined,
 ): NormalizedSpan[] {
-  const steps = resolveSteps(result);
+  const steps = readAiSdkSteps(result);
   if (steps.length === 0) {
     const fallback = createUsageModelSpan(trace, usage);
     return fallback ? [fallback] : [];
@@ -977,14 +973,14 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
   tools,
   toolReplay,
   replayMetadataByToolCallId,
-  runtimeToolCalls,
+  runtimeEvents,
 }: {
   input: TInput;
   context: HarnessContext;
   tools: TTools | undefined;
   toolReplay: AiSdkToolReplayPolicies<TInput> | undefined;
   replayMetadataByToolCallId: Map<string, ReplayMetadata>;
-  runtimeToolCalls: ToolCallRecord[];
+  runtimeEvents: TranscriptEvent[];
 }) {
   return Object.fromEntries(
     Object.entries(tools ?? {}).map(([toolName, tool]) => {
@@ -1009,6 +1005,14 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
         ) => {
           const startedAt = new Date();
           const normalizedArgs = normalizeArguments(toolInput);
+          const call: TranscriptToolCallEvent = {
+            type: "tool_call",
+            id: execution.toolCallId,
+            name: toolName,
+            ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
+            startedAt: startedAt.toISOString(),
+          };
+          runtimeEvents.push(call);
           const replayContext = {
             input,
             signal: context.signal,
@@ -1031,7 +1035,6 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
                   replay: undefined,
                 };
             const finishedAt = new Date();
-            const normalizedResult = toJsonValue(executionResult.result);
             const replayMetadata = normalizeReplayMetadata(
               executionResult.replay,
             );
@@ -1043,17 +1046,22 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
               );
             }
 
-            runtimeToolCalls.push({
-              id: execution.toolCallId,
+            call.finishedAt = finishedAt.toISOString();
+            call.durationMs = finishedAt.getTime() - startedAt.getTime();
+            if (replayMetadata) {
+              call.metadata = replayMetadata;
+            }
+            const normalizedResult = toJsonValue(executionResult.result);
+            runtimeEvents.push({
+              type: "tool_result",
+              toolCallId: execution.toolCallId,
               name: toolName,
-              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
               ...(normalizedResult !== undefined
-                ? { result: normalizedResult }
+                ? { content: normalizedResult }
                 : {}),
-              startedAt: startedAt.toISOString(),
-              finishedAt: finishedAt.toISOString(),
-              durationMs: finishedAt.getTime() - startedAt.getTime(),
-              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+              startedAt: call.startedAt,
+              finishedAt: call.finishedAt,
+              durationMs: call.durationMs,
             });
 
             return executionResult.result as InferToolOutput<typeof tool>;
@@ -1066,15 +1074,19 @@ function createToolset<TInput, TTools extends AiSdkToolset<TInput>>({
               replayMetadataByToolCallId.set(execution.toolCallId, replay);
             }
 
-            runtimeToolCalls.push({
-              id: execution.toolCallId,
+            call.finishedAt = finishedAt.toISOString();
+            call.durationMs = finishedAt.getTime() - startedAt.getTime();
+            if (replayMetadata) {
+              call.metadata = replayMetadata;
+            }
+            runtimeEvents.push({
+              type: "tool_result",
+              toolCallId: execution.toolCallId,
               name: toolName,
-              ...(normalizedArgs ? { arguments: normalizedArgs } : {}),
               error: normalizeError(error),
-              startedAt: startedAt.toISOString(),
-              finishedAt: finishedAt.toISOString(),
-              durationMs: finishedAt.getTime() - startedAt.getTime(),
-              ...(replayMetadata ? { metadata: replayMetadata } : {}),
+              startedAt: call.startedAt,
+              finishedAt: call.finishedAt,
+              durationMs: call.durationMs,
             });
             throw error;
           }
@@ -1198,32 +1210,39 @@ function toOutputValue(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
-  const steps = resolveSteps(result);
-  const usage = resolveLanguageModelUsage(result) ?? resolveStepUsage(steps);
+function resolveUsage(
+  result: unknown,
+  runtimeEvents: TranscriptEvent[] = [],
+  explicitSession?: NormalizedSession,
+): UsageSummary {
+  const steps = readAiSdkSteps(result);
+  const runtimeToolCallCount = countRuntimeToolCalls(runtimeEvents);
+  const explicitSessionToolCallCount = explicitSession
+    ? countSessionToolCalls(explicitSession)
+    : undefined;
+  const usage = readAiSdkUsage(result, steps);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
+  // Runtime events count only for custom runs without AI SDK steps, so usage
+  // stays aligned with the same transcript source used for assertions.
+  const toolCallCount =
+    explicitSessionToolCallCount ??
+    (steps.length > 0 ? countStepToolCalls(steps) : runtimeToolCallCount);
 
   if (!usage) {
-    if (steps.length > 0) {
-      const toolCallCount = countStepToolCalls(steps);
-
+    if (toolCallCount > 0 || steps.length > 0) {
       return {
-        provider: lastStep?.model.provider,
-        model: lastStep?.model.modelId,
+        provider: lastStep?.model?.provider,
+        model: lastStep?.model?.modelId,
         ...(toolCallCount > 0 ? { toolCalls: toolCallCount } : {}),
       };
     }
 
-    return runtimeToolCallCount > 0 ? { toolCalls: runtimeToolCallCount } : {};
+    return {};
   }
 
-  const stepToolCallCount = countStepToolCalls(steps);
-  const toolCallCount =
-    stepToolCallCount > 0 ? stepToolCallCount : runtimeToolCallCount;
-
   return {
-    provider: lastStep?.model.provider,
-    model: lastStep?.model.modelId,
+    provider: lastStep?.model?.provider,
+    model: lastStep?.model?.modelId,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     reasoningTokens:
@@ -1240,10 +1259,12 @@ function resolveUsage(result: unknown, runtimeToolCallCount = 0): UsageSummary {
   };
 }
 
+function countRuntimeToolCalls(events: readonly TranscriptEvent[]) {
+  return events.filter((event) => event.type === "tool_call").length;
+}
+
 function resolveStepUsage(steps: StepLike[]): LanguageModelUsage | undefined {
-  const usages = steps
-    .map((step) => step.usage)
-    .filter((usage): usage is LanguageModelUsage => Boolean(usage));
+  const usages = steps.map((step) => step.usage).filter(isLanguageModelUsage);
 
   if (usages.length === 0) {
     return undefined;
@@ -1306,59 +1327,64 @@ function countStepToolCalls(steps: StepLike[]) {
   );
 }
 
-function resolveSession(
-  input: unknown,
-  result: unknown,
-  output: JsonValue | undefined,
-  replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-  runtimeToolCalls: ToolCallRecord[] = [],
-): NormalizedSession {
+function countSessionToolCalls(session: NormalizedSession) {
+  return session.events.filter((event) => event.type === "tool_call").length;
+}
+
+function shouldUseRuntimeEvents(result: unknown) {
   if (
     isNormalizedSession(
       (result as Record<string, unknown> | undefined)?.session,
     )
   ) {
-    return (result as { session: NormalizedSession }).session;
+    return false;
   }
 
-  if (
-    isNormalizedSession((result as Record<string, unknown> | undefined)?.trace)
-  ) {
-    return (result as { trace: NormalizedSession }).trace;
+  return readAiSdkSteps(result).length === 0;
+}
+
+function resolveSession(
+  input: unknown,
+  result: unknown,
+  output: JsonValue | undefined,
+  replayMetadataByToolCallId: Map<string, ReplayMetadata>,
+  runtimeEvents: TranscriptEvent[] = [],
+  explicitSession = getResultSession(result),
+): NormalizedSession {
+  if (explicitSession) {
+    return explicitSession;
   }
 
-  const steps = resolveSteps(result);
-  const messages: NormalizedMessage[] = [
+  const steps = readAiSdkSteps(result);
+  const events: TranscriptEvent[] = [
     {
+      type: "message",
       role: "user",
       content: normalizeContent(input),
     },
   ];
-  const stepToolCallIds = new Set<string>();
 
   for (const step of steps) {
-    for (const toolCall of step.toolCalls ?? []) {
-      stepToolCallIds.add(toolCall.toolCallId);
-    }
-    messages.push(...normalizeStep(step, replayMetadataByToolCallId));
+    events.push(...normalizeStep(step, replayMetadataByToolCallId));
   }
 
-  const unmatchedRuntimeToolCalls = runtimeToolCalls.filter(
-    (call) => call.id === undefined || !stepToolCallIds.has(call.id),
-  );
-
-  if (unmatchedRuntimeToolCalls.length > 0) {
-    messages.push(...normalizeRuntimeToolCalls(unmatchedRuntimeToolCalls));
+  // Runtime events are only the transcript source when no AI SDK steps exist;
+  // explicit sessions returned above and provider steps stay authoritative.
+  if (steps.length === 0) {
+    events.push(...runtimeEvents);
   }
 
   if (
     output !== undefined &&
-    !messages.some(
-      (message) =>
-        message.role === "assistant" && message.content !== undefined,
+    !events.some(
+      (event) =>
+        event.type === "message" &&
+        event.role === "assistant" &&
+        event.content !== undefined,
     )
   ) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "assistant",
       content: output,
     });
@@ -1367,85 +1393,157 @@ function resolveSession(
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
 
   return {
-    messages,
-    provider: lastStep?.model.provider,
-    model: lastStep?.model.modelId,
+    events,
+    provider: lastStep?.model?.provider,
+    model: lastStep?.model?.modelId,
   };
 }
 
-function normalizeRuntimeToolCalls(
-  runtimeToolCalls: ToolCallRecord[],
-): NormalizedMessage[] {
-  const messages: NormalizedMessage[] = [
-    {
-      role: "assistant",
-      toolCalls: runtimeToolCalls,
-    },
-  ];
-
-  for (const call of runtimeToolCalls) {
-    if (call.result === undefined && !call.error) {
-      continue;
-    }
-
-    const content =
-      call.result !== undefined
-        ? call.result
-        : call.error && call.error.message.length > 0
-          ? call.error.message
-          : undefined;
-
-    messages.push({
-      role: "tool",
-      ...(content !== undefined ? { content } : {}),
-      metadata: normalizeMetadata({
-        name: call.name,
-        toolCallId: call.id,
-        isError: Boolean(call.error),
-      }),
-    });
-  }
-
-  return messages;
+function getResultSession(result: unknown): NormalizedSession | undefined {
+  const session = (result as Record<string, unknown> | undefined)?.session;
+  return isNormalizedSession(session) ? session : undefined;
 }
 
-function resolveSteps(result: unknown): StepLike[] {
+function resolveFailureSession(
+  input: unknown,
+  runtimeEvents: TranscriptEvent[],
+): NormalizedSession {
+  return {
+    events: [
+      {
+        type: "message",
+        role: "user",
+        content: normalizeContent(input),
+      },
+      ...runtimeEvents,
+    ],
+  };
+}
+
+/** Reads AI SDK step arrays only when the field looks like provider step data. */
+function readAiSdkSteps(result: unknown): StepLike[] {
   if (!result || typeof result !== "object") {
     return [];
   }
 
-  return Array.isArray((result as AiSdkLikeResult).steps)
-    ? ((result as AiSdkLikeResult).steps ?? [])
-    : [];
+  if (!Object.prototype.hasOwnProperty.call(result, "steps")) {
+    return [];
+  }
+
+  const steps = (result as AiSdkLikeResult).steps;
+  if (!Array.isArray(steps)) {
+    return [];
+  }
+  if (steps.length > 0 && !steps.every(isAiSdkStepLike)) {
+    return [];
+  }
+
+  return steps;
 }
 
-function resolveLanguageModelUsage(
+function isAiSdkStepLike(step: unknown): step is StepLike {
+  if (!step || typeof step !== "object") {
+    return false;
+  }
+
+  const record = step as Record<string, unknown>;
+  return (
+    Array.isArray(record.content) ||
+    Array.isArray(record.toolCalls) ||
+    Array.isArray(record.toolResults) ||
+    Boolean(record.response && typeof record.response === "object") ||
+    Boolean(record.usage && typeof record.usage === "object") ||
+    typeof record.finishReason === "string" ||
+    typeof record.stepNumber === "number" ||
+    typeof record.text === "string"
+  );
+}
+
+function readAiSdkUsage(
   result: unknown,
+  steps: StepLike[],
+): LanguageModelUsage | undefined {
+  // AI SDK generateText exposes aggregate `totalUsage`; `usage` is the last
+  // step and only applies to non-step results such as generateObject.
+  const totalUsage = readUsageField(result, "totalUsage");
+  if (totalUsage) {
+    return totalUsage;
+  }
+
+  if (steps.length > 0) {
+    return resolveStepUsage(steps);
+  }
+
+  return readUsageField(result, "usage");
+}
+
+function readUsageField(
+  result: unknown,
+  field: "usage" | "totalUsage",
 ): LanguageModelUsage | undefined {
   if (!result || typeof result !== "object") {
     return undefined;
   }
 
-  const aiResult = result as AiSdkLikeResult;
-  return aiResult.totalUsage ?? aiResult.usage;
+  const usage = (result as AiSdkLikeResult)[field];
+  return isLanguageModelUsage(usage) ? usage : undefined;
+}
+
+function isLanguageModelUsage(value: unknown): value is LanguageModelUsage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const usage = value as LanguageModelUsage;
+  return (
+    isOptionalFiniteNumber(usage.inputTokens) &&
+    isOptionalFiniteNumber(usage.outputTokens) &&
+    isOptionalFiniteNumber(usage.reasoningTokens) &&
+    isOptionalFiniteNumber(usage.totalTokens) &&
+    isOptionalFiniteNumber(usage.cachedInputTokens) &&
+    isUsageDetailObject(usage.inputTokenDetails) &&
+    isUsageDetailObject(usage.outputTokenDetails)
+  );
+}
+
+function isUsageDetailObject(value: unknown) {
+  if (value === undefined) {
+    return true;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isOptionalFiniteNumber);
+}
+
+function isOptionalFiniteNumber(value: unknown) {
+  return (
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function normalizeStep(
   step: StepLike,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-): NormalizedMessage[] {
+): TranscriptEvent[] {
   const toolResultsById = new Map(
     (step.toolResults ?? []).map((toolResult) => [
       toolResult.toolCallId,
       toolResult,
     ]),
   );
+  const toolErrorsById = new Map(
+    (step.toolCalls ?? [])
+      .filter((toolCall) => toolCall.invalid || toolCall.error !== undefined)
+      .map((toolCall) => [
+        toolCall.toolCallId,
+        normalizeError(toolCall.error ?? toolCall.invalid),
+      ]),
+  );
 
   const normalizedCalls = (step.toolCalls ?? []).map((toolCall) =>
     normalizeToolCall(toolCall, toolResultsById, replayMetadataByToolCallId),
-  );
-  const normalizedCallsById = new Map(
-    normalizedCalls.map((toolCall) => [toolCall.id, toolCall]),
   );
   const assistantMetadata = normalizeMetadata({
     stepNumber: step.stepNumber,
@@ -1454,29 +1552,33 @@ function normalizeStep(
     reasoningText: step.reasoningText,
     response: step.response,
   });
-  const messages: NormalizedMessage[] = [];
+  const events: TranscriptEvent[] = [];
 
-  if (step.text || normalizedCalls.length > 0 || assistantMetadata) {
-    messages.push({
+  if (step.text || assistantMetadata) {
+    events.push({
+      type: "message",
       role: "assistant",
       ...(step.text ? { content: step.text } : {}),
-      ...(normalizedCalls.length > 0 ? { toolCalls: normalizedCalls } : {}),
       ...(assistantMetadata ? { metadata: assistantMetadata } : {}),
     });
   }
+
+  events.push(...normalizedCalls);
 
   for (const toolResult of step.toolResults ?? []) {
     const content =
       toolResult.output === undefined
         ? undefined
         : normalizeContent(toolResult.output);
-    messages.push({
-      role: "tool",
+    events.push({
+      type: "tool_result",
+      toolCallId: toolResult.toolCallId,
+      name: toolResult.toolName,
       ...(content !== undefined ? { content } : {}),
+      ...(toolErrorsById.has(toolResult.toolCallId)
+        ? { error: toolErrorsById.get(toolResult.toolCallId) }
+        : {}),
       metadata: normalizeMetadata({
-        name: toolResult.toolName,
-        toolCallId: toolResult.toolCallId,
-        isError: Boolean(normalizedCallsById.get(toolResult.toolCallId)?.error),
         preliminary: toolResult.preliminary,
         providerExecuted: toolResult.providerExecuted,
         title: toolResult.title,
@@ -1485,18 +1587,16 @@ function normalizeStep(
     });
   }
 
-  return messages;
+  return events;
 }
 
 function normalizeToolCall(
   toolCall: StepLike["toolCalls"][number],
   toolResultsById: Map<string, StepLike["toolResults"][number]>,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
-): ToolCallRecord {
+): TranscriptToolCallEvent {
   const toolResult = toolResultsById.get(toolCall.toolCallId);
   const normalizedArguments = normalizeArguments(toolCall.input);
-  const normalizedResult =
-    toolResult !== undefined ? toJsonValue(toolResult.output) : undefined;
   const errorValue =
     toolCall.invalid || toolCall.error !== undefined
       ? normalizeError(toolCall.error ?? toolCall.invalid)
@@ -1506,19 +1606,17 @@ function normalizeToolCall(
   );
 
   return {
+    type: "tool_call",
     id: toolCall.toolCallId,
     name: toolCall.toolName,
     ...(normalizedArguments ? { arguments: normalizedArguments } : {}),
-    ...(toolResult && normalizedResult !== undefined
-      ? { result: normalizedResult }
-      : {}),
-    ...(errorValue ? { error: errorValue } : {}),
     metadata: normalizeMetadata({
       providerExecuted:
         toolCall.providerExecuted ?? toolResult?.providerExecuted,
       title: toolCall.title ?? toolResult?.title,
       dynamic: toolCall.dynamic,
       invalid: toolCall.invalid,
+      ...(errorValue ? { error: errorValue } : {}),
       preliminary: toolResult?.preliminary,
       providerMetadata:
         toolCall.providerMetadata ?? toolResult?.providerMetadata,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import {
   buildSpanTree,
@@ -59,17 +60,18 @@ const workspace: ReportWorkspace = {
             toolCalls: 1,
           },
           session: {
-            messages: [
+            events: messagesToTranscriptEvents([
               {
                 role: "assistant",
                 toolCalls: [
                   {
+                    id: "call_lookup",
                     name: "lookupInvoice",
                     durationMs: 6,
                   },
                 ],
               },
-            ],
+            ]),
           },
           traces: [
             {
@@ -121,6 +123,7 @@ const workspace: ReportWorkspace = {
         toolCalls: [
           {
             name: "validateRefund",
+            status: "ok",
           },
         ],
       },
@@ -266,6 +269,7 @@ describe("case helpers", () => {
     expect(caseToolCalls(workspace.cases[1]!)).toEqual([
       {
         name: "validateRefund",
+        status: "ok",
       },
     ]);
     expect(caseTotalTokens(workspace.cases[0]!)).toBe(1220);
@@ -280,21 +284,85 @@ describe("case helpers", () => {
         children: [{ id: "child" }],
       },
     ]);
-    expect(buildTranscript(workspace.cases[0]!.harness!.run!)).toMatchObject({
-      events: [
-        {
-          arguments: { invoiceId: "inv_123" },
-          kind: "tool",
-          name: "lookupInvoice",
-        },
-      ],
+    expect(
+      buildTranscript(workspace.cases[0]!.harness!.run!).events.find(
+        (event) => event.kind === "tool",
+      ),
+    ).toMatchObject({
+      durationMs: 6,
+      kind: "tool",
+      name: "lookupInvoice",
+      status: "pending",
     });
+  });
+
+  test("joins session tool result events into transcript tool events by id", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const run = testCase.harness!.run!;
+    run.traces = [];
+    run.session.events.push({
+      type: "tool_call",
+      id: "call_lookup_join",
+      name: "lookupInvoice",
+      arguments: { invoiceId: "inv_123" },
+      durationMs: 6,
+    });
+    run.session.events.push({
+      type: "tool_result",
+      toolCallId: "call_lookup_join",
+      name: "lookupInvoice",
+      content: { refundable: false },
+      durationMs: 8,
+    });
+
+    expect(
+      buildTranscript(run).events.find(
+        (event) => event.kind === "tool" && event.callId === "call_lookup_join",
+      ),
+    ).toMatchObject({
+      arguments: { invoiceId: "inv_123" },
+      durationMs: 8,
+      kind: "tool",
+      name: "lookupInvoice",
+      result: { refundable: false },
+      status: "ok",
+    });
+  });
+
+  test("renders unmatched tool result errors as transcript tool events", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: {
+        events: messagesToTranscriptEvents([
+          {
+            role: "tool",
+            toolCallId: "call_timeout",
+            name: "lookupInvoice",
+            error: { message: "Tool timed out", type: "TimeoutError" },
+          },
+        ]),
+      },
+      usage: {},
+    });
+
+    expect(transcript.events).toEqual([
+      {
+        callId: "call_timeout",
+        error: { message: "Tool timed out", type: "TimeoutError" },
+        id: "event-0:tool-result",
+        kind: "tool",
+        name: "lookupInvoice",
+        status: "error",
+      },
+    ]);
   });
 
   test("does not let usage undercount recorded session tool calls", () => {
     const testCase = structuredClone(workspace.cases[0]!);
     testCase.harness!.run!.usage.toolCalls = 1;
-    testCase.harness!.run!.session.messages[0]!.toolCalls!.push({
+    testCase.harness!.run!.session.events.push({
+      type: "tool_call",
+      id: "call_create",
       name: "createRefund",
     });
 
@@ -314,10 +382,15 @@ describe("case helpers", () => {
     expect(scoreTone(0.2)).toBe("bad");
   });
 
-  test("preserves repeated trace messages as distinct turns", () => {
+  test("builds transcripts from session events, not traces", () => {
     const transcript = buildTranscript({
       errors: [],
-      session: { messages: [] },
+      session: {
+        events: messagesToTranscriptEvents([
+          { role: "user", content: "Refund invoice inv_123" },
+          { role: "assistant", content: "Checking the invoice." },
+        ]),
+      },
       usage: {},
       traces: [
         {
@@ -328,9 +401,9 @@ describe("case helpers", () => {
               name: "model",
               startedAt: "2026-06-03T08:00:00.000Z",
               attributes: {
-                "gen_ai.input.messages": [{ role: "user", content: "yes" }],
+                "gen_ai.input.messages": [{ role: "user", content: "ignored" }],
                 "gen_ai.output.messages": [
-                  { role: "assistant", content: "Continue?" },
+                  { role: "assistant", content: "also ignored" },
                 ],
               },
             },
@@ -341,12 +414,12 @@ describe("case helpers", () => {
               startedAt: "2026-06-03T08:00:01.000Z",
               attributes: {
                 "gen_ai.input.messages": [
-                  { role: "user", content: "yes" },
-                  { role: "assistant", content: "Continue?" },
-                  { role: "user", content: "yes" },
+                  { role: "user", content: "ignored" },
+                  { role: "assistant", content: "also ignored" },
+                  { role: "user", content: "ignored again" },
                 ],
                 "gen_ai.output.messages": [
-                  { role: "assistant", content: "Done" },
+                  { role: "assistant", content: "ignored done" },
                 ],
               },
             },
@@ -360,23 +433,73 @@ describe("case helpers", () => {
         .filter((event) => event.kind === "message")
         .map((event) => [event.role, event.content]),
     ).toEqual([
-      ["user", "yes"],
-      ["assistant", "Continue?"],
-      ["user", "yes"],
-      ["assistant", "Done"],
+      ["user", "Refund invoice inv_123"],
+      ["assistant", "Checking the invoice."],
     ]);
   });
 
-  test("preserves trace span order when spans do not have timestamps", () => {
+  test("keeps trace spans separate from transcript events", () => {
+    const spans = [
+      {
+        durationMs: 120,
+        id: "model-1",
+        kind: "model" as const,
+        name: "model",
+      },
+      {
+        durationMs: 4,
+        id: "tool-1",
+        kind: "tool" as const,
+        name: "lookupInvoice",
+      },
+    ];
     const transcript = buildTranscript({
       errors: [],
-      session: { messages: [] },
+      session: { events: messagesToTranscriptEvents([]) },
+      usage: {},
+      traces: [
+        {
+          spans,
+        },
+      ],
+    });
+
+    expect(transcript.events).toEqual([]);
+    expect(buildSpanTree(spans)).toMatchObject([
+      { id: "tool-1" },
+      { id: "model-1" },
+    ]);
+  });
+
+  test("keeps session tool results when traces provide their own events", () => {
+    const transcript = buildTranscript({
+      errors: [],
+      session: {
+        events: messagesToTranscriptEvents([
+          {
+            role: "assistant",
+            toolCalls: [
+              {
+                id: "call_lookup",
+                name: "lookupInvoice",
+                arguments: { invoiceId: "inv_123" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            toolCallId: "call_lookup",
+            name: "lookupInvoice",
+            content: { refundable: true },
+            durationMs: 7,
+          },
+        ]),
+      },
       usage: {},
       traces: [
         {
           spans: [
             {
-              durationMs: 120,
               id: "model-1",
               kind: "model",
               name: "model",
@@ -389,15 +512,6 @@ describe("case helpers", () => {
                 ],
               },
             },
-            {
-              durationMs: 4,
-              id: "tool-1",
-              kind: "tool",
-              name: "lookupInvoice",
-              attributes: {
-                "gen_ai.tool.name": "lookupInvoice",
-              },
-            },
           ],
         },
       ],
@@ -407,25 +521,19 @@ describe("case helpers", () => {
       transcript.events.map((event) =>
         event.kind === "message"
           ? [event.kind, event.role, event.content]
-          : event.kind === "tool"
-            ? [event.kind, event.name]
-            : [event.kind, event.operation.name],
+          : [event.kind, event.name, event.status, event.result],
       ),
-    ).toEqual([
-      ["message", "user", "Refund invoice inv_123"],
-      ["message", "assistant", "Checking the invoice."],
-      ["tool", "lookupInvoice"],
-    ]);
+    ).toEqual([["tool", "lookupInvoice", "ok", { refundable: true }]]);
   });
 
-  test("keeps session messages when sparse traces only provide tool events", () => {
+  test("ignores sparse trace tool events in transcript", () => {
     const transcript = buildTranscript({
       errors: [],
       session: {
-        messages: [
+        events: messagesToTranscriptEvents([
           { role: "user", content: "Refund invoice inv_123" },
           { role: "assistant", content: "Approved" },
-        ],
+        ]),
       },
       usage: {},
       traces: [
@@ -448,14 +556,11 @@ describe("case helpers", () => {
       transcript.events.map((event) =>
         event.kind === "message"
           ? [event.kind, event.role, event.content]
-          : event.kind === "tool"
-            ? [event.kind, event.name]
-            : [event.kind, event.operation.name],
+          : [event.kind, event.name],
       ),
     ).toEqual([
       ["message", "user", "Refund invoice inv_123"],
       ["message", "assistant", "Approved"],
-      ["tool", "lookupInvoice"],
     ]);
   });
 });

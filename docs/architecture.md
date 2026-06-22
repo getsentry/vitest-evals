@@ -48,22 +48,51 @@ from `packages/core`:
 - `Harness`
 - `HarnessRun`
 - `NormalizedSession`
-- `ToolCallRecord`
+- `TranscriptEvent`
+- `TranscriptToolCallEvent`
+- `TranscriptToolResultEvent`
 - `UsageSummary`
 - `NormalizedTrace` and `NormalizedSpan`
 - helper accessors such as `toolCalls(result)`, `assistantMessages(result)`,
-  and `spansByKind(result, "tool")`
+  and `spans(result)`
 
 The normalized session model lives in `packages/core` and is intentionally
 JSON-serializable so it can be persisted, attached to errors, and emitted by
 reporters without custom serialization logic.
 
+`NormalizedSession` stores one ordered transcript field: `events`. The stored
+event stream is flat:
+
+- `type: "message"` for system, user, and assistant content
+- `type: "tool_call"` for a tool request
+- `type: "tool_result"` for a completed or failed tool execution
+
+This is the reporter and judge contract. `createHarness(...)` may accept strict
+camelCase message-shaped inputs at its lightweight result boundary: assistant
+`toolCalls`, `role: "tool"` results keyed by `toolCallId`, or AI SDK-style
+content parts with `type: "tool-call"` and `type: "tool-result"`. First-party
+harnesses may consume provider message/run-item data, including
+provider-specific snake_case fields, but those shapes are normalized into the
+package's camelCase `session.events` contract before storage. Custom harnesses
+that implement `Harness` directly must return that canonical `session.events`
+shape themselves. Other provider content-block or item-stream payloads should
+adapt those records into `events` directly. Downstream code should not read both
+`messages` and `events`, and should not treat traces as a transcript fallback.
+
+Assertions and judges should use helper projections instead of inspecting raw
+event internals unless the test is explicitly about transcript ordering:
+
+- `toolCalls(result)` returns clean tool inputs/results/status for assertions
+- `toolMessages(result)` returns normalized tool-result events
+- `userMessages(result)` and `assistantMessages(result)` return message events
+- `spans(result)` and related helpers return trace/span data only
+
 Normalized traces are also JSON-serializable. First-party harnesses attach
-native run, model, and tool spans automatically when they observe those
-operations. `createHarness(...)` attaches fallback run and tool spans for custom
-harnesses that do not return traces themselves. Span attributes include typed
-OpenTelemetry GenAI semantic keys for common model, agent, tool, and token
-fields while still allowing provider-specific attributes.
+native spans when provider/runtime data exposes real operations.
+`createHarness(...)` attaches a fallback run span for custom harnesses that do
+not return traces themselves. Span attributes include typed OpenTelemetry GenAI
+semantic keys for common model, agent, tool, and token fields while still
+allowing provider-specific attributes.
 
 `UsageSummary` is intentionally limited to stable usage units such as tokens,
 tool counts, retries, provider, and model. Provider-specific cost estimates are
@@ -145,8 +174,8 @@ while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
 report consumers. It exports stable schemas, TypeScript types, and helpers for:
 
 - JSON-safe values
-- normalized harness runs, sessions, messages, tool calls, usage, timings,
-  traces, spans, span events, errors, and artifacts
+- normalized harness runs, sessions, transcript-derived tool calls, usage,
+  timings, traces, spans, span events, errors, and artifacts
 - `task.meta.eval`
 - `task.meta.harness`
 - Vitest JSON reports
@@ -228,27 +257,39 @@ behavior only.
 ### `@vitest-evals/harness-ai-sdk`
 
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
-derive output, usage, messages, tool calls, and errors from common AI SDK
-result objects, while still allowing a custom `run` entrypoint and typed
-`output` selector. It also derives native trace spans from AI SDK steps and
-normalized tool activity. It exposes `aiSdkJudgeHarness(...)`, a thin adapter
-from AI SDK model configuration to the core judge harness interface.
+derive output, usage, transcript events, and errors from common AI SDK result
+objects. Successful tool-call transcripts come from AI SDK `steps`; custom
+`run` entrypoints that do not return steps use normalized transcript events for
+local tool executions. Output-only custom runs still get synthesized
+input/output messages; return a normalized `session` when evals need exact
+transcript control beyond that. It
+preserves native trace spans from AI SDK steps when they are available;
+tool-call assertions should use the normalized session helpers.
+It exposes `aiSdkJudgeHarness(...)`, a thin adapter from AI SDK model
+configuration to the core judge harness interface.
 
 ### `@vitest-evals/harness-openai-agents`
 
 Adapts `@openai/agents` `Runner.run(agent, input, options)` workflows into the
 normalized run/session shape. It accepts existing agents/runners or per-run
 `agent`/`runner` factories, supports custom app entrypoints, normalizes
-`RunResult` output, messages, usage, tool calls, tool results, errors, trace
-metadata, records native response/tool spans, and records replay metadata for
-opt-in local function tools. It also exposes `openaiAgentsJudgeHarness(...)`
-for judge-side model calls.
+`RunResult` output, transcript events, usage, errors, trace metadata,
+records run/model spans when data is available, and records replay metadata for
+opt-in local function tools. Successful tool-call transcripts come from
+OpenAI Agents generated item arrays (`newItems`, or `output` when callers
+return the SDK's model-output items); `history` is used as a complete SDK
+history source when no recognizable generated run items are available. Runtime
+wrappers enrich provider items by id and provide transcript events for custom
+entrypoints that return no provider items.
+It also exposes
+`openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`
 
 Adapts `pi-ai` style agents into the same normalized shape. It automatically
-adds run, model, and tool spans from the normalized Pi runtime activity. It also
-owns the standard tool replay/VCR behavior for opt-in tools and exposes
+adds run/model spans when runtime usage data is available. Its runtime event
+stream and wrapped tool calls are the transcript source for Pi workflows. It
+also owns the standard tool replay/VCR behavior for opt-in tools and exposes
 `piAiJudgeHarness(...)` for judge-side model calls. Replay modes include:
 
 - `auto` (default)
@@ -272,8 +313,8 @@ consumed independently.
 
 New runtime integrations should be implemented as thin adapter packages that:
 
-- execute the target runtime through its normal seam
-- capture messages, tool calls, usage, timings, and errors
+- execute the target runtime through its normal entrypoint
+- capture transcript events, usage, timings, and errors
 - normalize them into `HarnessRun`
 - avoid inventing harness-specific assertion or reporter behavior in userland
 

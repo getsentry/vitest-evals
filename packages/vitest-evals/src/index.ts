@@ -6,7 +6,7 @@ import type {
   HarnessRun,
   JsonValue,
   NormalizedSession,
-  ToolCallRecord,
+  ToolCall,
 } from "./harness";
 import {
   createFailedHarnessRun,
@@ -15,6 +15,7 @@ import {
   isHarnessRun,
   isNormalizedSession,
   latestAssistantMessageContent,
+  messagesToTranscriptEvents,
   normalizeContent,
   toolCalls,
   userMessages,
@@ -37,7 +38,7 @@ type EvalTaskMeta = {
     scores: (JudgeResult & { name: string })[];
     avgScore: number;
     output?: unknown;
-    toolCalls?: ToolCallRecord[];
+    toolCalls?: ToolCall[];
     thresholdFailed?: boolean;
   };
   harness?: {
@@ -267,7 +268,7 @@ export type JudgeAssertionOptions<
   /** Override or provide the app-facing output for the judge. */
   output?: JudgeAssertionOutput<TJudgeOptions>;
   /** Override or provide flattened tool calls for the judge. */
-  toolCalls?: ToolCallRecord[];
+  toolCalls?: ToolCall[];
   /** Override or provide the complete normalized harness run. */
   run?: HarnessRun<JudgeAssertionOutput<TJudgeOptions>>;
   /** Override or provide the normalized session transcript. */
@@ -697,7 +698,7 @@ function appendJudgeScore(
     score: JudgeResult & { name: string };
     output?: unknown;
     thresholdFailed: boolean;
-    toolCalls?: ToolCallRecord[];
+    toolCalls?: ToolCall[];
   },
 ) {
   const previousScores = task.meta.eval?.scores ?? [];
@@ -964,10 +965,11 @@ function createSyntheticJudgeSession<
   received: unknown,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
 ): NormalizedSession {
-  const messages: NormalizedSession["messages"] = [];
+  const events: NormalizedSession["events"] = [];
   const userContent = normalizeJudgeJsonValue(options.input);
   if (userContent !== undefined) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "user",
       content: userContent,
     });
@@ -975,14 +977,15 @@ function createSyntheticJudgeSession<
 
   const assistantContent = normalizeJudgeJsonValue(received);
   if (assistantContent !== undefined) {
-    messages.push({
+    events.push({
+      type: "message",
       role: "assistant",
       content: assistantContent,
     });
   }
 
   return {
-    messages,
+    events,
   };
 }
 
@@ -997,7 +1000,7 @@ function inferJudgeOutputValue(
   if (isNormalizedSession(received)) {
     return (
       resolveAssistantOutput(session) ??
-      normalizeJudgeJsonValue(received.messages)
+      normalizeJudgeJsonValue(received.events)
     );
   }
 
@@ -1189,11 +1192,11 @@ export {
   createFailedHarnessRun,
   createGenAiUsageAttributes,
   createHarness,
-  createToolCallSpans,
   ensureRunTrace,
   failedSpans,
   getHarnessRunFromError,
   latestAssistantMessageContent,
+  messagesToTranscriptEvents,
   messagesByRole,
   normalizeHarnessRun,
   normalizeSpanAttributes,
@@ -1205,7 +1208,6 @@ export {
   toolCalls,
   toolMessages,
   userMessages,
-  type CreateToolCallSpansOptions,
   type EnsureRunTraceOptions,
   type CreateHarnessOptions,
   type CreateHarnessRunArgs,
@@ -1225,22 +1227,31 @@ export {
   type JsonPrimitive,
   type JsonValue,
   type MaybePromise,
-  type NormalizedMessage,
   type NormalizedSession,
   type NormalizedSpan,
   type NormalizedSpanAttributes,
   type NormalizedSpanAttributeKey,
   type NormalizedSpanEvent,
+  type TranscriptEvent,
+  type TranscriptMessageContentPart,
+  type TranscriptMessageEvent,
+  type TranscriptMessageInput,
+  type TranscriptMessageTextPart,
+  type TranscriptMessageToolCallPart,
+  type TranscriptMessageToolCall,
+  type TranscriptMessageToolResultPart,
+  type TranscriptToolCallEvent,
+  type TranscriptToolResultEvent,
   type NormalizedTrace,
   type OpenTelemetrySemanticAttributeKey,
   type OpenTelemetrySemanticAttributes,
   type SimpleHarnessResult,
   type SimpleSpanEvent,
   type SimpleSpanRecord,
+  type SimpleTranscriptInput,
   type SimpleTraceRecord,
-  type SimpleToolCallRecord,
   type TimingSummary,
-  type ToolCallRecord,
+  type ToolCall,
   type UsageSummary,
 } from "./harness";
 

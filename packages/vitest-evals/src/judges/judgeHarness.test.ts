@@ -19,8 +19,9 @@ test("runJudgeHarness falls back to assistant content when output is missing", a
   const judgeHarness = createJudgeHarness({
     run: async () => ({
       session: {
-        messages: [
+        events: [
           {
+            type: "message",
             role: "assistant",
             content: '{"choice":"C"}',
           },

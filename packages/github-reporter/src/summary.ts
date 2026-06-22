@@ -1,4 +1,4 @@
-import type { EvalCase, EvalReport } from "./types";
+import type { EvalCase, EvalReport, ToolCallSummary } from "./types";
 import {
   compactLine,
   escapeFence,
@@ -290,7 +290,7 @@ function renderFailureBlock(
         ["Tool", "Status", "Duration"],
         toolCalls.map((toolCall) => [
           toolCall.name,
-          toolCall.error ? `error: ${compactLine(toolCall.error, 120)}` : "ok",
+          formatToolCallStatus(toolCall),
           toolCall.durationMs === undefined
             ? "n/a"
             : formatDuration(toolCall.durationMs),
@@ -319,6 +319,18 @@ function renderFailureBlock(
     lines.pop();
   }
   return lines;
+}
+
+function formatToolCallStatus(toolCall: ToolCallSummary) {
+  if (toolCall.status === "pending") {
+    return "pending";
+  }
+
+  if (toolCall.status === "error") {
+    return `error: ${compactLine(toolCall.error ?? "unknown error", 120)}`;
+  }
+
+  return "ok";
 }
 
 function renderAsciiSection(title: string, content: string[]) {

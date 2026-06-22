@@ -133,7 +133,10 @@ export function createJudgeHarness(
   return createHarness({
     name: options.name ?? "judge-harness",
     run: async ({ input, signal }) => {
-      return normalizeJudgeHarnessResult(await options.run(input, { signal }));
+      return normalizeJudgeHarnessResult(
+        input,
+        await options.run(input, { signal }),
+      );
     },
   });
 }
@@ -180,20 +183,20 @@ export function createRunJudge(
 }
 
 function normalizeJudgeHarnessResult(
+  input: JudgeHarnessInput,
   result: Awaited<ReturnType<CreateJudgeHarnessOptions["run"]>>,
 ): HarnessResultLike<JudgeHarnessOutput> {
   if (isHarnessRun(result)) {
     return result as HarnessRun<JudgeHarnessOutput>;
   }
 
-  if (hasOutputField(result)) {
-    return {
-      output: normalizeJudgeHarnessOutput(result.output),
-    };
-  }
+  const output = hasOutputField(result)
+    ? normalizeJudgeHarnessOutput(result.output)
+    : normalizeJudgeHarnessOutput(result);
 
   return {
-    output: normalizeJudgeHarnessOutput(result),
+    output,
+    messages: createJudgeHarnessMessages(input, output),
   };
 }
 
@@ -213,6 +216,21 @@ function normalizeJudgeHarnessOutput(value: unknown): JudgeHarnessOutput {
   }
 
   return normalizeContent(value);
+}
+
+function createJudgeHarnessMessages(
+  input: JudgeHarnessInput,
+  output: JudgeHarnessOutput,
+) {
+  return [
+    ...(input.system
+      ? [{ role: "system" as const, content: input.system }]
+      : []),
+    { role: "user" as const, content: input.prompt },
+    ...(output !== undefined
+      ? [{ role: "assistant" as const, content: output }]
+      : []),
+  ];
 }
 
 function resolveJudgeHarnessAssistantOutput(

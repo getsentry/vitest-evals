@@ -5,6 +5,7 @@ import {
   createJudgeHarness,
   describeEval,
   FactualityJudge,
+  messagesToTranscriptEvents,
   type CreateJudgeHarnessOptions,
   type HarnessRun,
   type JsonValue,
@@ -13,8 +14,18 @@ import {
 
 const factualityHarness = createHarness<string, string>({
   name: "qa-harness",
-  run: async () => ({
+  run: async ({ input }) => ({
     output: "Paris is the capital of France.",
+    messages: [
+      {
+        role: "user",
+        content: input,
+      },
+      {
+        role: "assistant",
+        content: "Paris is the capital of France.",
+      },
+    ],
   }),
 });
 
@@ -361,10 +372,22 @@ test("FactualityJudge can be shared across different app harnesses and judge har
   const objectHarness = createHarness<{ question: string }, { answer: string }>(
     {
       name: "object-qa-harness",
-      run: async () => ({
+      run: async ({ input }) => ({
         output: {
           answer: "Paris",
         },
+        messages: [
+          {
+            role: "user",
+            content: input,
+          },
+          {
+            role: "assistant",
+            content: {
+              answer: "Paris",
+            },
+          },
+        ],
       }),
     },
   );
@@ -435,7 +458,7 @@ test("FactualityJudge skips blank assistant transcript output", async () => {
   const run = {
     output: undefined,
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "user",
           content: "What is the capital of France?",
@@ -448,7 +471,7 @@ test("FactualityJudge skips blank assistant transcript output", async () => {
           role: "assistant",
           content: "   ",
         },
-      ],
+      ]),
     },
     usage: {},
     errors: [],
@@ -591,12 +614,12 @@ function createRun<TOutput extends JsonValue | undefined>(
   return {
     output,
     session: {
-      messages: [
+      events: messagesToTranscriptEvents([
         {
           role: "assistant",
           content: output,
         },
-      ],
+      ]),
     },
     usage: {},
     errors: [],

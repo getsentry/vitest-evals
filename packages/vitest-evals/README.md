@@ -34,13 +34,13 @@ workflow.
   `HarnessRun`
 - the returned `result.output` is the app-facing value you assert on directly
 - helper assertions usually read the returned `result`, for example
-  `toolCalls(result)` or `spansByKind(result, "tool")`
+  `toolCalls(result)` or `assistantMessages(result)`
 - `result.session` is the canonical JSON-serializable transcript for reporting,
   replay, tool assertions, and judges
-- `result.traces` contains JSON-serializable operation spans; the
-  first-party harnesses attach run, model, and tool spans automatically, while
-  `createHarness(...)` attaches fallback run and tool spans for custom harnesses
-  that do not return traces themselves. Span attributes include typed
+- `result.traces` contains JSON-serializable operation spans; first-party
+  harnesses attach native spans when provider/runtime data is available, while
+  `createHarness(...)` attaches a fallback run span for custom harnesses that do
+  not return traces themselves. Span attributes include typed
   OpenTelemetry GenAI semantic keys while still allowing provider-specific
   metadata
 - scenario-specific judge criteria should live in `input` or explicit matcher
@@ -247,6 +247,18 @@ const appHarness = createHarness<AppEvalInput, AppOutput>({
     });
 
     return {
+      events: [
+        {
+          type: "message",
+          role: "user",
+          content: input.events.map((event) => event.type).join(", "),
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: result.replies.map((reply) => reply.text).join("\n"),
+        },
+      ],
       output: {
         replies: result.replies,
         sideEffects: result.sideEffects,
@@ -319,9 +331,42 @@ Use `Harness.run(...)` for the application under test. Calling
 so reserve that for judges that intentionally need a second execution. Put
 criteria on `input` when they are part of the scenario itself; pass
 case-specific judge criteria through matcher options, or configure suite-wide
-criteria on the judge instance. `createHarness(...)` builds a default
-user/assistant session from `input` and typed `output`; return a full
-`HarnessRun` only when you need exact session control.
+criteria on the judge instance.
+
+`createHarness(...)` lightweight results must return at least one normalized
+event, either directly as `events` or from strict camelCase `messages`. Stored
+run metadata always uses `session.events`, a flat ordered transcript:
+
+```ts
+events: [
+  { type: "message", role: "user", content: input },
+  {
+    type: "tool_call",
+    id: "call_lookup",
+    name: "lookupInvoice",
+    arguments: { invoiceId: "inv_123" },
+  },
+  {
+    type: "tool_result",
+    toolCallId: "call_lookup",
+    name: "lookupInvoice",
+    content: { refundable: true },
+  },
+  { type: "message", role: "assistant", content: output },
+];
+```
+
+For apps that already produce message-shaped data, returning `messages` is also
+accepted; the harness normalizer converts assistant `toolCalls`, `role: "tool"`
+results keyed by `toolCallId`, and AI SDK `tool-call`/`tool-result` content
+parts into the same flat `events` shape. Provider wire formats such as OpenAI
+snake_case fields should be mapped by the harness before they reach this
+boundary. Other provider content blocks or item streams should adapt those
+records into `events` directly. Assertions and judges should read normalized
+projections through helpers such as `toolCalls(result)`, `userMessages(result)`,
+`assistantMessages(result)`, `toolMessages(result)`, and `spans(result)` instead
+of manually walking provider payloads. Return a full `HarnessRun` only when you
+need exact canonical `session.events`, trace, or usage control.
 
 Provider setup and rubric parsing stay in your judge. The core
 package only requires the judge to return a `JudgeResult` with a score and

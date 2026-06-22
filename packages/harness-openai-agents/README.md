@@ -111,14 +111,21 @@ The adapter provides:
 - native `Runner.run(agent, input, options)` execution
 - support for existing agents/runners or per-run `agent` and `runner` factories
 - a `run` escape hatch for app-specific entrypoints
-- normalized assistant output, messages, tool calls, tool results, usage,
-  timings, errors, and replay-friendly metadata
+- normalized assistant output, transcript events, usage, timings, errors, and
+  replay-friendly metadata
 - app-facing `run.output` from native `finalOutput`, a custom `run()` result's
   `output`, or an explicit `output` selector; native OpenAI Agents `output`
-  items stay in the normalized session trace
+  items stay in the normalized session transcript
 - native app output is accepted only when it is already JSON-safe; non-JSON
   values require an explicit `output` selector
 - opt-in replay metadata for local function tools configured with `toolReplay`
+
+Successful tool-call transcripts come from OpenAI Agents generated items:
+`newItems` first, then `output` only when it contains recognizable SDK
+model-output items. SDK `history` is used as a complete-history source when no
+generated items are available. Runtime wrappers can enrich matching run items
+with execution and replay metadata, and they provide transcript events for
+custom entrypoints that return no provider items.
 
 ## Tool Replay
 

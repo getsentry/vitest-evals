@@ -1,15 +1,5 @@
 import { z } from "zod";
-import {
-  HarnessRunSchema,
-  NormalizedMessageSchema,
-  NormalizedSessionSchema,
-  NormalizedSpanEventSchema,
-  NormalizedSpanSchema,
-  NormalizedTraceSchema,
-  TimingSummarySchema,
-  ToolCallRecordSchema,
-  UsageSummarySchema,
-} from "../harness";
+import { HarnessRunSchema, ToolCallSchema } from "../harness";
 import { JsonObjectSchema, JsonValueSchema } from "../json";
 import { isJsonObject, NullableFiniteNumberSchema } from "../schema-utils";
 
@@ -43,7 +33,7 @@ export const EvalMetaSchema = z
     avgScore: NullableFiniteNumberSchema,
     output: JsonValueSchema.optional(),
     thresholdFailed: z.boolean().optional(),
-    toolCalls: z.array(ToolCallRecordSchema).optional(),
+    toolCalls: z.array(ToolCallSchema).optional(),
   })
   .strict();
 
@@ -61,51 +51,20 @@ export const EvalTaskMetaSchema = z
 /** Combined eval and harness metadata stored on a Vitest assertion. */
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
-const LenientToolCallRecordSchema = ToolCallRecordSchema.strip();
-const LenientMessageSchema = NormalizedMessageSchema.extend({
-  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
-}).strip();
-const LenientSessionSchema = NormalizedSessionSchema.extend({
-  messages: z.array(LenientMessageSchema).default([]).catch([]),
-}).strip();
-const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
-const LenientSpanSchema = NormalizedSpanSchema.extend({
-  events: z.array(LenientSpanEventSchema).optional().catch(undefined),
-}).strip();
-const LenientTraceSchema = NormalizedTraceSchema.extend({
-  spans: z.array(LenientSpanSchema).default([]).catch([]),
-}).strip();
-const LenientHarnessRunSchema = HarnessRunSchema.extend({
-  session: LenientSessionSchema,
-  usage: UsageSummarySchema.strip().default({}),
-  timings: TimingSummarySchema.strip().optional(),
-  traces: z.array(LenientTraceSchema).optional().catch(undefined),
-}).strip();
-const LenientHarnessMetaSchema = HarnessMetaSchema.extend({
-  run: LenientHarnessRunSchema.optional().catch(undefined),
-}).strip();
-const LenientEvalScoreSchema = EvalScoreSchema.strip();
-const LenientEvalMetaSchema = EvalMetaSchema.extend({
-  scores: z.array(LenientEvalScoreSchema).optional().catch(undefined),
-  toolCalls: z.array(LenientToolCallRecordSchema).optional().catch(undefined),
-}).strip();
-
 /** Reads eval metadata from an arbitrary Vitest assertion meta value. */
 export function readEvalTaskMeta(input: unknown): EvalTaskMeta | undefined {
   if (!isJsonObject(input)) {
     return undefined;
   }
 
-  const evalResult = LenientEvalMetaSchema.safeParse(input.eval);
-  const harnessResult = LenientHarnessMetaSchema.safeParse(input.harness);
-  const meta: EvalTaskMeta = {
-    ...(evalResult.success && input.eval !== undefined
-      ? { eval: evalResult.data }
-      : {}),
-    ...(harnessResult.success && input.harness !== undefined
-      ? { harness: harnessResult.data }
-      : {}),
+  const meta = {
+    ...(input.eval !== undefined ? { eval: input.eval } : {}),
+    ...(input.harness !== undefined ? { harness: input.harness } : {}),
   };
+  if (!("eval" in meta) && !("harness" in meta)) {
+    return undefined;
+  }
 
-  return meta.eval || meta.harness ? meta : undefined;
+  const result = EvalTaskMetaSchema.safeParse(meta);
+  return result.success ? result.data : undefined;
 }

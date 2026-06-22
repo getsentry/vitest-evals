@@ -4,9 +4,9 @@ description: Read normalized operation spans from a harness run.
 editUrl: false
 ---
 
-Trace helpers read a harness run. First-party harnesses attach native run,
-model, and tool spans when they observe them. Custom harnesses created with
-`createHarness()` get fallback run and tool spans unless they return their own
+Trace helpers read a harness run. First-party harnesses attach native spans
+when provider/runtime data exposes real operations. Custom harnesses created
+with `createHarness()` get a fallback run span unless they return their own
 traces.
 
 ## Span Checks
@@ -22,9 +22,6 @@ import {
 } from "vitest-evals";
 
 expect(spansByKind(result, "model").length).toBeGreaterThan(0);
-expect(spansByKind(result, "tool").map((span) => span.name)).toContain(
-  "lookupInvoice",
-);
 expect(failedSpans(result)).toHaveLength(0);
 ```
 

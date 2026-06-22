@@ -1,5 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, test, vi } from "vitest";
+import { messagesToTranscriptEvents } from "./harness";
+import type { TranscriptEvent } from "./harness";
 import DefaultEvalReporter from "./reporter";
 
 type ReporterOptions = {
@@ -64,17 +66,7 @@ function createTestCase({
     run: {
       output?: Record<string, unknown> | string;
       session: {
-        messages: Array<{
-          role: "assistant" | "user";
-          content: string;
-          toolCalls?: Array<{
-            name: string;
-            arguments?: Record<string, unknown>;
-            result?: Record<string, unknown>;
-            durationMs?: number;
-            metadata?: Record<string, unknown>;
-          }>;
-        }>;
+        events: TranscriptEvent[];
       };
       usage?: {
         totalTokens?: number;
@@ -221,22 +213,27 @@ describe("DefaultEvalReporter", () => {
               refundId: "rf_inv_123",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
-                      result: {
-                        invoiceId: "inv_123",
-                        refundable: true,
-                      },
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                    refundable: true,
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -266,30 +263,40 @@ describe("DefaultEvalReporter", () => {
               refundId: "rf_inv_123",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
-                      result: {
-                        invoiceId: "inv_123",
-                        refundable: true,
-                      },
                     },
                     {
+                      id: "call_refund",
                       name: "createRefund",
-                      durationMs: 4,
-                      result: {
-                        refundId: "rf_inv_123",
-                        status: "submitted",
-                      },
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                    refundable: true,
+                  },
+                },
+                {
+                  role: "tool",
+                  toolCallId: "call_refund",
+                  name: "createRefund",
+                  content: {
+                    refundId: "rf_inv_123",
+                    status: "submitted",
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -305,13 +312,13 @@ describe("DefaultEvalReporter", () => {
       "├─ tool    lookupInvoice",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "result  invoiceId=inv_123 refundable=true [41B | 6ms]",
+      "result  invoiceId=inv_123 refundable=true [41B]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
       "├─ tool    createRefund",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
-      "result  status=submitted refundId=rf_inv_123 [46B | 4ms]",
+      "result  status=submitted refundId=rf_inv_123 [46B]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[5][0])).toContain(
       "└─ final   status=approved refundId=rf_inv_123",
@@ -335,22 +342,27 @@ describe("DefaultEvalReporter", () => {
                 refundId: "rf_inv_123",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
                     toolCalls: [
                       {
+                        id: "call_lookup",
                         name: "lookupInvoice",
-                        durationMs: 6,
-                        result: {
-                          invoiceId: "inv_123",
-                          refundable: true,
-                        },
                       },
                     ],
                   },
-                ],
+                  {
+                    role: "tool",
+                    toolCallId: "call_lookup",
+                    name: "lookupInvoice",
+                    content: {
+                      invoiceId: "inv_123",
+                      refundable: true,
+                    },
+                  },
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -385,24 +397,29 @@ describe("DefaultEvalReporter", () => {
                 status: "approved",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
                     toolCalls: [
                       {
+                        id: "call_lookup",
                         name: "lookupInvoice",
-                        durationMs: 6,
                         arguments: {
-                          invoiceId: "inv_123",
-                        },
-                        result: {
                           invoiceId: "inv_123",
                         },
                       },
                     ],
                   },
-                ],
+                  {
+                    role: "tool",
+                    toolCallId: "call_lookup",
+                    name: "lookupInvoice",
+                    content: {
+                      invoiceId: "inv_123",
+                    },
+                  },
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -439,21 +456,26 @@ describe("DefaultEvalReporter", () => {
                 status: "approved",
               },
               session: {
-                messages: [
+                events: messagesToTranscriptEvents([
                   {
                     role: "assistant",
                     content: "approved",
                     toolCalls: [
                       {
+                        id: "call_lookup",
                         name: "lookupInvoice",
-                        durationMs: 6,
-                        result: {
-                          invoiceId: "inv_123",
-                        },
                       },
                     ],
                   },
-                ],
+                  {
+                    role: "tool",
+                    toolCallId: "call_lookup",
+                    name: "lookupInvoice",
+                    content: {
+                      invoiceId: "inv_123",
+                    },
+                  },
+                ]),
               },
               usage: {
                 totalTokens: 12,
@@ -473,7 +495,7 @@ describe("DefaultEvalReporter", () => {
     }
   });
 
-  test("prefers token counts over response size when tool usage exists", () => {
+  test("shows response size for tool results", () => {
     const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
@@ -485,26 +507,26 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
-                      result: {
-                        invoiceId: "inv_123",
-                      },
-                      metadata: {
-                        usage: {
-                          totalTokens: 7,
-                        },
-                      },
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -516,11 +538,11 @@ describe("DefaultEvalReporter", () => {
     );
 
     expect(stripVTControlCharacters(logger.log.mock.calls[2][0])).toContain(
-      "result  invoiceId=inv_123 [7 tok | 6ms]",
+      "result  invoiceId=inv_123 [23B]",
     );
   });
 
-  test("includes replay metadata in tool result summaries", () => {
+  test("keeps replay metadata out of tool result summaries", () => {
     const { reporter, logger } = createInfoReporter();
 
     reporter.onTestCaseResult(
@@ -532,17 +554,14 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
-                      result: {
-                        invoiceId: "inv_123",
-                      },
                       metadata: {
                         replay: {
                           status: "replayed",
@@ -551,7 +570,15 @@ describe("DefaultEvalReporter", () => {
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -566,8 +593,9 @@ describe("DefaultEvalReporter", () => {
       .map(([line]) => stripVTControlCharacters(line))
       .join("\n");
 
-    expect(rendered).toContain("tool    lookupInvoice [cached]");
-    expect(rendered).toContain("result  invoiceId=inv_123 [23B | 6ms]");
+    expect(rendered).toContain("tool    lookupInvoice");
+    expect(rendered).not.toContain("[cached]");
+    expect(rendered).toContain("result  invoiceId=inv_123 [23B]");
   });
 
   test("shows summarized tool arguments in info report mode", () => {
@@ -582,25 +610,30 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
                       arguments: {
                         invoiceId: "inv_123",
-                      },
-                      result: {
-                        invoiceId: "inv_123",
-                        refundable: true,
                       },
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                    refundable: true,
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -619,14 +652,14 @@ describe("DefaultEvalReporter", () => {
       "args    invoiceId=inv_123",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
-      "result  refundable=true [41B | 6ms]",
+      "result  refundable=true [41B]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
       "└─ final   status=approved",
     );
   });
 
-  test("keeps legacy raw tool payload support for explicit tool details", () => {
+  test("shows raw tool payloads for explicit tool details", () => {
     const { reporter, logger } = createDetailedReporter(4);
 
     reporter.onTestCaseResult(
@@ -638,25 +671,30 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                   toolCalls: [
                     {
+                      id: "call_lookup",
                       name: "lookupInvoice",
-                      durationMs: 6,
                       arguments: {
                         invoiceId: "inv_123",
-                      },
-                      result: {
-                        invoiceId: "inv_123",
-                        refundable: true,
                       },
                     },
                   ],
                 },
-              ],
+                {
+                  role: "tool",
+                  toolCallId: "call_lookup",
+                  name: "lookupInvoice",
+                  content: {
+                    invoiceId: "inv_123",
+                    refundable: true,
+                  },
+                },
+              ]),
             },
             usage: {
               totalTokens: 12,
@@ -675,7 +713,7 @@ describe("DefaultEvalReporter", () => {
       "args    invoiceId=inv_123",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[3][0])).toContain(
-      "result  refundable=true [41B | 6ms]",
+      "result  refundable=true [41B]",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[4][0])).toContain(
       'raw in  {"invoiceId":"inv_123"}',
@@ -700,12 +738,12 @@ describe("DefaultEvalReporter", () => {
               status: "approved",
             },
             session: {
-              messages: [
+              events: messagesToTranscriptEvents([
                 {
                   role: "assistant",
                   content: "approved",
                 },
-              ],
+              ]),
             },
             usage: {
               totalTokens: 12,

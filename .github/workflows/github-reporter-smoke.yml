@@ -95,7 +95,9 @@ jobs:
               output: { status: "denied" },
               usage: { totalTokens: 42, toolCalls: 1 },
               timingMs: 1200,
-              toolCalls: [{ name: "lookupInvoice", durationMs: 7 }],
+              toolCalls: [
+                { name: "lookupInvoice", status: "ok", durationMs: 7 },
+              ],
             },
             {
               title: "returns wrong refund amount",
@@ -109,9 +111,10 @@ jobs:
               usage: { totalTokens: 120, toolCalls: 2 },
               timingMs: 1800,
               toolCalls: [
-                { name: "lookupInvoice", durationMs: 9 },
+                { name: "lookupInvoice", status: "ok", durationMs: 9 },
                 {
                   name: "createRefund",
+                  status: "error",
                   durationMs: 31,
                   error: { message: "amount mismatch" },
                 },
@@ -140,7 +143,9 @@ jobs:
               output: { tone: "calm" },
               usage: { totalTokens: 95, toolCalls: 1 },
               timingMs: 740,
-              toolCalls: [{ name: "loadCustomer", durationMs: 11 }],
+              toolCalls: [
+                { name: "loadCustomer", status: "ok", durationMs: 11 },
+              ],
             },
             {
               title: "explains partial refund",
@@ -163,7 +168,9 @@ jobs:
               output: { status: "needs_more_info" },
               usage: { totalTokens: 130, toolCalls: 1 },
               timingMs: 920,
-              toolCalls: [{ name: "readPolicy", durationMs: 5 }],
+              toolCalls: [
+                { name: "readPolicy", status: "ok", durationMs: 5 },
+              ],
             },
             {
               title: "uses order lookup",
@@ -176,8 +183,8 @@ jobs:
               usage: { totalTokens: 155, toolCalls: 2 },
               timingMs: 1100,
               toolCalls: [
-                { name: "lookupOrder", durationMs: 8 },
-                { name: "lookupPayment", durationMs: 14 },
+                { name: "lookupOrder", status: "ok", durationMs: 8 },
+                { name: "lookupPayment", status: "ok", durationMs: 14 },
               ],
             },
             {
@@ -190,7 +197,9 @@ jobs:
               output: { status: "approved", amount: 1200 },
               usage: { totalTokens: 170, toolCalls: 1 },
               timingMs: 990,
-              toolCalls: [{ name: "createRefund", durationMs: 22 }],
+              toolCalls: [
+                { name: "createRefund", status: "ok", durationMs: 22 },
+              ],
             },
             {
               title: "denies expired claim",
@@ -202,7 +211,9 @@ jobs:
               output: { status: "denied" },
               usage: { totalTokens: 190, toolCalls: 1 },
               timingMs: 1040,
-              toolCalls: [{ name: "readPolicy", durationMs: 6 }],
+              toolCalls: [
+                { name: "readPolicy", status: "ok", durationMs: 6 },
+              ],
             },
             {
               title: "handles duplicate request",
@@ -217,58 +228,76 @@ jobs:
             },
           ];
 
-          const assertionResults = cases.map((testCase) => ({
-            ancestorTitles: ["refund eval"],
-            fullName: `refund eval ${testCase.title}`,
-            title: testCase.title,
-            status: testCase.status,
-            duration: testCase.duration,
-            failureMessages:
-              testCase.status === "failed"
-                ? [`Score: ${testCase.score.toFixed(2)} below threshold: 1.00`]
-                : [],
-            location: {
-              line: testCase.line,
-              column: 5,
-            },
-            tags: [],
-            meta: {
-              eval: {
-                avgScore: testCase.score,
-                thresholdFailed: testCase.status === "failed",
-                output: testCase.output,
-                scores: [
+          const assertionResults = cases.map((testCase) => {
+            const toolEvents = (testCase.toolCalls ?? []).flatMap(
+              (toolCall, index) => {
+                const toolCallId = `call_${index + 1}`;
+                return [
                   {
-                    name: testCase.judge,
-                    score: testCase.score,
-                    metadata: testCase.rationale
-                      ? { rationale: testCase.rationale }
-                      : undefined,
+                    type: "tool_call",
+                    id: toolCallId,
+                    name: toolCall.name,
+                    durationMs: toolCall.durationMs,
                   },
-                  ...(testCase.extraScores ?? []),
-                ],
+                  {
+                    type: "tool_result",
+                    toolCallId,
+                    name: toolCall.name,
+                    durationMs: toolCall.durationMs,
+                    ...(toolCall.error ? { error: toolCall.error } : {}),
+                  },
+                ];
               },
-              harness: {
-                name: "smoke-harness",
-                run: {
+            );
+
+            return {
+              ancestorTitles: ["refund eval"],
+              fullName: `refund eval ${testCase.title}`,
+              title: testCase.title,
+              status: testCase.status,
+              duration: testCase.duration,
+              failureMessages:
+                testCase.status === "failed"
+                  ? [`Score: ${testCase.score.toFixed(2)} below threshold: 1.00`]
+                  : [],
+              location: {
+                line: testCase.line,
+                column: 5,
+              },
+              tags: [],
+              meta: {
+                eval: {
+                  avgScore: testCase.score,
+                  thresholdFailed: testCase.status === "failed",
                   output: testCase.output,
-                  usage: testCase.usage,
-                  timings: {
-                    totalMs: testCase.timingMs,
+                  scores: [
+                    {
+                      name: testCase.judge,
+                      score: testCase.score,
+                      metadata: testCase.rationale
+                        ? { rationale: testCase.rationale }
+                        : undefined,
+                    },
+                    ...(testCase.extraScores ?? []),
+                  ],
+                },
+                harness: {
+                  name: "smoke-harness",
+                  run: {
+                    output: testCase.output,
+                    usage: testCase.usage,
+                    timings: {
+                      totalMs: testCase.timingMs,
+                    },
+                    session: {
+                      events: toolEvents,
+                    },
+                    errors: testCase.errors ?? [],
                   },
-                  session: {
-                    messages: [
-                      {
-                        role: "assistant",
-                        toolCalls: testCase.toolCalls ?? [],
-                      },
-                    ],
-                  },
-                  errors: testCase.errors ?? [],
                 },
               },
-            },
-          }));
+            };
+          });
           const failedCount = cases.filter(
             (testCase) => testCase.status === "failed",
           ).length;
@@ -335,8 +364,8 @@ jobs:
           grep -F "Harness Errors" "$GITHUB_STEP_SUMMARY"
           grep -F "refund ledger rejected amount" "$GITHUB_STEP_SUMMARY"
           grep -F "Final Output" "$GITHUB_STEP_SUMMARY"
-          grep -F "Tool           Status  Duration" "$GITHUB_STEP_SUMMARY"
-          grep -F "lookupInvoice  ok      7ms" "$GITHUB_STEP_SUMMARY"
+          grep -F "Tool           Status" "$GITHUB_STEP_SUMMARY"
+          grep -F "lookupInvoice  ok" "$GITHUB_STEP_SUMMARY"
           grep -F "| Status | failed |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"

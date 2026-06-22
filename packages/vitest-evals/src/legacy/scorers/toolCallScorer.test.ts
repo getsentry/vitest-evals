@@ -8,7 +8,10 @@ describe("ToolCallScorer", () => {
       const scorer = ToolCallScorer();
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
       ];
       const result = await scorer({
         input: "test",
@@ -43,7 +46,10 @@ describe("ToolCallScorer", () => {
       const scorer = ToolCallScorer();
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
         { name: "format", arguments: { style: "json" } },
       ];
       const result = await scorer({
@@ -60,7 +66,10 @@ describe("ToolCallScorer", () => {
       const scorer = ToolCallScorer({ allowExtras: false });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
         { name: "format", arguments: { style: "json" } },
       ];
       const result = await scorer({
@@ -100,7 +109,10 @@ describe("ToolCallScorer", () => {
     test("fails when order is wrong", async () => {
       const scorer = ToolCallScorer({ ordered: true });
       const toolCalls: ToolCall[] = [
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
         { name: "search", arguments: { query: "weather" } },
       ];
       const result = await scorer({
@@ -121,7 +133,10 @@ describe("ToolCallScorer", () => {
       const scorer = ToolCallScorer({ ordered: true });
       const toolCalls: ToolCall[] = [
         { name: "search", arguments: { query: "weather" } },
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
       ];
       const result = await scorer({
         input: "test",
@@ -138,7 +153,10 @@ describe("ToolCallScorer", () => {
         { name: "init", arguments: {} },
         { name: "search", arguments: { query: "weather" } },
         { name: "cache", arguments: {} },
-        { name: "weather_api", arguments: { location: "Seattle" } },
+        {
+          name: "weather_api",
+          arguments: { location: "Seattle" },
+        },
         { name: "cleanup", arguments: {} },
       ];
       const result = await scorer({
@@ -232,7 +250,10 @@ describe("ToolCallScorer", () => {
     test("strict params require exact arguments", async () => {
       const scorer = ToolCallScorer({ params: "strict" });
       const toolCalls: ToolCall[] = [
-        { name: "search", arguments: { query: "Weather in SEATTLE" } },
+        {
+          name: "search",
+          arguments: { query: "Weather in SEATTLE" },
+        },
       ];
       const result = await scorer({
         input: "test",
@@ -318,7 +339,10 @@ describe("ToolCallScorer", () => {
         },
       });
       const toolCalls: ToolCall[] = [
-        { name: "weather_api", arguments: { location: "SEATTLE" } },
+        {
+          name: "weather_api",
+          arguments: { location: "SEATTLE" },
+        },
       ];
       const result = await scorer({
         input: "test",
@@ -404,10 +428,10 @@ describe("ToolCallScorer", () => {
       expect(result.score).toBe(1.0);
     });
 
-    test("handles null/undefined matching", async () => {
+    test("handles null matching", async () => {
       const scorer = ToolCallScorer({ params: "fuzzy" });
       const toolCalls: ToolCall[] = [
-        { name: "search", arguments: { query: null, filters: undefined } },
+        { name: "search", arguments: { query: null } },
       ];
       const result = await scorer({
         input: "test",

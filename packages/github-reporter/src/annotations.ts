@@ -1,4 +1,4 @@
-import type { EvalCase, EvalReport } from "./types";
+import type { EvalCase, EvalReport, ToolCallSummary } from "./types";
 import {
   compactLine,
   escapeCommandData,
@@ -132,13 +132,23 @@ function formatRawDetails(testCase: AnnotatedEvalCase) {
   if (testCase.toolCalls.length) {
     lines.push("", "Tools:");
     for (const toolCall of testCase.toolCalls) {
-      lines.push(
-        `- ${toolCall.name}: ${toolCall.error ? `error: ${toolCall.error}` : "ok"}`,
-      );
+      lines.push(`- ${toolCall.name}: ${formatToolCallStatus(toolCall)}`);
     }
   }
 
   return lines.join("\n");
+}
+
+function formatToolCallStatus(toolCall: ToolCallSummary) {
+  if (toolCall.status === "pending") {
+    return "pending";
+  }
+
+  if (toolCall.status === "error") {
+    return `error: ${toolCall.error ?? "unknown error"}`;
+  }
+
+  return "ok";
 }
 
 function formatWorkflowCommand({

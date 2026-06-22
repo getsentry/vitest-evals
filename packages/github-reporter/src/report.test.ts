@@ -79,21 +79,31 @@ const sampleJson: VitestJsonReport = {
                   totalMs: 4100,
                 },
                 session: {
-                  messages: [
+                  events: [
                     {
-                      role: "assistant",
-                      toolCalls: [
-                        {
-                          name: "lookupInvoice",
-                          durationMs: 6,
-                        },
-                        {
-                          name: "createRefund",
-                          error: {
-                            message: "skipped: invoice not refundable",
-                          },
-                        },
-                      ],
+                      type: "tool_call",
+                      id: "call_lookup",
+                      name: "lookupInvoice",
+                      durationMs: 6,
+                    },
+                    {
+                      type: "tool_call",
+                      id: "call_refund",
+                      name: "createRefund",
+                    },
+                    {
+                      type: "tool_result",
+                      toolCallId: "call_lookup",
+                      name: "lookupInvoice",
+                      durationMs: 6,
+                    },
+                    {
+                      type: "tool_result",
+                      toolCallId: "call_refund",
+                      name: "createRefund",
+                      error: {
+                        message: "skipped: invoice not refundable",
+                      },
                     },
                   ],
                 },
@@ -152,6 +162,17 @@ describe("collectEvalReport", () => {
         judgeName: "StructuredOutputJudge",
         score: 0.2,
       },
+      toolCalls: [
+        {
+          name: "lookupInvoice",
+          durationMs: 6,
+          status: "ok",
+        },
+        {
+          name: "createRefund",
+          status: "error",
+        },
+      ],
     });
   });
 
@@ -223,13 +244,18 @@ describe("collectEvalReport", () => {
         toolCalls: [
           {
             name: "validateRefund",
-            durationMs: 8,
+            status: "ok",
           },
           {
             name: "notifyCustomer",
+            status: "error",
             error: {
               message: "blocked by policy",
             },
+          },
+          {
+            name: "emailCustomer",
+            status: "pending",
           },
         ],
       },
@@ -239,21 +265,26 @@ describe("collectEvalReport", () => {
       workspace: "/repo",
     });
 
-    expect(report.usage.toolCalls).toBe(2);
+    expect(report.usage.toolCalls).toBe(3);
     expect(report.failures[0]?.harness).toBeUndefined();
     expect(report.failures[0]?.toolCalls).toMatchObject([
       {
-        durationMs: 8,
         name: "validateRefund",
+        status: "ok",
       },
       {
-        error: "blocked by policy",
         name: "notifyCustomer",
+        status: "error",
+      },
+      {
+        name: "emailCustomer",
+        status: "pending",
       },
     ]);
     expect(renderJobSummary(report)).toContain(
       "notifyCustomer  error: blocked by policy",
     );
+    expect(renderJobSummary(report)).toContain("emailCustomer   pending");
   });
 });
 
@@ -295,7 +326,7 @@ describe("mergeEvalReports", () => {
                 totalMs: 2000,
               },
               session: {
-                messages: [{ role: "assistant", toolCalls: [] }],
+                events: [],
               },
               errors: [],
             },
@@ -435,7 +466,9 @@ describe("publishEvalReport", () => {
     evalMeta.output = {
       value: "abcdefghijklmnopqrstuvwxyz",
     };
-    harnessRun.session.messages[0].toolCalls.push({
+    harnessRun.session.events.push({
+      type: "tool_call",
+      id: "call_notify",
       name: "notifyCustomer",
       durationMs: 4,
     });
@@ -763,6 +796,31 @@ describe("buildCheckAnnotations", () => {
 
     expect(buildCheckAnnotations(report, { maxAnnotations: 100 })).toHaveLength(
       50,
+    );
+  });
+
+  test("labels pending tool calls in Check Run annotations", () => {
+    const json = structuredClone(sampleJson);
+    const harnessRun = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .harness.run;
+    harnessRun.session.events.push({
+      type: "tool_call",
+      id: "call_email",
+      name: "emailCustomer",
+      durationMs: 4,
+    });
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    const toolCalls = report.failures[0]?.toolCalls ?? [];
+    expect(toolCalls[toolCalls.length - 1]).toMatchObject({
+      name: "emailCustomer",
+      durationMs: 4,
+      status: "pending",
+    });
+    expect(buildCheckAnnotations(report)[0]?.raw_details).toContain(
+      "- emailCustomer: pending",
     );
   });
 });
