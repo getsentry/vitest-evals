@@ -605,14 +605,20 @@ async function runAiSdkHarness<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(result) as TOutput | undefined);
+    const explicitSession = getResultSession(result);
     const useRuntimeEvents = shouldUseRuntimeEvents(result);
-    const usage = resolveUsage(result, useRuntimeEvents ? runtimeEvents : []);
+    const usage = resolveUsage(
+      result,
+      useRuntimeEvents ? runtimeEvents : [],
+      explicitSession,
+    );
     const session = resolveSession(
       input,
       result,
       output,
       replayMetadataByToolCallId,
       runtimeEvents,
+      explicitSession,
     );
     const errors = resolveHarnessRunErrors(result);
     const finishedAt = new Date();
@@ -1207,15 +1213,20 @@ function toOutputValue(value: unknown): JsonValue | undefined {
 function resolveUsage(
   result: unknown,
   runtimeEvents: TranscriptEvent[] = [],
+  explicitSession?: NormalizedSession,
 ): UsageSummary {
   const steps = readAiSdkSteps(result);
   const runtimeToolCallCount = countRuntimeToolCalls(runtimeEvents);
+  const explicitSessionToolCallCount = explicitSession
+    ? countSessionToolCalls(explicitSession)
+    : undefined;
   const usage = readAiSdkUsage(result, steps);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
   // Runtime events count only for custom runs without AI SDK steps, so usage
   // stays aligned with the same transcript source used for assertions.
   const toolCallCount =
-    steps.length > 0 ? countStepToolCalls(steps) : runtimeToolCallCount;
+    explicitSessionToolCallCount ??
+    (steps.length > 0 ? countStepToolCalls(steps) : runtimeToolCallCount);
 
   if (!usage) {
     if (toolCallCount > 0 || steps.length > 0) {
@@ -1316,6 +1327,10 @@ function countStepToolCalls(steps: StepLike[]) {
   );
 }
 
+function countSessionToolCalls(session: NormalizedSession) {
+  return session.events.filter((event) => event.type === "tool_call").length;
+}
+
 function shouldUseRuntimeEvents(result: unknown) {
   if (
     isNormalizedSession(
@@ -1334,13 +1349,10 @@ function resolveSession(
   output: JsonValue | undefined,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
   runtimeEvents: TranscriptEvent[] = [],
+  explicitSession = getResultSession(result),
 ): NormalizedSession {
-  if (
-    isNormalizedSession(
-      (result as Record<string, unknown> | undefined)?.session,
-    )
-  ) {
-    return (result as { session: NormalizedSession }).session;
+  if (explicitSession) {
+    return explicitSession;
   }
 
   const steps = readAiSdkSteps(result);
@@ -1385,6 +1397,11 @@ function resolveSession(
     provider: lastStep?.model?.provider,
     model: lastStep?.model?.modelId,
   };
+}
+
+function getResultSession(result: unknown): NormalizedSession | undefined {
+  const session = (result as Record<string, unknown> | undefined)?.session;
+  return isNormalizedSession(session) ? session : undefined;
 }
 
 function resolveFailureSession(

@@ -888,6 +888,67 @@ test("does not count runtime tool calls when custom run returns an explicit sess
   expect(toolCalls(result.session)).toEqual([]);
 });
 
+test("counts explicit session tool calls when custom run also returns steps", async () => {
+  const session = {
+    events: [
+      {
+        type: "message",
+        role: "user",
+        content: "Refund invoice inv_123",
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: {
+          status: "approved",
+        },
+      },
+    ],
+  } satisfies NormalizedSession;
+  const harness = aiSdkHarness({
+    run: async () => ({
+      session,
+      object: {
+        status: "approved",
+      },
+      steps: [
+        {
+          content: [],
+          toolCalls: [
+            {
+              toolCallId: "call_lookup",
+              toolName: "lookupInvoice",
+              input: {
+                invoiceId: "inv_123",
+              },
+            },
+          ],
+          toolResults: [],
+          usage: {
+            inputTokens: 5,
+            outputTokens: 2,
+            totalTokens: 7,
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage).toMatchObject({
+    inputTokens: 5,
+    outputTokens: 2,
+    totalTokens: 7,
+  });
+  expect(result.usage.toolCalls).toBeUndefined();
+  expect(result.session).toEqual(session);
+  expect(toolCalls(result.session)).toEqual([]);
+});
+
 test("attaches partial runtime tool calls when custom run errors", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
     invoiceId,
