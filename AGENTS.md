@@ -3,10 +3,18 @@
 ## Package Manager
 - Use **pnpm**: `pnpm install`, `pnpm test`, `pnpm typecheck`, `pnpm build`, `pnpm evals`
 
-## Commit Attribution
-- AI commits MUST include:
+## Repository Structure
 ```text
-Co-Authored-By: OpenAI Codex <codex@openai.com>
+packages/
+  core/                   # normalized session/run types, transcript events, report metadata
+  vitest-evals/           # root describeEval, judges, matchers, reporter, legacy; re-exports core
+  harness-ai-sdk/         # AI SDK adapter into HarnessRun
+  harness-openai-agents/  # OpenAI Agents adapter into HarnessRun
+  harness-pi-ai/          # pi-ai adapter, wrapped tool runtime, tool replay
+  github-reporter/        # GitHub Action reporter: collection, summary, annotations
+  report-ui/              # HTML report UI and its transcript/trace model
+  docs/                   # docs site, generated API reference, llms.txt
+apps/                     # demo-ai-sdk, demo-openai-agents, demo-pi (realistic demo fixtures)
 ```
 
 ## File-Scoped Commands
