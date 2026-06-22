@@ -3,6 +3,7 @@ import {
   assistantMessages,
   collectReportWorkspace,
   failedSpans,
+  HarnessRunSchema,
   latestAssistantMessageContent,
   messagesByRole,
   parseVitestJsonReport,
@@ -204,6 +205,16 @@ describe("parseVitestJsonReport", () => {
 });
 
 describe("readEvalTaskMeta", () => {
+  test("requires session events in the public harness run schema", () => {
+    expect(() =>
+      HarnessRunSchema.parse({
+        session: {},
+        usage: {},
+        errors: [],
+      }),
+    ).toThrow();
+  });
+
   test("reads eval and harness metadata from assertion meta", () => {
     const assertion = sampleJson.testResults[0]!.assertionResults[0]!;
 
@@ -362,11 +373,40 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
-  test("defaults missing harness errors for legacy run metadata", () => {
+  test("drops persisted session messages that cannot convert to valid events", () => {
     expect(
       readEvalTaskMeta({
         harness: {
-          name: "legacy",
+          name: "malformed",
+          run: {
+            session: {
+              messages: [
+                {
+                  role: "assistant",
+                  toolCalls: [
+                    {
+                      name: "lookupInvoice",
+                    },
+                  ],
+                },
+              ],
+            },
+            usage: {},
+          },
+        },
+      }),
+    ).toEqual({
+      harness: {
+        name: "malformed",
+      },
+    });
+  });
+
+  test("defaults missing harness errors for persisted run metadata", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "persisted",
           run: {
             session: {
               events: [],
@@ -379,7 +419,7 @@ describe("readEvalTaskMeta", () => {
       }),
     ).toMatchObject({
       harness: {
-        name: "legacy",
+        name: "persisted",
         run: {
           errors: [],
           usage: {
@@ -473,6 +513,23 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
+  test("does not default malformed persisted sessions to empty events", () => {
+    expect(
+      readEvalTaskMeta({
+        harness: {
+          name: "malformed",
+          run: {
+            session: {},
+          },
+        },
+      }),
+    ).toEqual({
+      harness: {
+        name: "malformed",
+      },
+    });
+  });
+
   test("preserves known metadata when persisted blocks include unknown keys", () => {
     const meta = readEvalTaskMeta({
       eval: {
@@ -494,7 +551,7 @@ describe("readEvalTaskMeta", () => {
         ],
       },
       harness: {
-        name: "legacy",
+        name: "persisted",
         run: {
           extraRunField: true,
           session: {

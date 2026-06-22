@@ -59,8 +59,8 @@ Use `output` when `finalOutput` needs validation or conversion before Vitest
 assertions and judges read `result.output`. The harness also attaches native
 run/model spans to `result.traces` when provider data is available. Tool-call
 transcript data comes from OpenAI Agents run items such as `newItems` and
-`output`; runtime tool wrappers only enrich matching run items with execution
-and replay details.
+`output`; runtime tool wrappers enrich matching run items and provide transcript
+events for custom entrypoints that return no provider items.
 
 ## Writing Evals
 

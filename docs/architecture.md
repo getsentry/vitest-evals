@@ -270,8 +270,9 @@ normalized run/session shape. It accepts existing agents/runners or per-run
 `RunResult` output, transcript events, usage, errors, trace metadata,
 records run/model spans when data is available, and records replay metadata for
 opt-in local function tools. Successful tool-call transcripts come from
-OpenAI Agents run items; runtime wrappers can enrich those items but do not
-create replacement transcript events. It also exposes
+OpenAI Agents run items when available; runtime wrappers enrich those items and
+provide transcript events for custom entrypoints that return no provider items.
+It also exposes
 `openaiAgentsJudgeHarness(...)` for judge-side model calls.
 
 ### `@vitest-evals/harness-pi-ai`

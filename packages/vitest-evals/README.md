@@ -247,6 +247,18 @@ const appHarness = createHarness<AppEvalInput, AppOutput>({
     });
 
     return {
+      events: [
+        {
+          type: "message",
+          role: "user",
+          content: input.events.map((event) => event.type).join(", "),
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: result.replies.map((reply) => reply.text).join("\n"),
+        },
+      ],
       output: {
         replies: result.replies,
         sideEffects: result.sideEffects,

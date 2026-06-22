@@ -122,8 +122,8 @@ The adapter provides:
 
 Successful tool-call transcripts come from OpenAI Agents run items such as
 `newItems` and `output`. Runtime wrappers can enrich matching run items with
-execution and replay metadata, but they do not create replacement transcript
-messages.
+execution and replay metadata, and they provide transcript events for custom
+entrypoints that return no provider items.
 
 ## Tool Replay
 

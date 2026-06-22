@@ -3,6 +3,9 @@ import { JsonObjectSchema, JsonValueSchema, type JsonValue } from "../json";
 import { FiniteNumberSchema } from "../schema-utils";
 import { NormalizedErrorSchema, type NormalizedError } from "./errors";
 
+// Harness sessions store only ordered transcript events. Provider-style
+// messages are an input-boundary convenience that normalize into this model.
+
 /** Tool-call event captured in a harness transcript. */
 export const TranscriptToolCallEventSchema = z
   .object({
@@ -99,7 +102,7 @@ export type TranscriptToolResultEvent = {
   finishedAt?: string;
   /** Tool execution duration in milliseconds. */
   durationMs?: number;
-  /** Extra JSON-safe message metadata. */
+  /** Extra JSON-safe tool-result metadata. */
   metadata?: Record<string, JsonValue>;
 };
 

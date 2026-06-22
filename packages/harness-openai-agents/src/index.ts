@@ -868,7 +868,14 @@ async function executeOpenAiAgentsHarness<
           : (resolveOutput(normalizeResult, {
               allowOutputField: Boolean(options.run),
             }) as TOutput | undefined);
-        const usage = resolveUsage(normalizeResult);
+        const runtimeToolCallCount = countToolCallEvents(capture.events);
+        const resolvedUsage = resolveUsage(normalizeResult);
+        const usage = {
+          ...resolvedUsage,
+          ...(resolvedUsage.toolCalls === undefined && runtimeToolCallCount > 0
+            ? { toolCalls: runtimeToolCallCount }
+            : {}),
+        };
         const session = resolveSession(input, normalizeResult, output, usage, {
           runtimeEvents: capture.events,
         });
@@ -1753,6 +1760,10 @@ function resolveSession(
     events.push(...normalizeRunItems(newItems, options.runtimeEvents));
   } else if (outputItems && outputItems.length > 0) {
     events.push(...normalizeRunItems(outputItems, options.runtimeEvents));
+  } else {
+    // Custom entrypoints may execute instrumented local tools without returning
+    // provider run items; in that case runtime capture is the transcript source.
+    events.push(...options.runtimeEvents);
   }
 
   if (

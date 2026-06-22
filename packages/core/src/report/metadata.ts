@@ -102,7 +102,7 @@ const LenientTranscriptEventSchema = z.union([
 const LenientSessionSchema = z.preprocess(
   normalizePersistedSession,
   NormalizedSessionSchema.extend({
-    events: z.array(LenientTranscriptEventSchema).default([]).catch([]),
+    events: z.array(LenientTranscriptEventSchema),
   }).strip(),
 );
 const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
@@ -159,6 +159,9 @@ function normalizePersistedToolCall(input: unknown) {
   return { ...input, status: "ok" };
 }
 
+// This is only for persisted artifacts that used provider-style message
+// transport. Current harness runs must store `session.events`; missing tool ids
+// are not synthesized because the event model requires real links.
 function normalizePersistedSession(input: unknown) {
   if (!isJsonObject(input) || Array.isArray(input.events)) {
     return input;
@@ -170,10 +173,13 @@ function normalizePersistedSession(input: unknown) {
   }
 
   const events = messagesToTranscriptEvents(messages as never[]);
-  const parsedEvents = events
-    .map((event) => LenientTranscriptEventSchema.safeParse(event))
-    .filter((result) => result.success)
-    .map((result) => result.data);
+  const eventResults = events.map((event) =>
+    LenientTranscriptEventSchema.safeParse(event),
+  );
+  if (eventResults.some((result) => !result.success)) {
+    return input;
+  }
+  const parsedEvents = eventResults.map((result) => result.data);
 
   return { ...input, events: parsedEvents };
 }

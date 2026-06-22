@@ -111,26 +111,26 @@ type ToolCallBase = {
 /** Tool call observed in a normalized session, with result status when known. */
 export type ToolCall =
   | (ToolCallBase & {
-      /** Lifecycle status for a tool call without a matching result message. */
+      /** Lifecycle status for a tool call without a matching result event. */
       status: "pending";
     })
   | (ToolCallBase & {
-      /** Lifecycle status for a tool call with a successful result message. */
+      /** Lifecycle status for a tool call with a successful result event. */
       status: "ok";
       /** JSON-safe tool result content when execution produced content. */
       result?: JsonValue;
     })
   | (ToolCallBase & {
-      /** Lifecycle status for a tool call with an error result message. */
+      /** Lifecycle status for a tool call with an error result event. */
       status: "error";
-      /** Normalized tool error captured by the result message. */
+      /** Normalized tool error captured by the result event. */
       error: NormalizedError;
     });
 
 /** Normalized transcript produced by an application harness. */
 export const NormalizedSessionSchema = z
   .object({
-    events: z.array(TranscriptEventSchema).default([]),
+    events: z.array(TranscriptEventSchema),
     provider: z.string().optional(),
     model: z.string().optional(),
     metadata: JsonObjectSchema.optional(),

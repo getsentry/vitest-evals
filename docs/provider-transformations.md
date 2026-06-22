@@ -219,8 +219,8 @@ return a normalized `session` when tool-call assertions need transcript data.
 
 Normalizes OpenAI Agents run items such as `newItems` and `output` into the root
 session and run model. Runtime tool wrappers may enrich those run items with
-execution/replay metadata, but they do not create successful transcript events
-without matching provider items.
+execution/replay metadata. When a custom entrypoint returns no provider items,
+runtime wrapper events are the transcript source for local tool activity.
 
 ### `@vitest-evals/harness-pi-ai`
 

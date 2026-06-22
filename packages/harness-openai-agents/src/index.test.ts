@@ -707,7 +707,7 @@ test("passes run input and context to agent factory before tool instrumentation"
   expect(spansByKind(result, "tool")).toEqual([]);
 });
 
-test("does not derive successful transcripts from runtime tool capture", async () => {
+test("uses runtime tool capture when custom runs return no provider items", async () => {
   const lookupBottle = {
     type: "function",
     name: "lookupBottle",
@@ -748,8 +748,17 @@ test("does not derive successful transcripts from runtime tool capture", async (
     createHarnessContext({}),
   );
 
-  expect(result.usage.toolCalls).toBeUndefined();
-  expect(toolCalls(result.session)).toEqual([]);
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupBottle",
+      status: "ok",
+      result: {
+        bottleId: "bt_123",
+        family: "bourbon",
+      },
+    },
+  ]);
 });
 
 test("attaches a failed run when agent setup fails", async () => {

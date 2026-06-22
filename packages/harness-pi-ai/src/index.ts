@@ -227,7 +227,7 @@ export type PiAiReplayMode = ReplayMode;
 
 /** Event sink for recording Pi AI transcript events. */
 export interface PiAiEventSink {
-  message: (event: TranscriptEvent) => void;
+  message: (event: TranscriptMessageEvent) => void;
   system: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   user: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
   assistant: (content: JsonValue, metadata?: Record<string, JsonValue>) => void;
