@@ -1,6 +1,6 @@
 {
   "name": "@vitest-evals/harness-pi-ai",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "pi-ai harness adapter with tool replay for vitest-evals.",
   "repository": {
     "type": "git",
