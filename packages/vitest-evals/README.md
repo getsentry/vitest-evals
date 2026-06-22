@@ -321,9 +321,9 @@ criteria on `input` when they are part of the scenario itself; pass
 case-specific judge criteria through matcher options, or configure suite-wide
 criteria on the judge instance.
 
-`createHarness(...)` lightweight results may return either normalized `events`
-or provider-style `messages`. Stored run metadata always uses
-`session.events`, a flat ordered transcript:
+`createHarness(...)` lightweight results must return at least one normalized
+event, either directly as `events` or from provider-style `messages`. Stored
+run metadata always uses `session.events`, a flat ordered transcript:
 
 ```ts
 events: [

@@ -310,11 +310,11 @@ export const qaHarness = createHarness<string, string>({
 });
 ```
 
-Lightweight harness results must include one transcript input:
+Lightweight harness results must include one non-empty transcript input:
 
 - `output`: typed app-facing output
 - `events`: ordered transcript events, or
-- `messages`: provider-style messages that are normalized into transcript events
+- `messages`: provider-style messages that normalize into transcript events
 
 They can also include:
 - `usage`: stable usage units

@@ -563,6 +563,11 @@ export function normalizeHarnessRun<
       "createHarness results must include ordered events or messages. Return a full HarnessRun or a lightweight result with events/messages.",
     );
   }
+  if (events.length === 0) {
+    throw new TypeError(
+      "createHarness results must include at least one transcript event. Return ordered events or provider-style messages that normalize into events.",
+    );
+  }
   const metadata = result.metadata
     ? normalizeMetadata(result.metadata)
     : undefined;

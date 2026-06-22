@@ -403,6 +403,34 @@ test("createHarness requires explicit lightweight transcript input", async () =>
   ).rejects.toThrow("must include ordered events or messages");
 });
 
+test("createHarness rejects empty lightweight transcript input", async () => {
+  const eventsHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      events: [],
+    }),
+  });
+  const messagesHarness = createHarness({
+    name: "custom-app",
+    run: async () => ({
+      output: "approved",
+      messages: [],
+    }),
+  });
+  const context = {
+    artifacts: {},
+    setArtifact: vi.fn(),
+  };
+
+  await expect(
+    eventsHarness.run("Refund invoice inv_123", context),
+  ).rejects.toThrow("at least one transcript event");
+  await expect(
+    messagesHarness.run("Refund invoice inv_123", context),
+  ).rejects.toThrow("at least one transcript event");
+});
+
 test("createHarness attaches fallback traces to direct runs", async () => {
   const lightweightHarness = createHarness({
     name: "custom-app",
