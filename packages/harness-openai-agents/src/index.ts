@@ -603,6 +603,21 @@ type RuntimeToolCapture = {
   events: TranscriptEvent[];
 };
 
+// Mirrors the public @openai/agents 0.8 RunResultData contract closely enough
+// to avoid treating arbitrary app fields named `history` as provider transcript.
+type OpenAiAgentsRunResultLike = {
+  input?: unknown;
+  history?: unknown;
+  newItems: unknown[];
+  output?: unknown[];
+  rawResponses: unknown[];
+};
+
+type OpenAiAgentsInitialEventSource = {
+  events: TranscriptEvent[];
+  usesProviderTranscript: boolean;
+};
+
 /** Adapts an `@openai/agents` Runner workflow into a normalized harness. */
 export function openaiAgentsHarness<
   TAgent,
@@ -868,17 +883,23 @@ async function executeOpenAiAgentsHarness<
           : (resolveOutput(normalizeResult, {
               allowOutputField: Boolean(options.run),
             }) as TOutput | undefined);
-        const runtimeToolCallCount = countToolCallEvents(capture.events);
-        const resolvedUsage = resolveUsage(normalizeResult);
+        const baseUsage = resolveUsage(normalizeResult);
+        const session = resolveSession(
+          input,
+          normalizeResult,
+          output,
+          baseUsage,
+          {
+            runtimeEvents: capture.events,
+          },
+        );
+        const sessionToolCallCount = countToolCallEvents(session.events);
         const usage = {
-          ...resolvedUsage,
-          ...(resolvedUsage.toolCalls === undefined && runtimeToolCallCount > 0
-            ? { toolCalls: runtimeToolCallCount }
+          ...baseUsage,
+          ...(sessionToolCallCount > 0
+            ? { toolCalls: sessionToolCallCount }
             : {}),
         };
-        const session = resolveSession(input, normalizeResult, output, usage, {
-          runtimeEvents: capture.events,
-        });
         const errors = resolveHarnessRunErrors(normalizeResult);
         const finishedAt = new Date();
 
@@ -1519,7 +1540,7 @@ async function executeInstrumentedTool<TInput>({
   execute: () => MaybePromise<unknown>;
 }) {
   const startedAt = new Date();
-  const toolCallId = resolveToolCallId(runContext, rawInput, details);
+  const toolCallId = resolveToolCallId(details);
   const resolvedToolCallId =
     toolCallId ??
     createRuntimeToolCallId(toolName, countToolCallEvents(capture.events));
@@ -1598,26 +1619,9 @@ function resolveToolName(tool: unknown) {
   );
 }
 
-function resolveToolCallId(
-  runContext: unknown,
-  rawInput: unknown,
-  details: unknown,
-) {
-  return (
-    findStringAtPath(details, ["toolCallId"]) ??
-    findStringAtPath(details, ["tool_call_id"]) ??
-    findStringAtPath(details, ["callId"]) ??
-    findStringAtPath(details, ["call_id"]) ??
-    findStringAtPath(details, ["toolCall", "callId"]) ??
-    findStringAtPath(details, ["toolCall", "call_id"]) ??
-    findStringAtPath(details, ["rawItem", "callId"]) ??
-    findStringAtPath(details, ["rawItem", "call_id"]) ??
-    findStringAtPath(runContext, ["toolCallId"]) ??
-    findStringAtPath(runContext, ["tool_call_id"]) ??
-    findStringAtPath(runContext, ["toolCall", "callId"]) ??
-    findStringAtPath(rawInput, ["toolCallId"]) ??
-    findStringAtPath(rawInput, ["tool_call_id"])
-  );
+function resolveToolCallId(details: unknown) {
+  const toolCall = getObjectProperty(details, "toolCall");
+  return stringProperty(toolCall, "callId");
 }
 
 function resolveOutput(
@@ -1643,8 +1647,15 @@ function resolveOutput(
   return undefined;
 }
 
-function isOpenAiAgentsRunResult(result: object) {
-  return "newItems" in result && "rawResponses" in result;
+function isOpenAiAgentsRunResult(
+  result: unknown,
+): result is OpenAiAgentsRunResultLike {
+  return Boolean(
+    result &&
+      typeof result === "object" &&
+      Array.isArray((result as { newItems?: unknown }).newItems) &&
+      Array.isArray((result as { rawResponses?: unknown }).rawResponses),
+  );
 }
 
 // Keep this adapter-local rather than exporting a core helper. Core
@@ -1709,10 +1720,8 @@ function resolveUsage(result: unknown) {
     usage && typeof usage === "object"
       ? (usage as Record<string, unknown>)
       : undefined;
-  const toolCallCount = countToolCallsFromResult(result) || undefined;
-
   if (!usageRecord) {
-    return toolCallCount ? { toolCalls: toolCallCount } : {};
+    return {};
   }
 
   return {
@@ -1722,7 +1731,6 @@ function resolveUsage(result: unknown) {
     outputTokens: numberProperty(usageRecord, "outputTokens"),
     reasoningTokens: numberProperty(usageRecord, "reasoningTokens"),
     totalTokens: numberProperty(usageRecord, "totalTokens"),
-    toolCalls: toolCallCount,
     retries: numberProperty(usageRecord, "retries"),
     metadata: normalizeMetadata({
       requests: usageRecord.requests,
@@ -1749,18 +1757,17 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  const newItems = arrayProperty(result, "newItems");
-  const outputItems = arrayProperty(result, "output");
-  const events =
-    newItems && newItems.length > 0
-      ? normalizeInputMessages(getObjectProperty(result, "input") ?? input)
-      : normalizeHistoryMessages(result, input);
+  const runItems = readOpenAiAgentsRunItems(result);
+  const initialSource = createInitialSessionEventSource(
+    input,
+    result,
+    runItems,
+  );
+  const events = initialSource.events;
 
-  if (newItems && newItems.length > 0) {
-    events.push(...normalizeRunItems(newItems, options.runtimeEvents));
-  } else if (outputItems && outputItems.length > 0) {
-    events.push(...normalizeRunItems(outputItems, options.runtimeEvents));
-  } else {
+  if (runItems) {
+    events.push(...normalizeRunItems(runItems, options.runtimeEvents));
+  } else if (!initialSource.usesProviderTranscript) {
     // Custom entrypoints may execute instrumented local tools without returning
     // provider run items; in that case runtime capture is the transcript source.
     events.push(...options.runtimeEvents);
@@ -1820,30 +1827,62 @@ function resolveFailureSession(
   };
 }
 
-function normalizeHistoryMessages(
+function readOpenAiAgentsRunItems(result: unknown): unknown[] | undefined {
+  const newItems = arrayProperty(result, "newItems");
+  if (newItems && newItems.length > 0 && hasOpenAiAgentsRunItem(newItems)) {
+    return newItems;
+  }
+
+  const outputItems = arrayProperty(result, "output");
+  if (
+    outputItems &&
+    outputItems.length > 0 &&
+    hasOpenAiAgentsRunItem(outputItems)
+  ) {
+    return outputItems;
+  }
+
+  return undefined;
+}
+
+/** Selects the provider transcript source before runtime events are considered. */
+function createInitialSessionEventSource(
+  input: unknown,
   result: unknown,
-  fallbackInput: unknown,
-): TranscriptEvent[] {
-  const history = arrayProperty(result, "history");
-  if (!history || history.length === 0) {
-    return normalizeInputMessages(
-      getObjectProperty(result, "input") ?? fallbackInput,
-    );
+  runItems: unknown[] | undefined,
+): OpenAiAgentsInitialEventSource {
+  if (runItems) {
+    return {
+      events: normalizeInputMessages(
+        getObjectProperty(result, "input") ?? input,
+      ),
+      usesProviderTranscript: true,
+    };
   }
 
-  const events: TranscriptEvent[] = [];
-  for (const item of history) {
-    const normalized = normalizeModelMessage(item);
-    if (normalized) {
-      events.push(normalized);
+  if (isOpenAiAgentsRunResult(result) && "input" in result) {
+    const history = arrayProperty(result, "history");
+    if (history && history.length > 0) {
+      return {
+        events: normalizeProviderItems(history),
+        usesProviderTranscript: true,
+      };
     }
+
+    return {
+      events: normalizeInputMessages(result.input),
+      usesProviderTranscript: false,
+    };
   }
 
-  return events.length > 0
-    ? events
-    : normalizeInputMessages(
-        getObjectProperty(result, "input") ?? fallbackInput,
-      );
+  return {
+    events: normalizeInputMessages(input),
+    usesProviderTranscript: false,
+  };
+}
+
+function normalizeProviderItems(items: unknown[]): TranscriptEvent[] {
+  return normalizeRunItems(items, []);
 }
 
 function normalizeInputMessages(input: unknown): TranscriptEvent[] {
@@ -1897,6 +1936,12 @@ function normalizeRunItems(
 
   for (const item of items) {
     const rawItem = getRunItemRawItem(item);
+
+    const message = normalizeModelMessage(item);
+    if (message) {
+      events.push(message);
+      continue;
+    }
 
     if (isAssistantMessageItem(item, rawItem)) {
       events.push({
@@ -1954,6 +1999,17 @@ function normalizeRunItems(
   }
 
   return events;
+}
+
+function hasOpenAiAgentsRunItem(items: unknown[]) {
+  return items.some((item) => {
+    const rawItem = getRunItemRawItem(item);
+    return (
+      isAssistantMessageItem(item, rawItem) ||
+      isToolCallItem(item, rawItem) ||
+      isToolCallOutputItem(item, rawItem)
+    );
+  });
 }
 
 function isToolCallEvent(
@@ -2230,33 +2286,6 @@ function resolveRawToolName(rawItem: unknown) {
   );
 }
 
-function countToolCallsFromResult(result: unknown): number {
-  const newItems = arrayProperty(result, "newItems");
-  const items =
-    newItems && newItems.length > 0
-      ? newItems
-      : (arrayProperty(result, "output") ?? []);
-  const seenCallIds = new Set<string>();
-
-  return items.reduce<number>((count, item) => {
-    const rawItem = getRunItemRawItem(item);
-    if (!isToolCallItem(item, rawItem)) {
-      return count;
-    }
-
-    const callId = resolveRunItemToolCallId(item, rawItem);
-    if (callId) {
-      if (seenCallIds.has(callId)) {
-        return count;
-      }
-
-      seenCallIds.add(callId);
-    }
-
-    return count + 1;
-  }, 0);
-}
-
 function normalizeArguments(
   value: unknown,
 ): Record<string, JsonValue> | undefined {
@@ -2420,15 +2449,6 @@ function numberProperty(value: unknown, key: string): number | undefined {
 function arrayProperty(value: unknown, key: string): unknown[] | undefined {
   const property = getObjectProperty(value, key);
   return Array.isArray(property) ? property : undefined;
-}
-
-function findStringAtPath(value: unknown, path: string[]) {
-  let current = value;
-  for (const key of path) {
-    current = getObjectProperty(current, key);
-  }
-
-  return typeof current === "string" ? current : undefined;
 }
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {

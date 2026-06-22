@@ -75,11 +75,12 @@ stream keeps the transcript ordered without overloading an assistant message
 with tool-request data that may or may not correspond to a provider's native
 message format.
 
-Harness adapters and `createHarness(...)` may accept either:
+First-party harness adapters and `createHarness(...)` lightweight results may
+accept either:
 
 - normalized `events`, which are stored directly
-- OpenAI/AI SDK-inspired `messages`, including assistant `toolCalls` or
-  `tool_calls`, separate `role: "tool"` results, and AI SDK-style
+- strict camelCase `messages`, including assistant `toolCalls`, separate
+  `role: "tool"` results with `toolCallId`, and AI SDK-style
   `tool-call`/`tool-result` content parts, which are normalized into events at
   the harness boundary
 
@@ -97,11 +98,13 @@ Harness adapters should:
   `type: "tool_result"` events when a result exists
 - treat the transcript as the source for tool-call assertions; traces are
   optional operational enrichment, not a fallback source for messages or tools
-- keep wrapper bookkeeping out of successful transcripts unless the provider
-  transcript already reported the same tool item and the wrapper only adds
-  execution details such as replay metadata
-- require custom run entrypoints that lack provider transcript data to return a
-  normalized `session` explicitly
+- keep wrapper bookkeeping out of successful transcripts when provider
+  transcript data is available; local tool executions may provide normalized
+  transcript events for custom entrypoints that return no provider transcript
+  data
+- require custom run entrypoints that lack provider transcript data and runtime
+  tool events to return a normalized `session` explicitly when evals need
+  message or tool-call assertions beyond synthesized input/output messages
 - preserve provider tool-call ids when providers expose them; adapters that
   execute tools themselves should create runtime-local ids so request/result
   transcript events remain unambiguous
@@ -125,7 +128,8 @@ OpenAI APIs illustrate why the input boundary is deliberately broader than the
 stored normalized shape:
 
 - Chat Completions represents tool requests as `assistant.tool_calls` and tool
-  outputs as separate `role: "tool"` messages with `tool_call_id`.
+  outputs as separate `role: "tool"` messages with `tool_call_id`; provider
+  adapters map those names into this package's camelCase JSON contract.
 - Responses and Realtime represent message, `function_call`, and
   `function_call_output` items as first-class conversation items.
 - OpenAI Agents exposes run items such as `tool_call_item` and
@@ -189,8 +193,9 @@ function normalizeSession(input: string, result: ProviderResult): NormalizedSess
 }
 ```
 
-For OpenAI Chat Completions-style inputs, custom harness authors may still
-return message-shaped data and let `createHarness(...)` normalize it:
+For apps that already produce message-shaped inputs, custom harness authors may
+return this package's strict camelCase message transport and let
+`createHarness(...)` normalize it:
 
 ```ts
 return {
@@ -222,15 +227,22 @@ directly instead of expecting `messages` to parse every raw provider object.
 ### `@vitest-evals/harness-ai-sdk`
 
 Normalizes AI SDK style `steps`, `toolCalls`, `toolResults`, and usage records
-into the root session and run model. Successful runs without AI SDK steps must
-return a normalized `session` when tool-call assertions need transcript data.
+into the root session and run model. Successful runs without AI SDK steps use
+normalized transcript events for local tool executions. Output-only custom runs
+still get synthesized input/output messages; return a normalized `session` when
+evals need exact transcript control beyond that.
 
 ### `@vitest-evals/harness-openai-agents`
 
 Normalizes OpenAI Agents run items such as `newItems` and `output` into the root
-session and run model. Runtime tool wrappers may enrich those run items with
-execution/replay metadata. When a custom entrypoint returns no provider items,
-runtime wrapper events are the transcript source for local tool activity.
+session and run model. The adapter treats `newItems` as the preferred generated
+item source and accepts `output` only when it contains recognizable SDK
+model-output items. SDK `history` is a complete-history source when no
+recognizable generated run items are available; app-level fields named
+`history` are not provider transcript data. Runtime tool wrappers may enrich
+provider run items with execution/replay metadata by tool-call id. When a
+custom entrypoint returns no provider items, normalized transcript events from
+local tool executions are the transcript source.
 
 ### `@vitest-evals/harness-pi-ai`
 

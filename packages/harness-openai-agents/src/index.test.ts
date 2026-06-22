@@ -34,6 +34,17 @@ function firstAssistantToolCall(session: NormalizedSession) {
   return session.events.find((event) => event.type === "tool_call");
 }
 
+function createOpenAiToolCallDetails(callId: string, name = "lookupBottle") {
+  return {
+    toolCall: {
+      type: "function_call",
+      callId,
+      name,
+      arguments: "{}",
+    },
+  };
+}
+
 const typedRunOutputHarness = openaiAgentsHarness({
   agent: {
     name: "classifier",
@@ -481,7 +492,12 @@ test("uses custom app output with app-level state and history fields", async () 
       state: {
         phase: "complete",
       },
-      history: ["reviewed"],
+      history: [
+        {
+          role: "assistant",
+          content: "stale app history",
+        },
+      ],
     })),
   });
 
@@ -495,6 +511,320 @@ test("uses custom app output with app-level state and history fields", async () 
   expect(result.output).toEqual({
     status: "approved",
   });
+  expect(result.session.events).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "user",
+        content: "Classify bottle bt_123",
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: {
+          status: "approved",
+        },
+      }),
+    ]),
+  );
+  expect(result.session.events).not.toContainEqual(
+    expect.objectContaining({
+      content: "stale app history",
+    }),
+  );
+});
+
+test("uses OpenAI Agents history when no generated item arrays are available", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: "classified",
+        input: "Classify bottle bt_123",
+        newItems: [],
+        rawResponses: [],
+        history: [
+          {
+            role: "user",
+            content: "Classify bottle bt_123",
+          },
+          {
+            role: "assistant",
+            status: "completed",
+            content: [
+              {
+                type: "output_text",
+                text: "classified from history",
+              },
+            ],
+          },
+        ],
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "history",
+    }),
+  );
+
+  expect(result.output).toBe("classified");
+  expect(result.session.events).toMatchObject([
+    {
+      type: "message",
+      role: "user",
+      content: "Classify bottle bt_123",
+    },
+    {
+      type: "message",
+      role: "assistant",
+      content: "classified from history",
+    },
+  ]);
+});
+
+test("uses OpenAI Agents history from SDK getter properties", async () => {
+  class GetterRunResult {
+    finalOutput = "classified";
+
+    get input() {
+      return "Classify bottle bt_123";
+    }
+
+    get newItems() {
+      return [];
+    }
+
+    get rawResponses() {
+      return [];
+    }
+
+    get history() {
+      return [
+        {
+          role: "user",
+          content: "Classify bottle bt_123",
+        },
+        {
+          role: "assistant",
+          content: "classified from getter history",
+        },
+      ];
+    }
+  }
+
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => new GetterRunResult()),
+    },
+  });
+
+  const result = await harness.run(
+    "Fallback input",
+    createHarnessContext({
+      scenario: "history-getters",
+    }),
+  );
+
+  expect(result.session.events).toMatchObject([
+    {
+      type: "message",
+      role: "user",
+      content: "Classify bottle bt_123",
+    },
+    {
+      type: "message",
+      role: "assistant",
+      content: "classified from getter history",
+    },
+  ]);
+});
+
+test("preserves tool items from OpenAI Agents history", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: "classified",
+        input: "Classify bottle bt_123",
+        newItems: [],
+        rawResponses: [],
+        history: [
+          {
+            role: "user",
+            content: "Classify bottle bt_123",
+          },
+          {
+            type: "function_call",
+            callId: "call_lookup",
+            name: "lookupBottle",
+            arguments: JSON.stringify({
+              bottleId: "bt_123",
+            }),
+            status: "completed",
+          },
+          {
+            type: "function_call_result",
+            callId: "call_lookup",
+            name: "lookupBottle",
+            output: {
+              bottleId: "bt_123",
+              family: "bourbon",
+            },
+            status: "completed",
+          },
+        ],
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "history-tools",
+    }),
+  );
+
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupBottle",
+      arguments: {
+        bottleId: "bt_123",
+      },
+      result: {
+        bottleId: "bt_123",
+        family: "bourbon",
+      },
+      status: "ok",
+    },
+  ]);
+  expect(result.usage.toolCalls).toBe(1);
+});
+
+test("ignores app-owned history without OpenAI Agents input", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: "classified",
+        newItems: [],
+        rawResponses: [],
+        history: [
+          {
+            role: "assistant",
+            content: "stale app history",
+          },
+        ],
+      })),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "app-history",
+    }),
+  );
+
+  expect(result.session.events).toEqual([
+    {
+      type: "message",
+      role: "user",
+      content: "Classify bottle bt_123",
+    },
+    {
+      type: "message",
+      role: "assistant",
+      content: "classified",
+    },
+  ]);
+});
+
+test("does not mix OpenAI Agents history with runtime tool capture", async () => {
+  const lookupBottle = {
+    type: "function",
+    name: "lookupBottle",
+    invoke: async () => ({
+      bottleId: "bt_123",
+      family: "bourbon",
+    }),
+  } satisfies OpenAiAgentsTool<string>;
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+      tools: [lookupBottle],
+    } satisfies DemoAgent,
+    runner: {
+      run: vi.fn(async (agent: DemoAgent, _input: string, runOptions) => {
+        await agent.tools?.[0].invoke?.(
+          runOptions?.context,
+          JSON.stringify({
+            bottleId: "bt_123",
+          }),
+          createOpenAiToolCallDetails("call_lookup"),
+        );
+
+        return {
+          finalOutput: "classified",
+          input: "Classify bottle bt_123",
+          newItems: [],
+          rawResponses: [],
+          history: [
+            {
+              role: "user",
+              content: "Classify bottle bt_123",
+            },
+            {
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: "classified from history",
+                },
+              ],
+            },
+          ],
+        };
+      }),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({
+      scenario: "history",
+    }),
+  );
+
+  expect(result.session.events).toMatchObject([
+    {
+      type: "message",
+      role: "user",
+      content: "Classify bottle bt_123",
+    },
+    {
+      type: "message",
+      role: "assistant",
+      content: "classified from history",
+    },
+  ]);
+  expect(toolCalls(result.session)).toEqual([]);
+  expect(result.usage.toolCalls).toBeUndefined();
 });
 
 test("does not fall back from non-JSON final output to output", async () => {
@@ -647,9 +977,7 @@ test("passes run input and context to agent factory before tool instrumentation"
         JSON.stringify({
           bottleId: "bt_123",
         }),
-        {
-          toolCallId: "call_lookup",
-        },
+        createOpenAiToolCallDetails("call_lookup"),
       );
 
       return {
@@ -729,9 +1057,7 @@ test("uses runtime tool capture when custom runs return no provider items", asyn
           JSON.stringify({
             bottleId: "bt_123",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         return {
@@ -843,9 +1169,7 @@ test("wraps OpenAI Agents function tools with replay metadata", async () => {
         JSON.stringify({
           bottleId: "bt_123",
         }),
-        {
-          toolCallId: "call_lookup",
-        },
+        createOpenAiToolCallDetails("call_lookup"),
       );
 
       return {
@@ -959,9 +1283,7 @@ test("prefers captured local tool results over model-visible output wrappers", a
           JSON.stringify({
             bottleId: "bt_123",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         return {
@@ -1045,9 +1367,7 @@ test("uses run item envelope ids to join captured tool results", async () => {
           JSON.stringify({
             bottleId: "bt_123",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         return {
@@ -1165,6 +1485,42 @@ test("normalizes Responses-style function call output items", async () => {
   ]);
 });
 
+test("counts tool calls from the selected OpenAI Agents run item source", async () => {
+  const harness = openaiAgentsHarness({
+    agent: {
+      name: "classifier",
+      model: "gpt-4.1-mini",
+    },
+    runner: {
+      run: async () => ({
+        finalOutput: "classified",
+        newItems: [
+          {
+            type: "app_event",
+            content: "not an SDK run item",
+          },
+        ],
+        output: createLookupBottleRunItems({
+          bottleId: "bt_123",
+          output: {
+            bottleId: "bt_123",
+            family: "bourbon",
+          },
+        }),
+        rawResponses: [],
+      }),
+    },
+  });
+
+  const result = await harness.run(
+    "Classify bottle bt_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toHaveLength(1);
+});
+
 test("preserves explicit null captured local tool results", async () => {
   const lookupBottle = {
     type: "function",
@@ -1184,9 +1540,7 @@ test("preserves explicit null captured local tool results", async () => {
           JSON.stringify({
             bottleId: "bt_unknown",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         return {
@@ -1335,9 +1689,7 @@ test("instruments real OpenAI Agent tools without mutating the caller's agent", 
           JSON.stringify({
             bottleId: "bt_123",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         return {
@@ -1468,9 +1820,7 @@ test("keeps tool capture isolated across overlapping runs", async () => {
           JSON.stringify({
             bottleId: `bt_${scenario}`,
           }),
-          {
-            toolCallId: `call_${scenario}`,
-          },
+          createOpenAiToolCallDetails(`call_${scenario}`),
         );
 
         return {
@@ -1592,9 +1942,7 @@ test("attaches partial tool calls when Runner.run errors", async () => {
           JSON.stringify({
             bottleId: "bt_missing",
           }),
-          {
-            toolCallId: "call_lookup",
-          },
+          createOpenAiToolCallDetails("call_lookup"),
         );
 
         throw new Error("classifier failed after lookup");

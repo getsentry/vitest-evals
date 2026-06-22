@@ -67,16 +67,17 @@ event stream is flat:
 - `type: "tool_call"` for a tool request
 - `type: "tool_result"` for a completed or failed tool execution
 
-This is the reporter and judge contract. OpenAI/AI SDK-inspired messages are
-allowed only at harness input boundaries. For example, custom harnesses may
-return Chat Completions-style `messages` with assistant `toolCalls` or
-`tool_calls` and `role: "tool"` results, or AI SDK-style content parts with
-`type: "tool-call"` and `type: "tool-result"`. First-party harnesses may
-consume provider message/run-item data, but those shapes are normalized into
-`session.events` before storage. Other provider content-block or item-stream
-payloads should adapt those records into `events` directly. Downstream code
-should not read both `messages` and `events`, and should not treat traces as a
-transcript fallback.
+This is the reporter and judge contract. `createHarness(...)` may accept strict
+camelCase message-shaped inputs at its lightweight result boundary: assistant
+`toolCalls`, `role: "tool"` results keyed by `toolCallId`, or AI SDK-style
+content parts with `type: "tool-call"` and `type: "tool-result"`. First-party
+harnesses may consume provider message/run-item data, including
+provider-specific snake_case fields, but those shapes are normalized into the
+package's camelCase `session.events` contract before storage. Custom harnesses
+that implement `Harness` directly must return that canonical `session.events`
+shape themselves. Other provider content-block or item-stream payloads should
+adapt those records into `events` directly. Downstream code should not read both
+`messages` and `events`, and should not treat traces as a transcript fallback.
 
 Assertions and judges should use helper projections instead of inspecting raw
 event internals unless the test is explicitly about transcript ordering:
@@ -258,8 +259,10 @@ behavior only.
 Adapts `ai-sdk`-style results into the normalized run/session shape. It can
 derive output, usage, transcript events, and errors from common AI SDK result
 objects. Successful tool-call transcripts come from AI SDK `steps`; custom
-`run` entrypoints that do not return steps should return a normalized
-`session` explicitly when tests need message or tool-call assertions. It
+`run` entrypoints that do not return steps use normalized transcript events for
+local tool executions. Output-only custom runs still get synthesized
+input/output messages; return a normalized `session` when evals need exact
+transcript control beyond that. It
 preserves native trace spans from AI SDK steps when they are available;
 tool-call assertions should use the normalized session helpers.
 It exposes `aiSdkJudgeHarness(...)`, a thin adapter from AI SDK model
@@ -273,8 +276,11 @@ normalized run/session shape. It accepts existing agents/runners or per-run
 `RunResult` output, transcript events, usage, errors, trace metadata,
 records run/model spans when data is available, and records replay metadata for
 opt-in local function tools. Successful tool-call transcripts come from
-OpenAI Agents run items when available; runtime wrappers enrich those items and
-provide transcript events for custom entrypoints that return no provider items.
+OpenAI Agents generated item arrays (`newItems`, or `output` when callers
+return the SDK's model-output items); `history` is used as a complete SDK
+history source when no recognizable generated run items are available. Runtime
+wrappers enrich provider items by id and provide transcript events for custom
+entrypoints that return no provider items.
 It also exposes
 `openaiAgentsJudgeHarness(...)` for judge-side model calls.
 

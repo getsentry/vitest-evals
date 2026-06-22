@@ -605,12 +605,14 @@ async function runAiSdkHarness<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(result) as TOutput | undefined);
-    const usage = resolveUsage(result);
+    const useRuntimeEvents = shouldUseRuntimeEvents(result);
+    const usage = resolveUsage(result, useRuntimeEvents ? runtimeEvents : []);
     const session = resolveSession(
       input,
       result,
       output,
       replayMetadataByToolCallId,
+      runtimeEvents,
     );
     const errors = resolveHarnessRunErrors(result);
     const finishedAt = new Date();
@@ -895,7 +897,7 @@ function createAiSdkModelSpans(
   result: unknown,
   usage: UsageSummary | undefined,
 ): NormalizedSpan[] {
-  const steps = resolveSteps(result);
+  const steps = readAiSdkSteps(result);
   if (steps.length === 0) {
     const fallback = createUsageModelSpan(trace, usage);
     return fallback ? [fallback] : [];
@@ -1202,18 +1204,24 @@ function toOutputValue(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function resolveUsage(result: unknown): UsageSummary {
-  const steps = resolveSteps(result);
-  const usage = resolveLanguageModelUsage(result) ?? resolveStepUsage(steps);
+function resolveUsage(
+  result: unknown,
+  runtimeEvents: TranscriptEvent[] = [],
+): UsageSummary {
+  const steps = readAiSdkSteps(result);
+  const runtimeToolCallCount = countRuntimeToolCalls(runtimeEvents);
+  const usage = readAiSdkUsage(result, steps);
   const lastStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
+  // Runtime events count only for custom runs without AI SDK steps, so usage
+  // stays aligned with the same transcript source used for assertions.
+  const toolCallCount =
+    steps.length > 0 ? countStepToolCalls(steps) : runtimeToolCallCount;
 
   if (!usage) {
-    if (steps.length > 0) {
-      const toolCallCount = countStepToolCalls(steps);
-
+    if (toolCallCount > 0 || steps.length > 0) {
       return {
-        provider: lastStep?.model.provider,
-        model: lastStep?.model.modelId,
+        provider: lastStep?.model?.provider,
+        model: lastStep?.model?.modelId,
         ...(toolCallCount > 0 ? { toolCalls: toolCallCount } : {}),
       };
     }
@@ -1221,18 +1229,16 @@ function resolveUsage(result: unknown): UsageSummary {
     return {};
   }
 
-  const stepToolCallCount = countStepToolCalls(steps);
-
   return {
-    provider: lastStep?.model.provider,
-    model: lastStep?.model.modelId,
+    provider: lastStep?.model?.provider,
+    model: lastStep?.model?.modelId,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     reasoningTokens:
       usage.outputTokenDetails?.reasoningTokens ?? usage.reasoningTokens,
     totalTokens:
       usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-    toolCalls: stepToolCallCount > 0 ? stepToolCallCount : undefined,
+    toolCalls: toolCallCount > 0 ? toolCallCount : undefined,
     metadata: normalizeMetadata({
       cacheReadTokens:
         usage.inputTokenDetails?.cacheReadTokens ?? usage.cachedInputTokens,
@@ -1242,10 +1248,12 @@ function resolveUsage(result: unknown): UsageSummary {
   };
 }
 
+function countRuntimeToolCalls(events: readonly TranscriptEvent[]) {
+  return events.filter((event) => event.type === "tool_call").length;
+}
+
 function resolveStepUsage(steps: StepLike[]): LanguageModelUsage | undefined {
-  const usages = steps
-    .map((step) => step.usage)
-    .filter((usage): usage is LanguageModelUsage => Boolean(usage));
+  const usages = steps.map((step) => step.usage).filter(isLanguageModelUsage);
 
   if (usages.length === 0) {
     return undefined;
@@ -1308,11 +1316,24 @@ function countStepToolCalls(steps: StepLike[]) {
   );
 }
 
+function shouldUseRuntimeEvents(result: unknown) {
+  if (
+    isNormalizedSession(
+      (result as Record<string, unknown> | undefined)?.session,
+    )
+  ) {
+    return false;
+  }
+
+  return readAiSdkSteps(result).length === 0;
+}
+
 function resolveSession(
   input: unknown,
   result: unknown,
   output: JsonValue | undefined,
   replayMetadataByToolCallId: Map<string, ReplayMetadata>,
+  runtimeEvents: TranscriptEvent[] = [],
 ): NormalizedSession {
   if (
     isNormalizedSession(
@@ -1322,7 +1343,7 @@ function resolveSession(
     return (result as { session: NormalizedSession }).session;
   }
 
-  const steps = resolveSteps(result);
+  const steps = readAiSdkSteps(result);
   const events: TranscriptEvent[] = [
     {
       type: "message",
@@ -1333,6 +1354,12 @@ function resolveSession(
 
   for (const step of steps) {
     events.push(...normalizeStep(step, replayMetadataByToolCallId));
+  }
+
+  // Runtime events are only the transcript source when no AI SDK steps exist;
+  // explicit sessions returned above and provider steps stay authoritative.
+  if (steps.length === 0) {
+    events.push(...runtimeEvents);
   }
 
   if (
@@ -1355,8 +1382,8 @@ function resolveSession(
 
   return {
     events,
-    provider: lastStep?.model.provider,
-    model: lastStep?.model.modelId,
+    provider: lastStep?.model?.provider,
+    model: lastStep?.model?.modelId,
   };
 }
 
@@ -1376,25 +1403,107 @@ function resolveFailureSession(
   };
 }
 
-function resolveSteps(result: unknown): StepLike[] {
+/** Reads AI SDK step arrays only when the field looks like provider step data. */
+function readAiSdkSteps(result: unknown): StepLike[] {
   if (!result || typeof result !== "object") {
     return [];
   }
 
-  return Array.isArray((result as AiSdkLikeResult).steps)
-    ? ((result as AiSdkLikeResult).steps ?? [])
-    : [];
+  if (!Object.prototype.hasOwnProperty.call(result, "steps")) {
+    return [];
+  }
+
+  const steps = (result as AiSdkLikeResult).steps;
+  if (!Array.isArray(steps)) {
+    return [];
+  }
+  if (steps.length > 0 && !steps.every(isAiSdkStepLike)) {
+    return [];
+  }
+
+  return steps;
 }
 
-function resolveLanguageModelUsage(
+function isAiSdkStepLike(step: unknown): step is StepLike {
+  if (!step || typeof step !== "object") {
+    return false;
+  }
+
+  const record = step as Record<string, unknown>;
+  return (
+    Array.isArray(record.content) ||
+    Array.isArray(record.toolCalls) ||
+    Array.isArray(record.toolResults) ||
+    Boolean(record.response && typeof record.response === "object") ||
+    Boolean(record.usage && typeof record.usage === "object") ||
+    typeof record.finishReason === "string" ||
+    typeof record.stepNumber === "number" ||
+    typeof record.text === "string"
+  );
+}
+
+function readAiSdkUsage(
   result: unknown,
+  steps: StepLike[],
+): LanguageModelUsage | undefined {
+  // AI SDK generateText exposes aggregate `totalUsage`; `usage` is the last
+  // step and only applies to non-step results such as generateObject.
+  const totalUsage = readUsageField(result, "totalUsage");
+  if (totalUsage) {
+    return totalUsage;
+  }
+
+  if (steps.length > 0) {
+    return resolveStepUsage(steps);
+  }
+
+  return readUsageField(result, "usage");
+}
+
+function readUsageField(
+  result: unknown,
+  field: "usage" | "totalUsage",
 ): LanguageModelUsage | undefined {
   if (!result || typeof result !== "object") {
     return undefined;
   }
 
-  const aiResult = result as AiSdkLikeResult;
-  return aiResult.totalUsage ?? aiResult.usage;
+  const usage = (result as AiSdkLikeResult)[field];
+  return isLanguageModelUsage(usage) ? usage : undefined;
+}
+
+function isLanguageModelUsage(value: unknown): value is LanguageModelUsage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const usage = value as LanguageModelUsage;
+  return (
+    isOptionalFiniteNumber(usage.inputTokens) &&
+    isOptionalFiniteNumber(usage.outputTokens) &&
+    isOptionalFiniteNumber(usage.reasoningTokens) &&
+    isOptionalFiniteNumber(usage.totalTokens) &&
+    isOptionalFiniteNumber(usage.cachedInputTokens) &&
+    isUsageDetailObject(usage.inputTokenDetails) &&
+    isUsageDetailObject(usage.outputTokenDetails)
+  );
+}
+
+function isUsageDetailObject(value: unknown) {
+  if (value === undefined) {
+    return true;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isOptionalFiniteNumber);
+}
+
+function isOptionalFiniteNumber(value: unknown) {
+  return (
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function normalizeStep(

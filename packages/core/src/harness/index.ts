@@ -23,7 +23,11 @@ export type {
   TranscriptToolResultEvent,
   TranscriptEvent,
   TranscriptMessageInput,
+  TranscriptMessageContentPart,
+  TranscriptMessageTextPart,
+  TranscriptMessageToolCallPart,
   TranscriptMessageToolCall,
+  TranscriptMessageToolResultPart,
 } from "./transcript";
 
 /** Usage values normalized by vitest-evals harnesses. */
@@ -235,7 +239,7 @@ export const NormalizedTraceSchema = z
     finishedAt: z.string().optional(),
     durationMs: FiniteNumberSchema.optional(),
     metadata: JsonObjectSchema.optional(),
-    spans: z.array(NormalizedSpanSchema).default([]),
+    spans: z.array(NormalizedSpanSchema),
   })
   .strict();
 
@@ -266,7 +270,7 @@ export const HarnessRunSchema = z
     timings: TimingSummarySchema.optional(),
     artifacts: JsonObjectSchema.optional(),
     traces: z.array(NormalizedTraceSchema).optional(),
-    errors: z.array(JsonObjectSchema).default([]),
+    errors: z.array(JsonObjectSchema),
   })
   .strict();
 

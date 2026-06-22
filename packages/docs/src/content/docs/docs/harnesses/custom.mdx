@@ -32,11 +32,13 @@ export async function answerQuestion(input: string): Promise<string> {
 
 `createHarness()` adapts that production entrypoint into normalized eval data.
 Return `output` for assertions and judges, and always return at least one
-ordered transcript event for the run. OpenAI/AI SDK-inspired `messages` are
-also accepted at this boundary and are normalized into events, including
-OpenAI-style `tool_calls` and AI SDK-style `tool-call`/`tool-result` content
-parts. If another provider uses content blocks or item streams, adapt those into
-`events` directly. Attach usage and artifacts when reports need them. It
+ordered transcript event for the run. Strict camelCase `messages` are also
+accepted at this boundary and are normalized into events, including assistant
+`toolCalls`, separate `role: "tool"` results keyed by `toolCallId`, and AI
+SDK-style `tool-call`/`tool-result` content parts. If another provider uses
+content blocks, item streams, or snake_case wire fields, adapt those into
+`events` or the camelCase message transport directly. Attach usage and artifacts
+when reports need them. It
 automatically attaches a fallback run span unless the harness returns its own
 traces.
 
@@ -67,7 +69,9 @@ export const qaHarness = createHarness<string, string>({
 ```
 
 Return a full `HarnessRun` only when you need complete control over the
-session, usage, timings, artifacts, traces, and errors.
+session, usage, timings, artifacts, traces, and errors. Full runs must already
+use canonical `session.events`; `createHarness()` is the preferred custom
+harness entrypoint when you want lightweight normalization.
 
 ## Writing Evals
 

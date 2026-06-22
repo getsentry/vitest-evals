@@ -58,9 +58,10 @@ export const qaHarness = aiSdkHarness({
 Use `output` for the value your evals care about. Messages, tool calls, usage,
 native trace spans, and errors remain available on the normalized harness run
 for judges, replay, and reports. Tool-call transcript data comes from AI SDK
-`steps`; custom `run` entrypoints that do not return steps should return a
-normalized `session` explicitly when evals need message or tool-call
-assertions.
+`steps`; custom `run` entrypoints that do not return steps use normalized
+transcript events for local tool executions. Output-only custom runs still get
+synthesized input/output messages; return a normalized `session` when evals
+need exact transcript control beyond that.
 
 ## Writing Evals
 

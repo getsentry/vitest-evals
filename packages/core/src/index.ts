@@ -56,7 +56,11 @@ export type {
   TimingSummary,
   ToolCall,
   TranscriptMessageInput,
+  TranscriptMessageContentPart,
+  TranscriptMessageTextPart,
+  TranscriptMessageToolCallPart,
   TranscriptMessageToolCall,
+  TranscriptMessageToolResultPart,
   UsageSummary,
 } from "./harness";
 

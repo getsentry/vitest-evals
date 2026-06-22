@@ -30,7 +30,11 @@ import type {
   TimingSummary,
   ToolCall,
   TranscriptMessageInput,
+  TranscriptMessageContentPart,
+  TranscriptMessageTextPart,
+  TranscriptMessageToolCallPart,
   TranscriptMessageToolCall,
+  TranscriptMessageToolResultPart,
   UsageSummary,
 } from "@vitest-evals/core";
 
@@ -75,7 +79,11 @@ export type {
   TimingSummary,
   ToolCall,
   TranscriptMessageInput,
+  TranscriptMessageContentPart,
+  TranscriptMessageTextPart,
+  TranscriptMessageToolCallPart,
   TranscriptMessageToolCall,
+  TranscriptMessageToolResultPart,
   UsageSummary,
 } from "@vitest-evals/core";
 
@@ -191,7 +199,7 @@ export type SimpleTranscriptInput =
       messages?: never;
     }
   | {
-      /** OpenAI/AI SDK-inspired messages normalized into transcript events. */
+      /** Strict camelCase message transport normalized into transcript events. */
       messages: TranscriptMessageInput[];
       events?: never;
     };
@@ -248,6 +256,10 @@ export type CreateHarnessRunArgs<TInput> = {
 
 /**
  * Options for creating a lightweight custom application harness.
+ *
+ * Prefer this helper for custom harnesses. Implement `Harness` directly only
+ * when the callback already returns a full `HarnessRun` with canonical
+ * `session.events`.
  *
  * @example
  * ```ts

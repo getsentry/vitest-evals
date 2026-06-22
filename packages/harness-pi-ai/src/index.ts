@@ -738,7 +738,6 @@ async function executePiHarnessRun<
         input,
         context,
         events,
-        toolCalls: runtime.toolCalls,
         toolReplay: options.toolReplay,
         executionState,
       },
@@ -771,7 +770,7 @@ async function executePiHarnessRun<
     const output = options.output
       ? await options.output(resultArgs)
       : (resolveOutput(normalizeResult) as TOutput | undefined);
-    const usage = resolveUsage(normalizeResult, runtime.toolCalls.length);
+    const usage = resolveUsage(normalizeResult, countToolCallEvents(events));
     const session = resolveSession(normalizeResult, events, output, usage);
     const errors = resolveErrors(normalizeResult);
     const finishedAt = new Date();
@@ -795,7 +794,7 @@ async function executePiHarnessRun<
       ],
     } as HarnessRun<TOutput>;
   } catch (error) {
-    const usage = resolveUsage(undefined, runtime.toolCalls.length);
+    const usage = resolveUsage(undefined, countToolCallEvents(events));
     const session = resolveSession(undefined, events, undefined, usage);
     const finishedAt = new Date();
     const serializedError = serializeError(error);
@@ -1154,7 +1153,6 @@ async function withInstrumentedAgentTools<TResult, TInput>(
     input: TInput;
     context: HarnessContext;
     events: TranscriptEvent[];
-    toolCalls: TranscriptToolCallEvent[];
     toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
     executionState: PiToolExecutionState;
   },
@@ -1199,7 +1197,6 @@ async function withInstrumentedAgentTools<TResult, TInput>(
         startedAt: startedAt.toISOString(),
         metadata: normalizeReplayMetadata(undefined),
       } satisfies TranscriptToolCallEvent;
-      args.toolCalls.push(call);
       args.events.push(call);
 
       try {
@@ -1443,10 +1440,7 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
   toolReplay: PiAiToolReplayPolicies<TInput> | undefined;
   executionState: PiToolExecutionState;
   events: TranscriptEvent[];
-}): PiAiRuntime<TTools, TInput> & {
-  toolCalls: TranscriptToolCallEvent[];
-} {
-  const toolCalls: TranscriptToolCallEvent[] = [];
+}): PiAiRuntime<TTools, TInput> {
   const eventSink: PiAiEventSink = {
     message: (event) => {
       events.push(event);
@@ -1501,7 +1495,10 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
           signal: context.signal,
           setArtifact: context.setArtifact,
         } satisfies PiAiToolContext<TInput>;
-        const toolCallId = createRuntimeToolCallId(toolName, toolCalls.length);
+        const toolCallId = createRuntimeToolCallId(
+          toolName,
+          countToolCallEvents(events),
+        );
         const call: TranscriptToolCallEvent = {
           type: "tool_call",
           id: toolCallId,
@@ -1512,7 +1509,6 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
 
         try {
           if (!isNativeImplementationCall) {
-            toolCalls.push(call);
             events.push(call);
           }
 
@@ -1574,7 +1570,6 @@ function createRuntime<TInput, TTools extends PiAiToolset<TInput>>({
     tools: runtimeTools,
     events: eventSink,
     signal: context.signal,
-    toolCalls,
   };
 }
 
@@ -1778,6 +1773,10 @@ function isLegacyNativeToolReplayMarker(
       "version" in value &&
       (value as { version?: unknown }).version === 1,
   );
+}
+
+function countToolCallEvents(events: readonly TranscriptEvent[]) {
+  return events.filter((event) => event.type === "tool_call").length;
 }
 
 function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {

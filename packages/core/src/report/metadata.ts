@@ -1,19 +1,5 @@
 import { z } from "zod";
-import {
-  HarnessRunSchema,
-  NormalizedErrorSchema,
-  NormalizedSessionSchema,
-  NormalizedSpanEventSchema,
-  NormalizedSpanSchema,
-  TranscriptMessageEventSchema,
-  TranscriptToolCallEventSchema,
-  TranscriptToolResultEventSchema,
-  NormalizedTraceSchema,
-  messagesToTranscriptEvents,
-  TimingSummarySchema,
-  ToolCallSchema,
-  UsageSummarySchema,
-} from "../harness";
+import { HarnessRunSchema, ToolCallSchema } from "../harness";
 import { JsonObjectSchema, JsonValueSchema } from "../json";
 import { isJsonObject, NullableFiniteNumberSchema } from "../schema-utils";
 
@@ -65,129 +51,20 @@ export const EvalTaskMetaSchema = z
 /** Combined eval and harness metadata stored on a Vitest assertion. */
 export type EvalTaskMeta = z.infer<typeof EvalTaskMetaSchema>;
 
-const LenientToolCallSchema = z.preprocess(
-  normalizePersistedToolCall,
-  z.discriminatedUnion("status", [
-    z
-      .object({
-        name: z.string(),
-        arguments: JsonObjectSchema.optional(),
-        status: z.literal("pending"),
-      })
-      .strip(),
-    z
-      .object({
-        name: z.string(),
-        arguments: JsonObjectSchema.optional(),
-        status: z.literal("ok"),
-        result: JsonValueSchema.optional(),
-      })
-      .strip(),
-    z
-      .object({
-        name: z.string(),
-        arguments: JsonObjectSchema.optional(),
-        status: z.literal("error"),
-        error: NormalizedErrorSchema,
-      })
-      .strip(),
-  ]),
-);
-const LenientTranscriptEventSchema = z.union([
-  TranscriptMessageEventSchema.strip(),
-  TranscriptToolCallEventSchema.strip(),
-  TranscriptToolResultEventSchema.strip(),
-]);
-const LenientSessionSchema = z.preprocess(
-  normalizePersistedSession,
-  NormalizedSessionSchema.extend({
-    events: z.array(LenientTranscriptEventSchema),
-  }).strip(),
-);
-const LenientSpanEventSchema = NormalizedSpanEventSchema.strip();
-const LenientSpanSchema = NormalizedSpanSchema.extend({
-  events: z.array(LenientSpanEventSchema).optional().catch(undefined),
-}).strip();
-const LenientTraceSchema = NormalizedTraceSchema.extend({
-  spans: z.array(LenientSpanSchema).default([]).catch([]),
-}).strip();
-const LenientHarnessRunSchema = HarnessRunSchema.extend({
-  session: LenientSessionSchema,
-  usage: UsageSummarySchema.strip().default({}),
-  timings: TimingSummarySchema.strip().optional(),
-  traces: z.array(LenientTraceSchema).optional().catch(undefined),
-}).strip();
-const LenientHarnessMetaSchema = HarnessMetaSchema.extend({
-  run: LenientHarnessRunSchema.optional().catch(undefined),
-}).strip();
-const LenientEvalScoreSchema = EvalScoreSchema.strip();
-const LenientEvalMetaSchema = EvalMetaSchema.extend({
-  scores: z.array(LenientEvalScoreSchema).optional().catch(undefined),
-  toolCalls: z.array(LenientToolCallSchema).optional().catch(undefined),
-}).strip();
-
 /** Reads eval metadata from an arbitrary Vitest assertion meta value. */
 export function readEvalTaskMeta(input: unknown): EvalTaskMeta | undefined {
   if (!isJsonObject(input)) {
     return undefined;
   }
 
-  const evalResult = LenientEvalMetaSchema.safeParse(input.eval);
-  const harnessResult = LenientHarnessMetaSchema.safeParse(input.harness);
-  const meta: EvalTaskMeta = {
-    ...(evalResult.success && input.eval !== undefined
-      ? { eval: evalResult.data }
-      : {}),
-    ...(harnessResult.success && input.harness !== undefined
-      ? { harness: harnessResult.data }
-      : {}),
+  const meta = {
+    ...(input.eval !== undefined ? { eval: input.eval } : {}),
+    ...(input.harness !== undefined ? { harness: input.harness } : {}),
   };
-
-  return meta.eval || meta.harness ? meta : undefined;
-}
-
-function normalizePersistedToolCall(input: unknown) {
-  if (!isJsonObject(input) || typeof input.status === "string") {
-    return input;
+  if (!("eval" in meta) && !("harness" in meta)) {
+    return undefined;
   }
 
-  if (input.error !== undefined) {
-    return { ...input, status: "error" };
-  }
-
-  return { ...input, status: "ok" };
-}
-
-// This is only for persisted artifacts that used message transport. Current
-// harness runs must store `session.events`. Malformed or
-// empty message sets are left unchanged so the strict schema rejects the run
-// rather than surfacing an empty transcript.
-function normalizePersistedSession(input: unknown) {
-  if (!isJsonObject(input) || Array.isArray(input.events)) {
-    return input;
-  }
-
-  const messages = input.messages;
-  if (!Array.isArray(messages) || !messages.every(isJsonObject)) {
-    return input;
-  }
-
-  let events: ReturnType<typeof messagesToTranscriptEvents>;
-  try {
-    events = messagesToTranscriptEvents(messages as never[]);
-  } catch {
-    return input;
-  }
-  if (events.length === 0) {
-    return input;
-  }
-  const eventResults = events.map((event) =>
-    LenientTranscriptEventSchema.safeParse(event),
-  );
-  if (eventResults.some((result) => !result.success)) {
-    return input;
-  }
-  const parsedEvents = eventResults.map((result) => result.data);
-
-  return { ...input, events: parsedEvents };
+  const result = EvalTaskMetaSchema.safeParse(meta);
+  return result.success ? result.data : undefined;
 }

@@ -120,10 +120,12 @@ The adapter provides:
   values require an explicit `output` selector
 - opt-in replay metadata for local function tools configured with `toolReplay`
 
-Successful tool-call transcripts come from OpenAI Agents run items such as
-`newItems` and `output`. Runtime wrappers can enrich matching run items with
-execution and replay metadata, and they provide transcript events for custom
-entrypoints that return no provider items.
+Successful tool-call transcripts come from OpenAI Agents generated items:
+`newItems` first, then `output` only when it contains recognizable SDK
+model-output items. SDK `history` is used as a complete-history source when no
+generated items are available. Runtime wrappers can enrich matching run items
+with execution and replay metadata, and they provide transcript events for
+custom entrypoints that return no provider items.
 
 ## Tool Replay
 

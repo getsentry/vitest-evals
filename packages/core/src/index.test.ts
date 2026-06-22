@@ -266,7 +266,7 @@ describe("readEvalTaskMeta", () => {
     });
   });
 
-  test("normalizes persisted eval tool calls without status", () => {
+  test("rejects persisted eval tool calls without status", () => {
     expect(
       readEvalTaskMeta({
         eval: {
@@ -284,26 +284,10 @@ describe("readEvalTaskMeta", () => {
           ],
         },
       }),
-    ).toMatchObject({
-      eval: {
-        toolCalls: [
-          {
-            name: "lookupInvoice",
-            status: "ok",
-          },
-          {
-            name: "createRefund",
-            status: "error",
-            error: {
-              message: "amount mismatch",
-            },
-          },
-        ],
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("normalizes persisted session messages into events", () => {
+  test("drops persisted session messages instead of adapting old transcript shapes", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -342,39 +326,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toMatchObject({
-      harness: {
-        run: {
-          session: {
-            events: [
-              {
-                type: "message",
-                role: "user",
-                content: "Refund invoice inv_123",
-              },
-              {
-                type: "message",
-                role: "assistant",
-                content: "Checking invoice",
-              },
-              {
-                type: "tool_call",
-                id: "call_lookup",
-                name: "lookupInvoice",
-              },
-              {
-                type: "tool_result",
-                toolCallId: "call_lookup",
-                name: "lookupInvoice",
-              },
-            ],
-          },
-        },
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("normalizes message tool calls without provider ids", () => {
+  test("drops persisted inline message tool calls", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -400,34 +355,7 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toMatchObject({
-      harness: {
-        name: "message-transport",
-        run: {
-          session: {
-            events: [
-              {
-                type: "message",
-                role: "assistant",
-                content: "Checking invoice",
-              },
-              {
-                type: "tool_call",
-                id: "message-0:tool-call-0",
-                name: "lookupInvoice",
-              },
-              {
-                type: "tool_result",
-                toolCallId: "message-0:tool-call-0",
-                content: {
-                  refundable: true,
-                },
-              },
-            ],
-          },
-        },
-      },
-    });
+    ).toBeUndefined();
   });
 
   test("drops separated tool messages without tool call ids", () => {
@@ -459,11 +387,7 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toEqual({
-      harness: {
-        name: "message-transport",
-      },
-    });
+    ).toBeUndefined();
   });
 
   test("drops persisted message transport that converts to no events", () => {
@@ -479,11 +403,7 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toEqual({
-      harness: {
-        name: "message-transport",
-      },
-    });
+    ).toBeUndefined();
   });
 
   test("drops persisted message transport with non-object entries", () => {
@@ -513,14 +433,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toEqual({
-      harness: {
-        name: "message-transport",
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("defaults missing harness errors for persisted run metadata", () => {
+  test("rejects harness runs without errors", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -535,20 +451,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toMatchObject({
-      harness: {
-        name: "persisted",
-        run: {
-          errors: [],
-          usage: {
-            totalTokens: 42,
-          },
-        },
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("defaults missing harness usage for partial run metadata", () => {
+  test("rejects harness runs without usage", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -560,21 +466,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toMatchObject({
-      harness: {
-        name: "partial",
-        run: {
-          errors: [],
-          session: {
-            events: [{ type: "message", role: "user", content: "hello" }],
-          },
-          usage: {},
-        },
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("preserves harness metadata when optional run arrays are partially invalid", () => {
+  test("rejects harness runs with invalid trace data", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -598,23 +493,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toMatchObject({
-      harness: {
-        name: "partial",
-        run: {
-          session: {
-            events: [{ type: "message", role: "user", content: "hello" }],
-          },
-          traces: [{ spans: [] }],
-          usage: {
-            totalTokens: 42,
-          },
-        },
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("preserves harness name when run metadata cannot be parsed", () => {
+  test("rejects harness metadata when run metadata cannot be parsed", () => {
     expect(
       readEvalTaskMeta({
         harness: {
@@ -624,11 +506,7 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toEqual({
-      harness: {
-        name: "partial",
-      },
-    });
+    ).toBeUndefined();
   });
 
   test("does not default malformed persisted sessions to empty events", () => {
@@ -641,14 +519,10 @@ describe("readEvalTaskMeta", () => {
           },
         },
       }),
-    ).toEqual({
-      harness: {
-        name: "malformed",
-      },
-    });
+    ).toBeUndefined();
   });
 
-  test("preserves known metadata when persisted blocks include unknown keys", () => {
+  test("rejects metadata blocks with unknown keys", () => {
     const meta = readEvalTaskMeta({
       eval: {
         avgScore: 1,
@@ -692,67 +566,30 @@ describe("readEvalTaskMeta", () => {
       },
     });
 
-    expect(meta).toMatchObject({
-      eval: {
-        avgScore: 1,
-        scores: [
-          {
-            name: "StructuredOutputJudge",
-            score: 1,
-          },
-        ],
-        toolCalls: [
-          {
-            name: "lookupInvoice",
-          },
-        ],
-      },
-      harness: {
-        run: {
-          errors: [],
-          session: {
-            events: [
-              {
-                type: "tool_call",
-                id: "call_lookup",
-                name: "lookupInvoice",
-              },
-            ],
-          },
-          usage: {
-            totalTokens: 42,
-          },
-        },
-      },
-    });
-    expect(meta?.eval).not.toHaveProperty("estimatedCostUsd");
-    expect(meta?.harness?.run?.usage).not.toHaveProperty("estimatedCostUsd");
+    expect(meta).toBeUndefined();
   });
 });
 
 describe("messagesToTranscriptEvents", () => {
-  test("accepts OpenAI-style chat tool call aliases", () => {
+  test("accepts message tool calls", () => {
     expect(
       messagesToTranscriptEvents([
         {
           role: "assistant",
           content: "Checking invoice",
-          tool_calls: [
+          toolCalls: [
             {
               id: "call_lookup",
-              type: "function",
-              function: {
-                name: "lookupInvoice",
-                arguments: JSON.stringify({
-                  invoiceId: "inv_123",
-                }),
+              name: "lookupInvoice",
+              arguments: {
+                invoiceId: "inv_123",
               },
             },
           ],
         },
         {
           role: "tool",
-          tool_call_id: "call_lookup",
+          toolCallId: "call_lookup",
           content: {
             refundable: true,
           },
@@ -841,8 +678,8 @@ describe("messagesToTranscriptEvents", () => {
     ]);
   });
 
-  test("does not duplicate tool calls when content parts and aliases are both present", () => {
-    expect(
+  test("rejects mixed assistant tool call representations", () => {
+    expect(() =>
       messagesToTranscriptEvents([
         {
           role: "assistant",
@@ -867,14 +704,34 @@ describe("messagesToTranscriptEvents", () => {
           ],
         },
       ]),
+    ).toThrow(
+      "Assistant messages must not mix tool-call content parts with toolCalls.",
+    );
+  });
+
+  test("keeps system and user JSON arrays as message content", () => {
+    expect(
+      messagesToTranscriptEvents([
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "not-a-tool",
+            },
+          ],
+        },
+      ]),
     ).toEqual([
       {
-        type: "tool_call",
-        id: "call_lookup",
-        name: "lookupInvoice",
-        arguments: {
-          invoiceId: "inv_123",
-        },
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "not-a-tool",
+          },
+        ],
       },
     ]);
   });
@@ -887,9 +744,142 @@ describe("messagesToTranscriptEvents", () => {
           content: {
             refundable: true,
           },
-        },
+        } as never,
       ]),
     ).toThrow("Tool result messages must include toolCallId.");
+  });
+
+  test("rejects snake_case top-level tool result ids", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "tool",
+          tool_call_id: "call_lookup",
+          content: {
+            refundable: true,
+          },
+        } as never,
+      ]),
+    ).toThrow("Tool result messages must include toolCallId.");
+  });
+
+  test("rejects non-string top-level tool result ids", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "tool",
+          toolCallId: undefined,
+          content: {
+            refundable: true,
+          },
+        } as never,
+      ]),
+    ).toThrow("Tool result messages must include toolCallId.");
+  });
+
+  test("rejects mixed tool result content part ids", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "tool",
+          toolCallId: "call_lookup",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+              output: {
+                refundable: true,
+              },
+            },
+          ],
+        },
+      ]),
+    ).toThrow(
+      "Tool-result content parts must not include top-level toolCallId.",
+    );
+  });
+
+  test("rejects assistant tool calls without a name", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          toolCalls: [
+            {
+              id: "call_lookup",
+            } as never,
+          ],
+        },
+      ]),
+    ).toThrow("Assistant tool calls must include name.");
+  });
+
+  test("rejects inline assistant tool call outcomes", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          toolCalls: [
+            {
+              id: "call_lookup",
+              name: "lookupInvoice",
+              result: {
+                refundable: true,
+              },
+            } as never,
+          ],
+        },
+      ]),
+    ).toThrow("Assistant tool calls must use separate tool result messages.");
+  });
+
+  test("rejects malformed AI SDK-style tool content parts", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_lookup",
+            } as never,
+          ],
+        },
+      ]),
+    ).toThrow(
+      "Tool-call content parts require assistant role, toolCallId, and toolName.",
+    );
+
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_lookup",
+            } as never,
+          ],
+        },
+      ]),
+    ).toThrow("Tool-result content parts require tool role and toolCallId.");
+  });
+
+  test("rejects unsupported typed content parts", () => {
+    expect(() =>
+      messagesToTranscriptEvents([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "function_call",
+              callId: "call_lookup",
+              name: "lookupInvoice",
+            },
+          ],
+        },
+      ]),
+    ).toThrow("Message content parts must use the harness message contract.");
   });
 });
 

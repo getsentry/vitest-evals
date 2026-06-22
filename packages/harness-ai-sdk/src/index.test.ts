@@ -689,6 +689,205 @@ test("supports a typed output selector with inferred diagnostics", async () => {
   expect(result.usage.totalTokens).toBe(7);
 });
 
+test("attaches runtime tool calls when custom run succeeds without SDK steps", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      const toolResult = await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        object: {
+          status: "approved",
+        },
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+  expect(result.session.events).toMatchObject([
+    {
+      role: "user",
+      content: "Refund invoice inv_123",
+    },
+    {
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      role: "assistant",
+      content: {
+        status: "approved",
+      },
+    },
+  ]);
+});
+
+test("ignores app-owned steps fields that are not AI SDK steps", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+
+      return {
+        object: {
+          status: "approved",
+        },
+        steps: [
+          {
+            label: "domain workflow step",
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.usage.toolCalls).toBe(1);
+  expect(toolCalls(result.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      result: {
+        invoiceId: "inv_123",
+        refundable: true,
+      },
+    },
+  ]);
+});
+
+test("does not count runtime tool calls when custom run returns an explicit session", async () => {
+  const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
+    invoiceId,
+    refundable: true,
+  }));
+  const session = {
+    events: [
+      {
+        type: "message",
+        role: "user",
+        content: "Refund invoice inv_123",
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: {
+          status: "approved",
+        },
+      },
+    ],
+  } satisfies NormalizedSession;
+  const harness = aiSdkHarness({
+    tools: {
+      lookupInvoice: {
+        inputSchema: z.object({
+          invoiceId: z.string(),
+        }),
+        execute,
+      },
+    } satisfies AiSdkToolset<string>,
+    run: async ({ runtime }) => {
+      const toolResult = await runtime.tools.lookupInvoice.execute?.(
+        {
+          invoiceId: "inv_123",
+        },
+        {
+          toolCallId: "call_lookup",
+          messages: [],
+        } satisfies ToolExecutionOptions,
+      );
+      const invoiceId =
+        toolResult && !(Symbol.asyncIterator in toolResult)
+          ? toolResult.invoiceId
+          : undefined;
+
+      return {
+        session,
+        object: {
+          status: "approved",
+          invoiceId,
+        },
+      };
+    },
+  });
+
+  const result = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(result.output).toEqual({
+    status: "approved",
+    invoiceId: "inv_123",
+  });
+  expect(result.usage.toolCalls).toBeUndefined();
+  expect(result.session).toEqual(session);
+  expect(toolCalls(result.session)).toEqual([]);
+});
+
 test("attaches partial runtime tool calls when custom run errors", async () => {
   const execute = vi.fn(async ({ invoiceId }: { invoiceId: string }) => ({
     invoiceId,
@@ -881,7 +1080,7 @@ test("omits empty runtime tool error content when custom run errors", async () =
   expect(run?.session.events[2]).not.toHaveProperty("content");
 });
 
-test("does not derive successful transcripts from runtime tool bookkeeping", async () => {
+test("attaches successful runtime tool calls from custom runs", async () => {
   const execute = vi.fn(async () => null);
   const harness = aiSdkHarness({
     tools: {
@@ -918,12 +1117,31 @@ test("does not derive successful transcripts from runtime tool bookkeeping", asy
   );
 
   expect(execute).toHaveBeenCalledTimes(1);
-  expect(run.usage.toolCalls).toBeUndefined();
-  expect(toolCalls(run.session)).toEqual([]);
+  expect(run.usage.toolCalls).toBe(1);
+  expect(toolCalls(run.session)).toMatchObject([
+    {
+      name: "lookupInvoice",
+      arguments: {
+        invoiceId: "inv_123",
+      },
+      result: null,
+    },
+  ]);
   expect(run.session.events).toMatchObject([
     {
       role: "user",
       content: "Refund invoice inv_123",
+    },
+    {
+      type: "tool_call",
+      id: "call_lookup",
+      name: "lookupInvoice",
+    },
+    {
+      type: "tool_result",
+      toolCallId: "call_lookup",
+      name: "lookupInvoice",
+      content: null,
     },
     {
       role: "assistant",
@@ -1248,6 +1466,11 @@ test("aggregates per-step usage when total usage is missing", async () => {
   const harness = aiSdkHarness({
     run: async () => ({
       text: "approved",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 100,
+        totalTokens: 200,
+      },
       steps: [
         {
           stepNumber: 0,
@@ -1325,6 +1548,54 @@ test("aggregates per-step usage when total usage is missing", async () => {
       cacheReadTokens: 3,
     },
   });
+});
+
+test("handles step-like results without model metadata", async () => {
+  const harness = aiSdkHarness({
+    run: async () => ({
+      text: "approved",
+      steps: [
+        {
+          text: "approved",
+          usage: {
+            inputTokens: 3,
+            outputTokens: 4,
+          },
+        },
+      ],
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(run.session.provider).toBeUndefined();
+  expect(run.session.model).toBeUndefined();
+  expect(run.usage).toMatchObject({
+    inputTokens: 3,
+    outputTokens: 4,
+    totalTokens: 7,
+  });
+});
+
+test("ignores malformed AI SDK usage fields", async () => {
+  const harness = aiSdkHarness({
+    run: async () => ({
+      text: "approved",
+      usage: {
+        inputTokens: "3",
+      },
+    }),
+  });
+
+  const run = await harness.run(
+    "Refund invoice inv_123",
+    createHarnessContext({}),
+  );
+
+  expect(run.usage).toEqual({});
 });
 
 test("normalizes arrays and empty objects without dropping positions", async () => {

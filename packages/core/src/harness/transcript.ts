@@ -3,8 +3,9 @@ import { JsonObjectSchema, JsonValueSchema, type JsonValue } from "../json";
 import { FiniteNumberSchema } from "../schema-utils";
 import { NormalizedErrorSchema, type NormalizedError } from "./errors";
 
-// Harness sessions store only ordered transcript events. OpenAI/AI SDK-inspired
-// messages are an input-boundary convenience that normalize into this model.
+// Harness sessions store only ordered transcript events. Message-style inputs
+// are a strict transport convenience that normalize into this model; provider
+// wire formats should be mapped by their harness adapters first.
 
 /** Tool-call event captured in a harness transcript. */
 export const TranscriptToolCallEventSchema = z
@@ -158,38 +159,35 @@ export type TranscriptMessageContentPart =
   | TranscriptMessageToolCallPart
   | TranscriptMessageToolResultPart;
 
-/** Message content accepted at harness input boundaries. */
-export type TranscriptMessageContentInput =
-  | JsonValue
-  | TranscriptMessageContentPart[];
+/** System/user message content accepted at harness input boundaries. */
+export type TranscriptMessageContentInput = JsonValue;
 
-/** Message-transport tool call accepted at harness input boundaries. */
-export type TranscriptMessageToolCall = Omit<
+type TranscriptMessageToolCallBase = Omit<
   TranscriptToolCallEvent,
   "type" | "id" | "name" | "arguments"
 > & {
   /** Tool-call id when the message transport exposes one. */
   id?: string;
-  /** Provider tool-call type when callers pass provider messages directly. */
-  type?: string;
-  /** Tool name when callers use the normalized message transport. */
-  name?: string;
-  /** JSON-safe tool arguments when callers use the normalized message transport. */
+  /** JSON-safe tool arguments in the harness message contract. */
   arguments?: Record<string, JsonValue>;
-  /** OpenAI-style function payload when callers pass chat tool calls directly. */
-  function?: {
-    /** Tool name from the provider function payload. */
-    name: string;
-    /** JSON object or JSON-encoded object arguments. */
-    arguments?: JsonValue;
-  };
-  /** JSON-safe inline result for message transports that nest outcomes. */
-  result?: JsonValue;
-  /** Inline error for message transports that nest outcomes. */
-  error?: NormalizedError;
 };
 
-/** OpenAI/AI SDK-inspired message accepted at harness input boundaries. */
+/** Message-transport tool call accepted at harness input boundaries. */
+export type TranscriptMessageToolCall = TranscriptMessageToolCallBase & {
+  /** Tool name in the harness message contract. */
+  name: string;
+};
+
+type TranscriptTopLevelToolMessage = Omit<
+  TranscriptToolResultEvent,
+  "type" | "toolCallId" | "content"
+> & {
+  role: "tool";
+  toolCallId: string;
+  content?: JsonValue | TranscriptMessageToolResultPart[];
+};
+
+/** Message-style transport accepted at harness input boundaries. */
 export type TranscriptMessageInput =
   | {
       role: "system" | "user";
@@ -198,17 +196,20 @@ export type TranscriptMessageInput =
     }
   | {
       role: "assistant";
-      content?: TranscriptMessageContentInput;
+      content?:
+        | JsonValue
+        | (TranscriptMessageTextPart | TranscriptMessageToolCallPart)[];
       toolCalls?: TranscriptMessageToolCall[];
-      tool_calls?: TranscriptMessageToolCall[];
       metadata?: Record<string, JsonValue>;
     }
-  | (Omit<TranscriptToolResultEvent, "type" | "toolCallId" | "content"> & {
+  | TranscriptTopLevelToolMessage
+  // AI SDK-style message arrays can carry one or more tool-result parts, each
+  // with its own id, so the message itself does not need a top-level id.
+  | {
       role: "tool";
-      toolCallId?: string;
-      tool_call_id?: string;
-      content?: TranscriptMessageContentInput;
-    });
+      content: TranscriptMessageToolResultPart[];
+      metadata?: Record<string, JsonValue>;
+    };
 
 /** Converts message-transport inputs into normalized transcript events. */
 export function messagesToTranscriptEvents(
@@ -224,16 +225,16 @@ export function messagesToTranscriptEvents(
         continue;
       }
 
-      const toolCallId = message.toolCallId ?? message.tool_call_id;
-      if (!toolCallId) {
+      if (!hasTopLevelToolCallId(message)) {
         throw new TypeError("Tool result messages must include toolCallId.");
       }
 
-      events.push(toolResultMessageEvent(message, toolCallId));
+      events.push(toolResultMessageEvent(message, message.toolCallId));
       continue;
     }
 
-    const partEvents = contentPartEvents(message);
+    const partEvents =
+      message.role === "assistant" ? contentPartEvents(message) : undefined;
     const partEventsHaveToolCalls = partEvents?.some(
       (event) => event.type === "tool_call",
     );
@@ -252,24 +253,35 @@ export function messagesToTranscriptEvents(
       continue;
     }
     if (partEventsHaveToolCalls) {
+      if ((message.toolCalls ?? []).length > 0) {
+        throw new TypeError(
+          "Assistant messages must not mix tool-call content parts with toolCalls.",
+        );
+      }
       continue;
     }
 
-    const messageToolCalls = message.toolCalls ?? message.tool_calls ?? [];
+    const messageToolCalls = message.toolCalls ?? [];
     for (const [toolIndex, toolCall] of messageToolCalls.entries()) {
+      const rawToolCall = toolCall as Record<string, unknown>;
+      if (
+        Object.prototype.hasOwnProperty.call(rawToolCall, "result") ||
+        Object.prototype.hasOwnProperty.call(rawToolCall, "error")
+      ) {
+        throw new TypeError(
+          "Assistant tool calls must use separate tool result messages.",
+        );
+      }
+      if (typeof toolCall.name !== "string" || toolCall.name.length === 0) {
+        throw new TypeError("Assistant tool calls must include name.");
+      }
       const id =
         toolCall.id ?? `message-${messageIndex}:tool-call-${toolIndex}`;
-      const name = toolCall.name ?? toolCall.function?.name;
-      if (!name) {
-        continue;
-      }
       events.push({
         type: "tool_call",
         id,
-        name,
-        ...normalizeToolCallArguments(
-          toolCall.arguments ?? toolCall.function?.arguments,
-        ),
+        name: toolCall.name,
+        ...normalizeToolCallArguments(toolCall.arguments),
         ...(toolCall.startedAt ? { startedAt: toolCall.startedAt } : {}),
         ...(toolCall.finishedAt ? { finishedAt: toolCall.finishedAt } : {}),
         ...(toolCall.durationMs !== undefined
@@ -277,29 +289,13 @@ export function messagesToTranscriptEvents(
           : {}),
         ...(toolCall.metadata ? { metadata: toolCall.metadata } : {}),
       });
-      if (toolCall.result !== undefined || toolCall.error) {
-        events.push({
-          type: "tool_result",
-          toolCallId: id,
-          name,
-          ...(toolCall.result !== undefined
-            ? { content: toolCall.result }
-            : {}),
-          ...(toolCall.error ? { error: toolCall.error } : {}),
-          ...(toolCall.startedAt ? { startedAt: toolCall.startedAt } : {}),
-          ...(toolCall.finishedAt ? { finishedAt: toolCall.finishedAt } : {}),
-          ...(toolCall.durationMs !== undefined
-            ? { durationMs: toolCall.durationMs }
-            : {}),
-          ...(toolCall.metadata ? { metadata: toolCall.metadata } : {}),
-        });
-      }
     }
   }
 
   return events;
 }
 
+/** Normalizes strict AI SDK-style content parts and rejects malformed tool parts. */
 function contentPartEvents(
   message: TranscriptMessageInput,
 ): TranscriptEvent[] | undefined {
@@ -314,23 +310,29 @@ function contentPartEvents(
     }
 
     if (part.type === "text" && typeof part.text === "string") {
-      if (message.role !== "tool") {
-        events.push({
-          type: "message",
-          role: message.role,
-          content: part.text,
-          ...recordMetadata(message.metadata),
-        });
+      if (message.role === "tool") {
+        throw new TypeError("Text content parts require message role.");
       }
+      events.push({
+        type: "message",
+        role: message.role,
+        content: part.text,
+        ...recordMetadata(message.metadata),
+      });
       continue;
     }
 
-    if (
-      part.type === "tool-call" &&
-      message.role === "assistant" &&
-      typeof part.toolCallId === "string" &&
-      typeof part.toolName === "string"
-    ) {
+    if (part.type === "tool-call") {
+      if (
+        message.role !== "assistant" ||
+        typeof part.toolCallId !== "string" ||
+        typeof part.toolName !== "string"
+      ) {
+        throw new TypeError(
+          "Tool-call content parts require assistant role, toolCallId, and toolName.",
+        );
+      }
+
       events.push({
         type: "tool_call",
         id: part.toolCallId,
@@ -342,11 +344,18 @@ function contentPartEvents(
       continue;
     }
 
-    if (
-      part.type === "tool-result" &&
-      message.role === "tool" &&
-      typeof part.toolCallId === "string"
-    ) {
+    if (part.type === "tool-result") {
+      if (message.role !== "tool" || typeof part.toolCallId !== "string") {
+        throw new TypeError(
+          "Tool-result content parts require tool role and toolCallId.",
+        );
+      }
+      if (hasTopLevelToolCallId(message)) {
+        throw new TypeError(
+          "Tool-result content parts must not include top-level toolCallId.",
+        );
+      }
+
       events.push({
         type: "tool_result",
         toolCallId: part.toolCallId,
@@ -356,14 +365,19 @@ function contentPartEvents(
         ...jsonTimeFields(part),
         ...jsonMetadata(part.metadata),
       });
+      continue;
     }
+
+    throw new TypeError(
+      "Message content parts must use the harness message contract.",
+    );
   }
 
   return events.length > 0 ? events : undefined;
 }
 
 function toolResultMessageEvent(
-  message: Extract<TranscriptMessageInput, { role: "tool" }>,
+  message: TranscriptTopLevelToolMessage,
   toolCallId: string,
 ): TranscriptToolResultEvent {
   return {
@@ -377,6 +391,12 @@ function toolResultMessageEvent(
     ...timeFields(message),
     ...recordMetadata(message.metadata),
   };
+}
+
+function hasTopLevelToolCallId(
+  message: Extract<TranscriptMessageInput, { role: "tool" }>,
+): message is TranscriptTopLevelToolMessage {
+  return typeof (message as { toolCallId?: unknown }).toolCallId === "string";
 }
 
 function timeFields(
@@ -415,25 +435,13 @@ function jsonMetadata(value: JsonValue | undefined) {
 }
 
 function normalizeToolCallArguments(value: JsonValue | undefined) {
-  const parsed = typeof value === "string" ? parseJsonObject(value) : value;
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-    ? { arguments: parsed as Record<string, JsonValue> }
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { arguments: value as Record<string, JsonValue> }
     : {};
 }
 
 function isJsonObject(value: unknown): value is Record<string, JsonValue> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function parseJsonObject(value: string) {
-  try {
-    const parsed = JSON.parse(value) as JsonValue;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /** Returns true for normalized message transcript events. */
