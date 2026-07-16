@@ -116,6 +116,21 @@ export function collectReportWorkspace(
           continue;
         }
 
+        const evalMeta =
+          meta.eval ??
+          (meta.harness
+            ? {
+                avgScore:
+                  assertion.status === "passed"
+                    ? 1
+                    : assertion.status === "failed"
+                      ? 0
+                      : null,
+                scores: [],
+                thresholdFailed: false,
+              }
+            : undefined);
+
         runCases.push({
           id: createCaseId(runId, file.name, assertion),
           runId,
@@ -133,7 +148,7 @@ export function collectReportWorkspace(
             : {}),
           ...(assertion.location ? { location: assertion.location } : {}),
           failureMessages: assertion.failureMessages ?? [],
-          ...(meta.eval ? { eval: meta.eval } : {}),
+          ...(evalMeta ? { eval: evalMeta } : {}),
           ...(meta.harness ? { harness: meta.harness } : {}),
         });
       }

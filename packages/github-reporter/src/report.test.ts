@@ -176,6 +176,35 @@ describe("collectEvalReport", () => {
     });
   });
 
+  test("counts harness-only assertions as scored evals", () => {
+    const json = structuredClone(sampleJson);
+    const assertion = json.testResults[0]!.assertionResults[0]!;
+    assertion.status = "passed";
+    assertion.failureMessages = [];
+    assertion.meta = {
+      harness: (assertion.meta as any).harness,
+    };
+
+    const report = collectEvalReport(json, {
+      workspace: "/repo",
+    });
+
+    expect(report.totals).toMatchObject({
+      evalTotal: 1,
+      evalPassed: 1,
+      evalFailed: 0,
+    });
+    expect(report.score).toEqual({
+      average: 1,
+      minimum: 1,
+    });
+    expect(report.cases[0]?.eval).toEqual({
+      avgScore: 1,
+      thresholdFailed: false,
+      scores: [],
+    });
+  });
+
   test("does not normalize provider-specific cost as usage", () => {
     const json = structuredClone(sampleJson);
     const usage = (json.testResults[0]?.assertionResults[0]?.meta as any)

@@ -965,6 +965,42 @@ describe("collectReportWorkspace", () => {
     });
   });
 
+  test("defaults harness-only case scores from Vitest status", () => {
+    const json = structuredClone(sampleJson);
+    const passed = json.testResults[0]!.assertionResults[0]!;
+    passed.status = "passed";
+    passed.failureMessages = [];
+    passed.meta = {
+      harness: (passed.meta as any).harness,
+    };
+
+    const failed = structuredClone(passed);
+    failed.fullName = "refund agent failed assertions";
+    failed.title = "failed assertions";
+    failed.status = "failed";
+    failed.failureMessages = ["expected approved, received denied"];
+
+    const skipped = structuredClone(passed);
+    skipped.fullName = "refund agent skipped assertions";
+    skipped.title = "skipped assertions";
+    skipped.status = "skipped";
+
+    json.testResults[0]!.assertionResults = [passed, failed, skipped];
+
+    const workspace = collectReportWorkspace(json);
+
+    expect(workspace.cases.map((testCase) => testCase.eval)).toEqual([
+      { avgScore: 1, scores: [], thresholdFailed: false },
+      { avgScore: 0, scores: [], thresholdFailed: false },
+      { avgScore: null, scores: [], thresholdFailed: false },
+    ]);
+    expect(workspace.runs[0]?.totals).toMatchObject({
+      evalTotal: 3,
+      evalPassed: 1,
+      evalFailed: 1,
+    });
+  });
+
   test("collects eval-only cases when avgScore is null", () => {
     const json = structuredClone(sampleJson);
     json.testResults[0]!.assertionResults = [
