@@ -120,8 +120,8 @@ importers:
         specifier: ^0.39.2
         version: 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
       '@sentry/starlight-theme':
-        specifier: ^0.6.0
-        version: 0.6.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
+        specifier: ^0.8.0
+        version: 0.8.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))
       '@vercel/functions':
         specifier: ^2.0.0
         version: 2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31)
@@ -1409,8 +1409,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sentry/starlight-theme@0.6.0':
-    resolution: {integrity: sha512-olQRVtrN9nJWoVVWhxUqk3KVEBCXRF2xLq4Pkd2/eyfpfzJTzfxFbAI4Sg/GV11IK3fFwNviIyFUPQR6aHsfKA==}
+  '@sentry/starlight-theme@0.8.0':
+    resolution: {integrity: sha512-Stcb8D2EqO309jfhugJJxM3tf0vq+zg1XV1dA0AVJMK81sMa8AWHKajqgy60rhLvr22rpJnc2UextZw/szd2BA==}
     engines: {node: '>=22.12.0'}
     peerDependencies:
       '@astrojs/starlight': '>=0.39.0'
@@ -4077,6 +4077,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0
@@ -5795,7 +5796,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.46.2':
     optional: true
 
-  '@sentry/starlight-theme@0.6.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
+  '@sentry/starlight-theme@0.8.0(@astrojs/starlight@0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3))':
     dependencies:
       '@astrojs/starlight': 0.39.2(astro@6.3.5(@types/node@25.5.0)(@vercel/functions@2.2.13(@aws-sdk/credential-provider-web-identity@3.972.31))(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.46.2)(yaml@2.9.0))(typescript@5.8.3)
       '@fontsource-variable/rubik': 5.2.8
