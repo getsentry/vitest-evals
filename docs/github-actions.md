@@ -4,6 +4,9 @@
 surface for `vitest-evals`. It reads Vitest JSON output and publishes GitHub
 job summaries, workflow annotations, and optional Check Runs.
 
+Public docs mirror this guide at
+[vitest-evals.sentry.dev/docs/github](https://vitest-evals.sentry.dev/docs/github).
+
 Use JSON as the eval artifact because it preserves `task.meta.eval` and
 `task.meta.harness`; JUnit XML does not carry the full eval metadata.
 

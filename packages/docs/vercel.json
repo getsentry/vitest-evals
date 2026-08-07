@@ -15,7 +15,7 @@
     },
     {
       "source": "/github-actions",
-      "destination": "/docs#github",
+      "destination": "/docs/github",
       "permanent": true
     }
   ],
