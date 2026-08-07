@@ -400,14 +400,68 @@ jobs:
           ACTION_STATUS: ${{ steps.reporter_action.outputs.status }}
           ACTION_RESULTS_COUNT: ${{ steps.reporter_action.outputs['results-count'] }}
           ACTION_EVALS_TOTAL: ${{ steps.reporter_action.outputs['evals-total'] }}
+          ACTION_EVALS_PASSED: ${{ steps.reporter_action.outputs['evals-passed'] }}
           ACTION_EVALS_FAILED: ${{ steps.reporter_action.outputs['evals-failed'] }}
+          ACTION_PASS_RATE: ${{ steps.reporter_action.outputs['pass-rate'] }}
           ACTION_SCORE_AVERAGE: ${{ steps.reporter_action.outputs['score-average'] }}
+          ACTION_GATE_STATUS: ${{ steps.reporter_action.outputs['gate-status'] }}
+          ACTION_GATE_TITLE: ${{ steps.reporter_action.outputs['gate-title'] }}
           ACTION_CHECK_URL: ${{ steps.reporter_action.outputs['check-url'] }}
         run: |
           set -euo pipefail
           test "$ACTION_STATUS" = "failed"
+          test "$ACTION_GATE_STATUS" = "failed"
           test "$ACTION_RESULTS_COUNT" = "1"
           test "$ACTION_EVALS_TOTAL" = "10"
+          test "$ACTION_EVALS_PASSED" = "8"
           test "$ACTION_EVALS_FAILED" = "2"
+          test "$ACTION_PASS_RATE" = "0.80"
           test "$ACTION_SCORE_AVERAGE" = "0.59"
+          test "$ACTION_GATE_TITLE" = "2 eval failures"
           test -z "$ACTION_CHECK_URL"
+
+      - name: Run gated reporter action above floor
+        id: reporter_action_gated_pass
+        uses: ./
+        with:
+          results: tmp/github-reporter-smoke/vitest-results.json
+          publish-summary: false
+          publish-annotations: true
+          publish-check: false
+          min-pass-rate: "0.7"
+
+      - name: Assert gated pass outputs
+        env:
+          ACTION_STATUS: ${{ steps.reporter_action_gated_pass.outputs.status }}
+          ACTION_GATE_STATUS: ${{ steps.reporter_action_gated_pass.outputs['gate-status'] }}
+          ACTION_GATE_TITLE: ${{ steps.reporter_action_gated_pass.outputs['gate-title'] }}
+          ACTION_PASS_RATE: ${{ steps.reporter_action_gated_pass.outputs['pass-rate'] }}
+          ACTION_EVALS_FAILED: ${{ steps.reporter_action_gated_pass.outputs['evals-failed'] }}
+        run: |
+          set -euo pipefail
+          test "$ACTION_STATUS" = "passed"
+          test "$ACTION_GATE_STATUS" = "passed"
+          test "$ACTION_PASS_RATE" = "0.80"
+          test "$ACTION_EVALS_FAILED" = "2"
+          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — floor 70.0%"
+
+      - name: Run gated reporter action below floor
+        id: reporter_action_gated_fail
+        continue-on-error: true
+        uses: ./
+        with:
+          results: tmp/github-reporter-smoke/vitest-results.json
+          publish-summary: false
+          publish-check: false
+          min-pass-rate: "0.9"
+
+      - name: Assert gated fail outputs
+        env:
+          ACTION_OUTCOME: ${{ steps.reporter_action_gated_fail.outcome }}
+          ACTION_STATUS: ${{ steps.reporter_action_gated_fail.outputs.status }}
+          ACTION_GATE_TITLE: ${{ steps.reporter_action_gated_fail.outputs['gate-title'] }}
+        run: |
+          set -euo pipefail
+          test "$ACTION_OUTCOME" = "failure"
+          test "$ACTION_STATUS" = "failed"
+          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — required 90.0%"

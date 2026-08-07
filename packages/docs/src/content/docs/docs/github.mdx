@@ -51,7 +51,22 @@ jobs:
           fail-on-failures: true
 ```
 
-Use `fail-on-failures: true` when eval failures should block the workflow.
+Use `fail-on-failures: true` when every eval case must pass. For qualitative
+suites that tolerate some misses, prefer a score floor:
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results.json
+    publish-check: true
+    min-pass-rate: 0.8
+```
+
+When a gate is configured, `status`, the Check Run conclusion/title, and step
+exit all follow the gate decision (for example
+`Eval pass rate 63.7% — required 80.0%`) instead of failing on any single case.
+Quality misses stay visible as warnings when the suite is still above the floor.
 
 ## Sharded Evals
 
@@ -74,11 +89,13 @@ reducer job.
   with:
     results: eval-results/*.json
     publish-check: true
-    fail-on-failures: true
+    min-pass-rate: 0.8
 ```
 
 Keep each shard’s JSON artifact distinct. The reducer job should be the only job
-that publishes the combined report.
+that publishes the combined report. When the reducer owns the gate, shard jobs
+can use `continue-on-error` so qualitative misses still upload JSON while
+missing result files remain hard failures.
 
 ## Permissions
 

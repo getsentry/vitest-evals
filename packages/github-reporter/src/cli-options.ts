@@ -6,6 +6,8 @@ export type CliOptions = {
   checkRun: boolean;
   failOnFailures: boolean;
   failOnCheckError: boolean;
+  minPassRate?: number;
+  minScoreAverage?: number;
   maxAnnotations?: number;
   maxFailures?: number;
   checkRunId?: number;
@@ -64,6 +66,12 @@ export function parseCliArgs(
         break;
       case "--fail-on-check-error":
         options.failOnCheckError = true;
+        break;
+      case "--min-pass-rate":
+        options.minPassRate = readRatio(args, ++index, arg);
+        break;
+      case "--min-score-average":
+        options.minScoreAverage = readRatio(args, ++index, arg);
         break;
       case "--max-annotations":
         options.maxAnnotations = readInteger(args, ++index, arg);
@@ -133,4 +141,13 @@ function readInteger(args: string[], index: number, flag: string) {
     throw new Error(`Invalid integer for ${flag}`);
   }
   return Number(rawValue);
+}
+
+function readRatio(args: string[], index: number, flag: string) {
+  const rawValue = readValue(args, index, flag);
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(`Invalid ratio for ${flag}`);
+  }
+  return parsed;
 }

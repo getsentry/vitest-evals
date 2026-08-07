@@ -27,6 +27,9 @@ async function main() {
     checkRunId: options.checkRunId,
     checkName: options.checkName,
     failOnCheckError: options.failOnCheckError,
+    failOnFailures: options.failOnFailures,
+    minPassRate: options.minPassRate,
+    minScoreAverage: options.minScoreAverage,
     maxAnnotations: options.maxAnnotations,
     maxFailures: options.maxFailures,
     repository: options.repository,
@@ -35,7 +38,8 @@ async function main() {
     warn,
   });
 
-  if (options.failOnFailures && result.report.status === "failed") {
+  if (result.shouldFail) {
+    console.error(result.gate.message);
     process.exitCode = 1;
   }
 }
@@ -59,7 +63,9 @@ function usage() {
     "  --annotations            Emit GitHub workflow-command annotations",
     "  --no-annotations         Disable workflow-command annotations",
     "  --check-run              Publish a GitHub Check Run when configured",
-    "  --fail-on-failures       Exit non-zero when the combined report failed",
+    "  --fail-on-failures       Exit non-zero when any eval case failed",
+    "  --min-pass-rate <0-1>    Exit non-zero when eval pass rate is below this floor",
+    "  --min-score-average <0-1> Exit non-zero when average score is below this floor",
     "  --fail-on-check-error    Fail when Check Run publishing fails",
     "  --check-run-id <id>      Update an existing Check Run",
     "  --check-name <name>      Check Run name (default: vitest-evals)",

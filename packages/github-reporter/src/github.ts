@@ -1,5 +1,6 @@
 import { buildCheckAnnotations } from "./annotations";
-import { renderJobSummary, type SummaryOptions } from "./summary";
+import { type EvalGateResult, evaluateEvalGate } from "./gate";
+import { type SummaryOptions, renderJobSummary } from "./summary";
 import type { EvalReport } from "./types";
 
 /** Options for creating or updating a GitHub Check Run. */
@@ -11,6 +12,11 @@ export type PublishCheckRunOptions = SummaryOptions & {
   apiUrl?: string;
   checkRunId?: number;
   maxAnnotations?: number;
+  /**
+   * Suite gate decision. When omitted, the report is evaluated with the
+   * default advisory policy so title/conclusion stay consistent.
+   */
+  gate?: EvalGateResult;
 };
 
 /** Result of attempting to publish a GitHub Check Run. */
@@ -106,24 +112,18 @@ function buildCheckRunPayload(
   report: EvalReport,
   options: PublishCheckRunOptions,
 ) {
+  const gate = options.gate ?? evaluateEvalGate(report);
   const annotations = buildCheckAnnotations(report, {
     maxAnnotations: options.maxAnnotations,
+    gate,
   });
-  const title =
-    report.failures.length === 0 && report.status === "passed"
-      ? "No eval failures"
-      : report.failures.length === 0
-        ? "Vitest run failed"
-        : `${report.failures.length} eval failure${
-            report.failures.length === 1 ? "" : "s"
-          }`;
 
   return {
     status: "completed",
-    conclusion: report.status === "passed" ? "success" : "failure",
+    conclusion: gate.ok ? "success" : "failure",
     completed_at: new Date().toISOString(),
     output: {
-      title,
+      title: gate.title,
       summary: truncateCheckSummary(
         renderJobSummary(report, {
           ...options,
@@ -131,6 +131,7 @@ function buildCheckRunPayload(
           maxReasonChars: options.maxReasonChars ?? 4000,
           maxOutputChars: options.maxOutputChars ?? 2000,
           maxToolCalls: options.maxToolCalls ?? 10,
+          gate,
         }),
       ),
       annotations,

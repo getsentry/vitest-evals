@@ -32,9 +32,15 @@ inputs:
     required: false
     default: "${{ github.token }}"
   fail-on-failures:
-    description: "Fail the action when the combined eval report failed."
+    description: "Fail the action when any eval case failed. Equivalent to min-pass-rate: 1."
     required: false
     default: "false"
+  min-pass-rate:
+    description: "Minimum fraction of eval cases that must pass (0-1). Example: 0.8 requires an 80% pass rate."
+    required: false
+  min-score-average:
+    description: "Minimum average eval score across scored cases (0-1)."
+    required: false
   max-annotations:
     description: "Maximum number of failure annotations to publish. Check Run annotations are capped at 50."
     required: false
@@ -44,15 +50,27 @@ inputs:
 
 outputs:
   status:
-    description: "Combined report status: passed or failed."
+    description: "Effective CI status: passed or failed. Follows the configured gate when set; otherwise mirrors the raw report."
   results-count:
     description: "Number of Vitest JSON result files included."
   evals-total:
     description: "Total eval cases included in the report."
+  evals-passed:
+    description: "Passed eval cases included in the report."
   evals-failed:
     description: "Failed eval cases included in the report."
+  pass-rate:
+    description: "Eval pass rate as a 0-1 ratio (for example 0.80), or n/a."
   score-average:
     description: "Average eval score across the combined report."
+  score-minimum:
+    description: "Minimum eval score across the combined report."
+  gate-status:
+    description: "Same value as status. Kept for explicit gate wiring."
+  gate-title:
+    description: "Short gate title used for Check Runs and suite-level annotations."
+  gate-message:
+    description: "Human-readable gate decision message."
   check-url:
     description: "URL of the published GitHub Check Run, when available."
 

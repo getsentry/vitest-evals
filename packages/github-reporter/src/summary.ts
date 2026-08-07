@@ -1,3 +1,5 @@
+import type { EvalGateResult } from "./gate";
+import { formatPercent } from "./gate";
 import type { EvalCase, EvalReport, ToolCallSummary } from "./types";
 import {
   compactLine,
@@ -17,6 +19,7 @@ export type SummaryOptions = {
   maxReasonChars?: number;
   maxOutputChars?: number;
   maxToolCalls?: number;
+  gate?: EvalGateResult;
 };
 
 const DEFAULT_MAX_FAILURES = 20;
@@ -43,7 +46,7 @@ export function renderJobSummary(
   const lines: string[] = [
     "# vitest-evals",
     "",
-    ...renderSummaryTable(report, nonEvalFailures),
+    ...renderSummaryTable(report, nonEvalFailures, options.gate),
     "",
     ...renderScoreDistribution(report),
     "## Results",
@@ -51,14 +54,18 @@ export function renderJobSummary(
   ];
 
   if (report.failures.length > 0) {
-    lines.push("### Failures", "");
+    const failureHeading =
+      options.gate?.ok === true ? "### Quality Misses" : "### Failures";
+    lines.push(failureHeading, "");
     failures.forEach((testCase, index) => {
       lines.push(...renderFailureDetails(testCase, index + 1, options), "");
     });
 
     if (report.failures.length > failures.length) {
+      const omittedLabel =
+        options.gate?.ok === true ? "quality misses" : "failures";
       lines.push(
-        `${report.failures.length - failures.length} more failures omitted from this summary.`,
+        `${report.failures.length - failures.length} more ${omittedLabel} omitted from this summary.`,
         "",
       );
     }
@@ -77,9 +84,13 @@ function formatCountLine(passed: number, failed: number, total: number) {
   return `${formatNumber(passed)} passed, ${formatNumber(failed)} failed, ${formatNumber(total)} total`;
 }
 
-function renderSummaryTable(report: EvalReport, nonEvalFailures: number) {
+function renderSummaryTable(
+  report: EvalReport,
+  nonEvalFailures: number,
+  gate?: EvalGateResult,
+) {
   const rows: Array<[string, string]> = [
-    ["Status", report.status],
+    ["Status", gate?.status ?? report.status],
     [
       "Evals",
       formatCountLine(
@@ -90,8 +101,21 @@ function renderSummaryTable(report: EvalReport, nonEvalFailures: number) {
     ],
   ];
 
+  if (gate?.passRate !== undefined && gate.passRate !== null) {
+    rows.push(["Pass Rate", formatPercent(gate.passRate)]);
+  } else if (report.totals.evalTotal > 0) {
+    rows.push([
+      "Pass Rate",
+      formatPercent(report.totals.evalPassed / report.totals.evalTotal),
+    ]);
+  }
+
   if (report.score) {
     rows.push(["Score", formatScoreSummary(report.score)]);
+  }
+
+  if (gate?.enforced) {
+    rows.push(["Gate", gate.message]);
   }
 
   if (nonEvalFailures > 0) {
