@@ -27,12 +27,21 @@ export type PublishEvalReportOptions = SummaryOptions &
     annotations?: boolean;
     checkRun?: boolean;
     failOnCheckError?: boolean;
+    /**
+     * When true, keep the workflow step green on a failed gate so the Check
+     * Run owns PR status instead of a canned job failure line. Defaults to
+     * true only when a Check Run is actually published; if publishing is
+     * skipped/fails, the step still exits non-zero on a failed gate.
+     */
+    softFail?: boolean;
     maxAnnotations?: number;
     checkRunId?: number;
     checkName?: string;
     token?: string;
     repository?: string;
     sha?: string;
+    detailsUrl?: string;
+    externalId?: string;
     warn?: (message: string) => void;
   };
 
@@ -42,8 +51,9 @@ export type PublishEvalReportResult = {
   resultFiles: string[];
   gate: EvalGateResult;
   /**
-   * True when an enforced gate rejects the report. Advisory (ungated) runs
-   * never fail the step, matching `fail-on-failures: false` defaults.
+   * True when an enforced gate rejects the report and soft-fail did not keep
+   * the step green. Advisory (ungated) runs never fail the step, matching
+   * `fail-on-failures: false` defaults.
    */
   shouldFail: boolean;
   checkRun?: PublishCheckRunResult;
@@ -118,12 +128,18 @@ export async function publishEvalReport(
         name: options.checkName,
         repository: options.repository,
         sha: options.sha,
+        detailsUrl: options.detailsUrl,
+        externalId: options.externalId,
         token: options.token,
         gate,
       });
 
       if (checkRun.status === "skipped") {
         options.warn?.(`GitHub Check Run skipped: ${checkRun.reason}`);
+      } else if (checkRun.htmlUrl) {
+        console.log(`published check run: ${checkRun.htmlUrl}`);
+      } else if (checkRun.id !== undefined) {
+        console.log(`published check run id: ${checkRun.id}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -134,11 +150,21 @@ export async function publishEvalReport(
     }
   }
 
+  const gateFailed = gate.enforced && !gate.ok;
+  const softFail =
+    options.softFail ??
+    (options.checkRun === true && checkRunPublished(checkRun));
+  const shouldFail = gateFailed && !softFail;
+
   return {
     report,
     resultFiles,
     gate,
-    shouldFail: gate.enforced && !gate.ok,
+    shouldFail,
     checkRun,
   };
+}
+
+function checkRunPublished(checkRun: PublishCheckRunResult | undefined) {
+  return checkRun?.status === "created" || checkRun?.status === "updated";
 }

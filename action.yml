@@ -20,7 +20,7 @@ inputs:
     required: false
     default: "true"
   publish-check:
-    description: "Publish a GitHub Check Run for the combined report."
+    description: "Publish one GitHub Check Run for the combined report. On pull_request, attaches to the PR head SHA (not the temporary merge commit) so the check shows on the PR."
     required: false
     default: "false"
   check-name:
@@ -31,10 +31,16 @@ inputs:
     description: "GitHub token used for Check Run publishing."
     required: false
     default: "${{ github.token }}"
+  sha:
+    description: "Commit SHA for the Check Run. Defaults to pull_request.head.sha on pull_request events, otherwise GITHUB_SHA."
+    required: false
   fail-on-failures:
     description: "Fail the action when any eval case failed. Equivalent to min-pass-rate: 1."
     required: false
     default: "false"
+  soft-fail:
+    description: "When true, keep this step green on a failed gate so a published Check Run owns PR status. Defaults to true only when a Check Run is published successfully."
+    required: false
   min-pass-rate:
     description: "Minimum fraction of eval cases that must pass (0-1). Example: 0.8 requires an 80% pass rate."
     required: false

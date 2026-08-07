@@ -23,10 +23,12 @@ async function main() {
     checkName: inputs.checkName,
     failOnCheckError: false,
     failOnFailures: inputs.failOnFailures,
+    softFail: inputs.softFail,
     minPassRate: inputs.minPassRate,
     minScoreAverage: inputs.minScoreAverage,
     maxAnnotations: inputs.maxAnnotations,
     maxFailures: inputs.maxFailures,
+    sha: inputs.sha,
     token: inputs.githubToken,
     warn: (message) => console.log(`::warning::${escapeCommandData(message)}`),
   });

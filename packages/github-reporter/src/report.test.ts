@@ -12,7 +12,11 @@ import {
   formatPercent,
   renderGateWorkflowCommand,
 } from "./gate";
-import { publishCheckRun } from "./github";
+import {
+  publishCheckRun,
+  resolveCheckDetailsUrl,
+  resolveCheckSha,
+} from "./github";
 import { mergeEvalReports } from "./merge";
 import { publishEvalReport } from "./report";
 import { renderJobSummary } from "./summary";
@@ -525,6 +529,91 @@ describe("publishEvalReport", () => {
     expect(summary).not.toContain("createRefund");
     expect(summary).toContain("2 more tool calls omitted");
   });
+
+  test("soft-fails a gated miss when a Check Run is published", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-report-"));
+    const resultFile = join(directory, "vitest-results.json");
+    await writeFile(resultFile, `${JSON.stringify(sampleJson)}\n`);
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 55,
+        html_url: "https://github.test/checks/55",
+      }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await publishEvalReport({
+      resultPatterns: [resultFile],
+      summaryEnabled: false,
+      annotations: false,
+      checkRun: true,
+      minPassRate: 1,
+      token: "token",
+      repository: "getsentry/vitest-evals",
+      sha: "abc123",
+    });
+
+    expect(result.gate.ok).toBe(false);
+    expect(result.checkRun).toMatchObject({
+      status: "created",
+      htmlUrl: "https://github.test/checks/55",
+    });
+    expect(result.shouldFail).toBe(false);
+  });
+
+  test("still fails the step when Check Run publishing is skipped", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-report-"));
+    const resultFile = join(directory, "vitest-results.json");
+    await writeFile(resultFile, `${JSON.stringify(sampleJson)}\n`);
+
+    const result = await publishEvalReport({
+      resultPatterns: [resultFile],
+      summaryEnabled: false,
+      annotations: false,
+      checkRun: true,
+      minPassRate: 1,
+      token: "",
+      repository: "getsentry/vitest-evals",
+      sha: "abc123",
+    });
+
+    expect(result.gate.ok).toBe(false);
+    expect(result.checkRun).toMatchObject({ status: "skipped" });
+    expect(result.shouldFail).toBe(true);
+  });
+
+  test("honors softFail false even when a Check Run is published", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-report-"));
+    const resultFile = join(directory, "vitest-results.json");
+    await writeFile(resultFile, `${JSON.stringify(sampleJson)}\n`);
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 56,
+        html_url: "https://github.test/checks/56",
+      }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await publishEvalReport({
+      resultPatterns: [resultFile],
+      summaryEnabled: false,
+      annotations: false,
+      checkRun: true,
+      softFail: false,
+      minPassRate: 1,
+      token: "token",
+      repository: "getsentry/vitest-evals",
+      sha: "abc123",
+    });
+
+    expect(result.shouldFail).toBe(true);
+  });
 });
 
 describe("normalizePathForGitHub", () => {
@@ -697,10 +786,12 @@ describe("parseActionInputs", () => {
         "INPUT_PUBLISH-CHECK": "true",
         "INPUT_GITHUB-TOKEN": "token",
         "INPUT_FAIL-ON-FAILURES": "true",
+        "INPUT_SOFT-FAIL": "false",
         "INPUT_MIN-PASS-RATE": "0.8",
         "INPUT_MIN-SCORE-AVERAGE": "0.75",
         "INPUT_CHECK-NAME": "sharded evals",
         "INPUT_MAX-FAILURES": "5",
+        INPUT_SHA: "deadbeef",
       }),
     ).toMatchObject({
       results: ["eval-results/*.json", "other-results.json"],
@@ -709,10 +800,12 @@ describe("parseActionInputs", () => {
       publishCheck: true,
       githubToken: "token",
       failOnFailures: true,
+      softFail: false,
       minPassRate: 0.8,
       minScoreAverage: 0.75,
       checkName: "sharded evals",
       maxFailures: 5,
+      sha: "deadbeef",
     });
   });
 
@@ -989,6 +1082,80 @@ describe("buildCheckAnnotations", () => {
   });
 });
 
+describe("resolveCheckSha", () => {
+  test("prefers explicit sha over environment values", () => {
+    expect(
+      resolveCheckSha(
+        {
+          GITHUB_PR_HEAD_SHA: "env-head",
+          GITHUB_SHA: "merge",
+        },
+        { sha: "explicit" },
+      ),
+    ).toBe("explicit");
+  });
+
+  test("prefers GITHUB_PR_HEAD_SHA over GITHUB_SHA", () => {
+    expect(
+      resolveCheckSha({
+        GITHUB_PR_HEAD_SHA: "env-head",
+        GITHUB_SHA: "merge",
+      }),
+    ).toBe("env-head");
+  });
+
+  test("reads pull_request.head.sha from the event payload", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-event-"));
+    const eventPath = join(directory, "event.json");
+    await writeFile(
+      eventPath,
+      `${JSON.stringify({
+        pull_request: { head: { sha: "pr-head-sha" } },
+      })}\n`,
+    );
+
+    expect(
+      resolveCheckSha(
+        {
+          GITHUB_SHA: "merge-sha",
+          GITHUB_EVENT_PATH: eventPath,
+        },
+        { eventPath },
+      ),
+    ).toBe("pr-head-sha");
+  });
+
+  test("falls back to GITHUB_SHA", () => {
+    expect(resolveCheckSha({ GITHUB_SHA: "merge-sha" })).toBe("merge-sha");
+  });
+});
+
+describe("resolveCheckDetailsUrl", () => {
+  test("prefers an explicit details URL", () => {
+    expect(
+      resolveCheckDetailsUrl(
+        {
+          GITHUB_SERVER_URL: "https://github.com",
+          GITHUB_REPOSITORY: "getsentry/vitest-evals",
+          GITHUB_RUN_ID: "99",
+        },
+        { detailsUrl: "https://example.test/details" },
+      ),
+    ).toBe("https://example.test/details");
+  });
+
+  test("builds a workflow run URL from Actions env", () => {
+    expect(
+      resolveCheckDetailsUrl({
+        GITHUB_SERVER_URL: "https://github.com/",
+        GITHUB_REPOSITORY: "getsentry/vitest-evals",
+        GITHUB_RUN_ID: "123",
+        GITHUB_JOB: "report",
+      }),
+    ).toBe("https://github.com/getsentry/vitest-evals/actions/runs/123#report");
+  });
+});
+
 describe("publishCheckRun", () => {
   test("skips when GitHub configuration is missing", async () => {
     vi.stubEnv("GITHUB_TOKEN", "");
@@ -1020,12 +1187,14 @@ describe("publishCheckRun", () => {
       token: "token",
       repository: "getsentry/vitest-evals",
       sha: "abc123",
+      detailsUrl: "https://github.test/actions/runs/9",
     });
 
     expect(result).toEqual({
       status: "created",
       id: 123,
       htmlUrl: "https://github.test/checks/123",
+      sha: "abc123",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, request] = fetchMock.mock.calls[0] as unknown as [
@@ -1039,6 +1208,7 @@ describe("publishCheckRun", () => {
     expect(JSON.parse(request.body)).toMatchObject({
       name: "vitest-evals",
       head_sha: "abc123",
+      details_url: "https://github.test/actions/runs/9",
       status: "completed",
       conclusion: "failure",
       output: {
@@ -1052,6 +1222,41 @@ describe("publishCheckRun", () => {
         ],
       },
     });
+  });
+
+  test("uses pull_request head sha when only GITHUB_SHA is the merge commit", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vitest-evals-event-"));
+    const eventPath = join(directory, "event.json");
+    await writeFile(
+      eventPath,
+      `${JSON.stringify({
+        pull_request: { head: { sha: "pr-head" } },
+      })}\n`,
+    );
+    vi.stubEnv("GITHUB_EVENT_PATH", eventPath);
+    vi.stubEnv("GITHUB_SHA", "merge-sha");
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 321,
+        html_url: "https://github.test/checks/321",
+      }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const report = collectEvalReport(sampleJson);
+    await publishCheckRun(report, {
+      token: "token",
+      repository: "getsentry/vitest-evals",
+    });
+
+    const [, request] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { body: string },
+    ];
+    expect(JSON.parse(request.body).head_sha).toBe("pr-head");
   });
 
   test("uses the configured gate for Check Run conclusion and title", async () => {

@@ -15,6 +15,8 @@ export {
 } from "./gate";
 export {
   publishCheckRun,
+  resolveCheckDetailsUrl,
+  resolveCheckSha,
   type PublishCheckRunOptions,
   type PublishCheckRunResult,
 } from "./github";

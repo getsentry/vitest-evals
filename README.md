@@ -112,15 +112,17 @@ steps:
     with:
       results: vitest-results.json
       publish-check: true
+      min-pass-rate: 0.8
 ```
 
 The reporter action writes a plain ASCII job summary through
-`GITHUB_STEP_SUMMARY`, emits terse annotations for failed evals, and publishes a
-separate Check Run when `publish-check` is enabled and `checks: write`
-permission is configured. It can also reduce sharded eval JSON artifacts into
-one combined report and gate CI on pass rate or average score.
-See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow
-and score-gate options.
+`GITHUB_STEP_SUMMARY`, emits terse annotations for failed evals, and can publish
+a separate Check Run when `publish-check` is enabled and `checks: write`
+permission is configured. On `pull_request`, that Check Run attaches to the PR
+head commit (not the temporary merge SHA). It can also reduce sharded eval JSON
+artifacts into one combined report and gate CI on pass rate or average score.
+See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow,
+soft-fail defaults, and score-gate options.
 
 ## Local Report UI
 

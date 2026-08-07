@@ -63,10 +63,15 @@ suites that tolerate some misses, prefer a score floor:
     min-pass-rate: 0.8
 ```
 
-When a gate is configured, `status`, the Check Run conclusion/title, and step
-exit all follow the gate decision (for example
-`Eval pass rate 63.7% — required 80.0%`) instead of failing on any single case.
-Quality misses stay visible as warnings when the suite is still above the floor.
+When a gate is configured, `status` and the Check Run conclusion/title follow
+the gate decision (for example `Eval pass rate 63.7% — required 80.0%`) instead
+of failing on any single case. Quality misses stay visible as warnings when the
+suite is still above the floor.
+
+On `pull_request`, the Check Run attaches to the PR head commit (not the
+temporary merge `GITHUB_SHA`) so it appears on the PR checks list. When the Check
+Run publishes successfully, the action step soft-fails by default so that check
+owns green/red; set `soft-fail: false` if you also want the workflow job red.
 
 ## Sharded Evals
 
@@ -102,3 +107,6 @@ missing result files remain hard failures.
 Use `checks: write` when publishing Check Runs. Keep `contents: read` for
 checkout and avoid broader token permissions unless another workflow step needs
 them.
+
+See [GitHub Actions reporting](/docs/github-actions/) in the repo docs for the
+full input table, soft-fail defaults, and per-shard summary pattern.

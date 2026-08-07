@@ -8,10 +8,16 @@ export type ActionInputs = {
   checkName: string;
   githubToken?: string;
   failOnFailures: boolean;
+  /**
+   * When set, overrides the default soft-fail behavior for gated Check Runs.
+   * `undefined` means "default": soft-fail only when a Check Run is published.
+   */
+  softFail?: boolean;
   minPassRate?: number;
   minScoreAverage?: number;
   maxAnnotations?: number;
   maxFailures?: number;
+  sha?: string;
 };
 
 /** Parses GitHub Action inputs from INPUT_* environment variables. */
@@ -31,10 +37,12 @@ export function parseActionInputs(
     checkName: getInput(env, "check-name") || "vitest-evals",
     githubToken: getInput(env, "github-token"),
     failOnFailures: parseBooleanInput(getInput(env, "fail-on-failures"), false),
+    softFail: parseOptionalBooleanInput(getInput(env, "soft-fail")),
     minPassRate: parseOptionalRatio(getInput(env, "min-pass-rate")),
     minScoreAverage: parseOptionalRatio(getInput(env, "min-score-average")),
     maxAnnotations: parseOptionalInteger(getInput(env, "max-annotations")),
     maxFailures: parseOptionalInteger(getInput(env, "max-failures")),
+    sha: getInput(env, "sha") || undefined,
   };
 }
 
@@ -56,6 +64,13 @@ function parseBooleanInput(value: string, defaultValue: boolean) {
     return false;
   }
   throw new Error(`Invalid boolean input: ${value}`);
+}
+
+function parseOptionalBooleanInput(value: string) {
+  if (!value) {
+    return undefined;
+  }
+  return parseBooleanInput(value, false);
 }
 
 function parseOptionalInteger(value: string) {
