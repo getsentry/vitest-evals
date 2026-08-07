@@ -220,7 +220,8 @@ stable artifact to process:
 3. It merges sharded reports when multiple result files are provided.
 4. It writes an ASCII job summary to `GITHUB_STEP_SUMMARY`.
 5. It emits terse workflow-command annotations for failed evals.
-6. When explicitly configured, it publishes a separate GitHub Check Run.
+6. When explicitly configured, it publishes a separate GitHub Check Run attached
+   to the PR head SHA on `pull_request` events (not the temporary merge commit).
 
 JUnit XML can be emitted alongside JSON, but it is not used as the source of
 truth for eval reporting because it does not carry the full harness metadata.

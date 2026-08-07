@@ -40,7 +40,8 @@ job remains failed when the eval step fails.
 
 ## Check Run
 
-Add `checks: write` and enable `publish-check`.
+Add `checks: write` and enable `publish-check` when you want a dedicated PR
+check with a custom secondary status line (the Check Run title).
 
 ```yaml
 permissions:
@@ -53,15 +54,52 @@ steps:
     with:
       results: vitest-results.json
       publish-check: true
+      min-pass-rate: 0.8
 ```
 
+### Commit SHA (important on pull_request)
+
+On `pull_request`, GitHub sets `GITHUB_SHA` to a temporary merge commit. PR
+checks and required status attach to the **head** commit. The action therefore
+resolves the Check Run SHA in this order:
+
+1. explicit `sha` input / `--sha`
+2. `GITHUB_PR_HEAD_SHA` (optional override env)
+3. `pull_request.head.sha` from `GITHUB_EVENT_PATH`
+4. `GITHUB_SHA`
+
+You usually do not need to pass `sha` yourself. If you must override:
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  with:
+    results: vitest-results.json
+    publish-check: true
+    sha: ${{ github.event.pull_request.head.sha || github.sha }}
+```
+
+### What owns green/red
+
+A Check Run is a **separate** GitHub check from the workflow job row. Use it
+when you want the PR checks list secondary line to show the gate title
+(for example `Eval pass rate 90.2% — floor 80.0%`) instead of canned job text.
+
+Recommended defaults when `publish-check: true` and a gate is set:
+
+- the Check Run conclusion follows the gate
+- if the Check Run publishes successfully, the action step stays green
+  (`soft-fail` default) so the Check Run owns PR status
+- if Check Run publishing is skipped or fails, the step still fails on a
+  rejected gate so you do not silently lose the status signal
+- set `soft-fail: false` when you also want the workflow job red
+
 If the token or permission is missing, the action keeps the job summary and
-workflow annotations and warns instead of failing the job.
+workflow annotations and warns instead of failing solely for the missing check.
 
 ## Score and Pass-Rate Gates
 
 By default the action reports scores and failures without failing the step.
-Use a gate when the report job should own green/red:
+Use a gate when CI should own green/red:
 
 - `fail-on-failures: true` requires every eval case to pass
 - `min-pass-rate: 0.8` requires at least 80% of eval cases to pass
@@ -69,13 +107,15 @@ Use a gate when the report job should own green/red:
 
 When a gate is configured:
 
-- `status`, Check Run conclusion, and step exit all follow the gate
+- `status` and Check Run conclusion/title follow the gate
 - the Check Run title / `gate-title` show the decision
   (for example `Eval pass rate 63.7% — required 80.0%`)
 - case misses become warnings when the gate still passes, so a green check is
   not flooded with red failure annotations
 - non-eval / infrastructure failures still fail hard
 - missing scores fail closed when `min-score-average` is set
+- with `publish-check: true`, a successfully published Check Run soft-fails the
+  step so the Check Run owns PR status (override with `soft-fail: false`)
 
 Without a gate, `status` still mirrors the raw report (`any case failed`), but
 the step stays green unless you set `fail-on-failures` / a floor. Use the
@@ -93,9 +133,25 @@ the step stays green unless you set `fail-on-failures` / a floor. Use the
 # ${{ steps.report.outputs.gate-title }}   # Eval pass rate 90.0% — floor 80.0%
 # ${{ steps.report.outputs.pass-rate }}    # 0.90
 # ${{ steps.report.outputs.evals-failed }} # raw miss count
+# ${{ steps.report.outputs.check-url }}    # published Check Run URL
 ```
 
 `fail-on-failures: true` is equivalent to `min-pass-rate: 1`.
+
+### Job summary only (no Check Run)
+
+If you only need the rich markdown report on the workflow job, leave
+`publish-check` off. That keeps everything under the normal workflow check and
+avoids a second Checks API entry on the PR.
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results.json
+    publish-summary: true
+    min-pass-rate: 0.8
+```
 
 ## Sharded Evals
 
@@ -160,7 +216,22 @@ jobs:
         with:
           results: eval-results/*.json
           publish-check: true
+          check-name: eval score
           min-pass-rate: 0.8
+```
+
+Optional: publish a per-shard job summary (no Check Run) so each matrix job
+shows its own metric table and quality misses, while the reducer still owns the
+aggregate gate:
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results-${{ matrix.shard }}.json
+    publish-summary: true
+    publish-check: false
+    fail-on-failures: false
 ```
 
 Use `fail-on-failures: true` instead of a pass-rate floor when every case must
@@ -174,10 +245,12 @@ on the reducer.
 | `results` | `vitest-results.json` | Vitest JSON result files. Supports paths, `*` and `**` globs, and newline-separated entries. |
 | `publish-summary` | `true` | Write a GitHub Actions job summary. |
 | `publish-annotations` | `true` | Emit GitHub workflow annotations for failed evals. |
-| `publish-check` | `false` | Publish one GitHub Check Run for the combined report. |
+| `publish-check` | `false` | Publish one GitHub Check Run for the combined report. Attaches to PR head on `pull_request`. |
 | `check-name` | `vitest-evals` | Name of the GitHub Check Run. |
 | `github-token` | `${{ github.token }}` | Token used for Check Run publishing. |
+| `sha` | PR head, else `GITHUB_SHA` | Commit SHA for the Check Run. |
 | `fail-on-failures` | `false` | Fail the action when any eval case failed. Equivalent to `min-pass-rate: 1`. |
+| `soft-fail` | auto | Keep the step green when a published Check Run owns a failed gate. Defaults to true only after a successful Check Run publish. |
 | `min-pass-rate` | unset | Minimum fraction of eval cases that must pass (`0`-`1`). |
 | `min-score-average` | unset | Minimum average eval score across scored cases (`0`-`1`). |
 | `max-annotations` | unset | Maximum number of failure annotations to publish. Check Run annotations are capped at 50 by GitHub. |

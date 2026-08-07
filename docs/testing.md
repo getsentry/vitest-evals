@@ -83,6 +83,8 @@ Cover:
 - long judge rationale handling without tables
 - workflow-command escaping
 - optional Check Run payloads and missing-configuration fallback
+- PR head SHA resolution for Check Runs on `pull_request`
+- soft-fail when a published Check Run owns a failed gate
 
 ### Harness Package Changes
 

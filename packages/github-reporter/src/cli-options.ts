@@ -6,6 +6,7 @@ export type CliOptions = {
   checkRun: boolean;
   failOnFailures: boolean;
   failOnCheckError: boolean;
+  softFail?: boolean;
   minPassRate?: number;
   minScoreAverage?: number;
   maxAnnotations?: number;
@@ -66,6 +67,12 @@ export function parseCliArgs(
         break;
       case "--fail-on-check-error":
         options.failOnCheckError = true;
+        break;
+      case "--soft-fail":
+        options.softFail = true;
+        break;
+      case "--no-soft-fail":
+        options.softFail = false;
         break;
       case "--min-pass-rate":
         options.minPassRate = readRatio(args, ++index, arg);

@@ -612,9 +612,13 @@ Action inputs:
 - `publish-annotations`: emit workflow annotations for failed evals. Default:
   `true`.
 - `publish-check`: create a GitHub Check Run for the combined report. Default:
-  `false`.
+  `false`. On `pull_request`, attaches to the PR head SHA (not the merge SHA).
+- `sha`: optional commit SHA override for the Check Run.
 - `fail-on-failures`: fail the reporting step when the combined report failed.
   Default: `false`.
+- `soft-fail`: keep the step green when a published Check Run owns a failed
+  gate. Defaults to true only after a successful Check Run publish.
+- `min-pass-rate` / `min-score-average`: optional aggregate floors in `0`-`1`.
 
 For Check Runs, grant `checks: write`:
 

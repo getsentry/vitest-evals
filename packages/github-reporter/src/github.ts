@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { buildCheckAnnotations } from "./annotations";
 import { type EvalGateResult, evaluateEvalGate } from "./gate";
 import { type SummaryOptions, renderJobSummary } from "./summary";
@@ -10,6 +11,8 @@ export type PublishCheckRunOptions = SummaryOptions & {
   sha?: string;
   name?: string;
   apiUrl?: string;
+  detailsUrl?: string;
+  externalId?: string;
   checkRunId?: number;
   maxAnnotations?: number;
   /**
@@ -29,12 +32,72 @@ export type PublishCheckRunResult =
       status: "created" | "updated";
       id?: number;
       htmlUrl?: string;
+      sha?: string;
     };
 
 const DEFAULT_CHECK_NAME = "vitest-evals";
 const MAX_CHECK_SUMMARY_LENGTH = 64_000;
 const CHECK_SUMMARY_TRUNCATION_SUFFIX =
   "\n\n[truncated for GitHub Check Run]\n";
+
+/**
+ * Resolve the commit SHA a Check Run should attach to.
+ *
+ * On `pull_request`, `GITHUB_SHA` is the temporary merge commit. PR status and
+ * required checks attach to the head commit, so prefer an explicit head SHA
+ * (option/env or `pull_request.head.sha` from the event payload) first.
+ */
+export function resolveCheckSha(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { sha?: string; eventPath?: string } = {},
+): string | undefined {
+  const explicit = options.sha?.trim() || env.GITHUB_PR_HEAD_SHA?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const eventPath = options.eventPath?.trim() || env.GITHUB_EVENT_PATH?.trim();
+  if (eventPath) {
+    try {
+      const event = JSON.parse(readFileSync(eventPath, "utf8")) as {
+        pull_request?: { head?: { sha?: unknown } };
+      };
+      const headSha = event.pull_request?.head?.sha;
+      if (typeof headSha === "string" && headSha.trim()) {
+        return headSha.trim();
+      }
+    } catch {
+      // Fall through to GITHUB_SHA when the event payload is unavailable.
+    }
+  }
+
+  return env.GITHUB_SHA?.trim() || undefined;
+}
+
+/**
+ * Build a Check Run details URL that points back at the current workflow job
+ * (or run) when GitHub Actions env is present.
+ */
+export function resolveCheckDetailsUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { detailsUrl?: string } = {},
+): string | undefined {
+  const explicit = options.detailsUrl?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const server = env.GITHUB_SERVER_URL?.replace(/\/$/, "");
+  const repository = env.GITHUB_REPOSITORY?.trim();
+  const runId = env.GITHUB_RUN_ID?.trim();
+  if (!server || !repository || !runId) {
+    return undefined;
+  }
+
+  // GITHUB_JOB is the job id/key, not the numeric job database id, so link the
+  // run page. Consumers can override with an explicit details URL when needed.
+  return `${server}/${repository}/actions/runs/${runId}`;
+}
 
 /** Publishes the eval report to a GitHub Check Run when configuration allows it. */
 export async function publishCheckRun(
@@ -43,7 +106,10 @@ export async function publishCheckRun(
 ): Promise<PublishCheckRunResult> {
   const token = options.token ?? process.env.GITHUB_TOKEN;
   const repository = options.repository ?? process.env.GITHUB_REPOSITORY;
-  const sha = options.sha ?? process.env.GITHUB_SHA;
+  const sha = resolveCheckSha(process.env, { sha: options.sha });
+  const detailsUrl = resolveCheckDetailsUrl(process.env, {
+    detailsUrl: options.detailsUrl,
+  });
 
   if (!token) {
     return { status: "skipped", reason: "missing GITHUB_TOKEN" };
@@ -52,7 +118,11 @@ export async function publishCheckRun(
     return { status: "skipped", reason: "missing GITHUB_REPOSITORY" };
   }
   if (!sha && options.checkRunId === undefined) {
-    return { status: "skipped", reason: "missing GITHUB_SHA" };
+    return {
+      status: "skipped",
+      reason:
+        "missing commit SHA (set --sha / options.sha, GITHUB_PR_HEAD_SHA, pull_request.head.sha, or GITHUB_SHA)",
+    };
   }
 
   const [owner, repo] = repository.split("/");
@@ -63,7 +133,7 @@ export async function publishCheckRun(
     };
   }
 
-  const payload = buildCheckRunPayload(report, options);
+  const payload = buildCheckRunPayload(report, options, detailsUrl);
   const apiUrl =
     options.apiUrl ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
   const requestUrl =
@@ -83,6 +153,7 @@ export async function publishCheckRun(
         ? {
             name: options.name ?? DEFAULT_CHECK_NAME,
             head_sha: sha,
+            ...(options.externalId ? { external_id: options.externalId } : {}),
             ...payload,
           }
         : payload,
@@ -105,12 +176,14 @@ export async function publishCheckRun(
     status: options.checkRunId === undefined ? "created" : "updated",
     id: data.id,
     htmlUrl: data.html_url,
+    sha,
   };
 }
 
 function buildCheckRunPayload(
   report: EvalReport,
   options: PublishCheckRunOptions,
+  detailsUrl?: string,
 ) {
   const gate = options.gate ?? evaluateEvalGate(report);
   const annotations = buildCheckAnnotations(report, {
@@ -122,6 +195,7 @@ function buildCheckRunPayload(
     status: "completed",
     conclusion: gate.ok ? "success" : "failure",
     completed_at: new Date().toISOString(),
+    ...(detailsUrl ? { details_url: detailsUrl } : {}),
     output: {
       title: gate.title,
       summary: truncateCheckSummary(
