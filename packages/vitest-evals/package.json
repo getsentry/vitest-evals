@@ -1,6 +1,6 @@
 {
   "name": "vitest-evals",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Harness-backed AI testing on top of Vitest.",
   "repository": {
     "type": "git",
