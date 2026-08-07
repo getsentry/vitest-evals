@@ -1152,7 +1152,7 @@ describe("resolveCheckDetailsUrl", () => {
         GITHUB_RUN_ID: "123",
         GITHUB_JOB: "report",
       }),
-    ).toBe("https://github.com/getsentry/vitest-evals/actions/runs/123#report");
+    ).toBe("https://github.com/getsentry/vitest-evals/actions/runs/123");
   });
 });
 

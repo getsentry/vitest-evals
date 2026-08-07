@@ -151,9 +151,10 @@ export async function publishEvalReport(
   }
 
   const gateFailed = gate.enforced && !gate.ok;
-  const softFail =
-    options.softFail ??
-    (options.checkRun === true && checkRunPublished(checkRun));
+  // Soft-fail only when a Check Run actually published. Explicit soft-fail:true
+  // still requires a published check so a failed gate cannot go silent.
+  const wantsSoftFail = options.softFail ?? options.checkRun === true;
+  const softFail = wantsSoftFail && checkRunPublished(checkRun);
   const shouldFail = gateFailed && !softFail;
 
   return {

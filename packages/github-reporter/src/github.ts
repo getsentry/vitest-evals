@@ -94,10 +94,9 @@ export function resolveCheckDetailsUrl(
     return undefined;
   }
 
-  const jobId = env.GITHUB_JOB?.trim();
   // GITHUB_JOB is the job id/key, not the numeric job database id, so link the
   // run page. Consumers can override with an explicit details URL when needed.
-  return `${server}/${repository}/actions/runs/${runId}${jobId ? `#${jobId}` : ""}`;
+  return `${server}/${repository}/actions/runs/${runId}`;
 }
 
 /** Publishes the eval report to a GitHub Check Run when configuration allows it. */
