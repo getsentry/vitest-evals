@@ -67,6 +67,8 @@ outputs:
     description: "Minimum eval score across the combined report."
   gate-status:
     description: "Configured gate status: passed or failed."
+  gate-title:
+    description: "Short gate title used for Check Runs and suite-level annotations."
   gate-message:
     description: "Human-readable gate decision message."
   check-url:

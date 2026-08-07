@@ -41,16 +41,18 @@ async function main() {
   setOutput("score-average", formatScore(result.report.score?.average));
   setOutput("score-minimum", formatScore(result.report.score?.minimum));
   setOutput("gate-status", result.gate.status);
+  setOutput("gate-title", result.gate.title);
   setOutput("gate-message", result.gate.message);
   if (result.checkRun?.status !== "skipped" && result.checkRun?.htmlUrl) {
     setOutput("check-url", result.checkRun.htmlUrl);
   }
 
+  // Mirror the Check Run title into step logs and GITHUB_OUTPUT so workflows
+  // can surface it without scraping annotations or the summary page.
+  console.log(result.gate.title);
+  console.log(result.gate.message);
+
   if (result.shouldFail) {
-    // Suite-level gate annotation is emitted by publishEvalReport when
-    // annotations are enabled. Keep a plain error here so the step log still
-    // shows the gate decision if annotations are off.
-    console.error(result.gate.message);
     process.exit(1);
   }
 }

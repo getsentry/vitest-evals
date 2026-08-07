@@ -184,6 +184,7 @@ on the reducer.
 | `score-average` | Average eval score across the combined report. |
 | `score-minimum` | Minimum eval score across the combined report. |
 | `gate-status` | Configured gate status: `passed` or `failed`. |
+| `gate-title` | Short gate title used for Check Runs and suite-level annotations. |
 | `gate-message` | Human-readable gate decision. |
 | `check-url` | URL of the published GitHub Check Run, when available. |
 
