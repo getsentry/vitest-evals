@@ -1,12 +1,17 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveResultFiles } from "@vitest-evals/core/node";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { parseActionInputs } from "./action/inputs";
 import { buildCheckAnnotations, renderWorkflowCommands } from "./annotations";
 import { parseCliArgs } from "./cli-options";
 import { collectEvalReport } from "./collect";
+import {
+  evaluateEvalGate,
+  formatPercent,
+  renderGateWorkflowCommand,
+} from "./gate";
 import { publishCheckRun } from "./github";
 import { mergeEvalReports } from "./merge";
 import { publishEvalReport } from "./report";
@@ -587,6 +592,101 @@ describe("parseCliArgs", () => {
       "Invalid integer for --max-failures",
     );
   });
+
+  test("parses score gate options", () => {
+    expect(
+      parseCliArgs(
+        ["--min-pass-rate", "0.8", "--min-score-average", "0.75"],
+        {},
+      ),
+    ).toMatchObject({
+      minPassRate: 0.8,
+      minScoreAverage: 0.75,
+    });
+  });
+
+  test("rejects invalid ratio options", () => {
+    expect(() => parseCliArgs(["--min-pass-rate", "2"], {})).toThrow(
+      "Invalid ratio for --min-pass-rate",
+    );
+  });
+});
+
+describe("evaluateEvalGate", () => {
+  test("mirrors report status when no policy is configured", () => {
+    const report = collectEvalReport(sampleJson, { workspace: "/repo" });
+    const gate = evaluateEvalGate(report);
+
+    expect(gate).toMatchObject({
+      ok: false,
+      enforced: false,
+      status: "failed",
+      title: "1 eval failure",
+    });
+  });
+
+  test("passes a partial suite above the pass-rate floor", () => {
+    const report = collectEvalReport(sampleJson, { workspace: "/repo" });
+    report.totals.evalTotal = 10;
+    report.totals.evalPassed = 8;
+    report.totals.evalFailed = 2;
+    report.score = { average: 0.84, minimum: 0.2 };
+
+    const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
+
+    expect(gate.ok).toBe(true);
+    expect(gate.enforced).toBe(true);
+    expect(gate.passRate).toBe(0.8);
+    expect(gate.title).toContain("80.0%");
+    expect(gate.message).toContain("pass rate floor 80.0%");
+  });
+
+  test("fails a suite below the pass-rate floor with a titled annotation", () => {
+    const report = collectEvalReport(sampleJson, { workspace: "/repo" });
+    report.totals.evalTotal = 102;
+    report.totals.evalPassed = 65;
+    report.totals.evalFailed = 37;
+    report.score = { average: 0.72, minimum: 0.2 };
+
+    const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
+
+    expect(gate.ok).toBe(false);
+    expect(gate.title).toBe("Eval pass rate 63.7% — required 80.0%");
+    expect(renderGateWorkflowCommand(gate)).toBe(
+      "::error title=Eval pass rate 63.7%25 — required 80.0%25::eval pass rate below floor: 65/102 passed (63.7%25), avg score 0.72; required >= 80.0%25",
+    );
+  });
+
+  test("fails closed on non-eval failures even when pass rate is high", () => {
+    const report = collectEvalReport(sampleJson, { workspace: "/repo" });
+    report.totals.evalTotal = 10;
+    report.totals.evalPassed = 10;
+    report.totals.evalFailed = 0;
+    report.totals.failed = 1;
+    report.failures = [];
+    report.score = { average: 0.95, minimum: 0.9 };
+
+    const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
+
+    expect(gate.ok).toBe(false);
+    expect(gate.title).toBe("Eval report hard failure");
+    expect(gate.message).toContain("non-eval test failure");
+  });
+
+  test("treats fail-on-failures as a 100% pass-rate floor", () => {
+    const report = collectEvalReport(sampleJson, { workspace: "/repo" });
+    const gate = evaluateEvalGate(report, { failOnFailures: true });
+
+    expect(gate.ok).toBe(false);
+    expect(gate.enforced).toBe(true);
+    expect(gate.title).toContain("required 100.0%");
+  });
+
+  test("formats percentages with one decimal place", () => {
+    expect(formatPercent(0.8)).toBe("80.0%");
+    expect(formatPercent(0.637)).toBe("63.7%");
+    expect(formatPercent(null)).toBe("n/a");
+  });
 });
 
 describe("parseActionInputs", () => {
@@ -597,6 +697,8 @@ describe("parseActionInputs", () => {
         "INPUT_PUBLISH-CHECK": "true",
         "INPUT_GITHUB-TOKEN": "token",
         "INPUT_FAIL-ON-FAILURES": "true",
+        "INPUT_MIN-PASS-RATE": "0.8",
+        "INPUT_MIN-SCORE-AVERAGE": "0.75",
         "INPUT_CHECK-NAME": "sharded evals",
         "INPUT_MAX-FAILURES": "5",
       }),
@@ -607,6 +709,8 @@ describe("parseActionInputs", () => {
       publishCheck: true,
       githubToken: "token",
       failOnFailures: true,
+      minPassRate: 0.8,
+      minScoreAverage: 0.75,
       checkName: "sharded evals",
       maxFailures: 5,
     });
@@ -661,6 +765,19 @@ describe("parseActionInputs", () => {
       }),
     ).toThrow("Invalid integer input: 1e2");
   });
+
+  test("rejects invalid ratio inputs", () => {
+    expect(() =>
+      parseActionInputs({
+        "INPUT_MIN-PASS-RATE": "1.5",
+      }),
+    ).toThrow("Invalid ratio input: 1.5");
+    expect(() =>
+      parseActionInputs({
+        "INPUT_MIN-SCORE-AVERAGE": "abc",
+      }),
+    ).toThrow("Invalid ratio input: abc");
+  });
 });
 
 describe("formatDuration", () => {
@@ -689,6 +806,7 @@ describe("renderJobSummary", () => {
     expect(summary).toContain("| Metric | Value |");
     expect(summary).toContain("| Status | failed |");
     expect(summary).toContain("| Evals | 0 passed, 1 failed, 1 total |");
+    expect(summary).toContain("| Pass Rate | 0.0% |");
     expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
     expect(summary).not.toContain("| Usage |");
@@ -856,6 +974,9 @@ describe("buildCheckAnnotations", () => {
 
 describe("publishCheckRun", () => {
   test("skips when GitHub configuration is missing", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubEnv("GITHUB_REPOSITORY", "");
+    vi.stubEnv("GITHUB_SHA", "");
     const report = collectEvalReport(sampleJson);
 
     await expect(publishCheckRun(report)).resolves.toEqual({
@@ -914,6 +1035,44 @@ describe("publishCheckRun", () => {
         ],
       },
     });
+  });
+
+  test("uses the configured gate for Check Run conclusion and title", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 126,
+        html_url: "https://github.test/checks/126",
+      }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const report = collectEvalReport(sampleJson, {
+      workspace: "/repo",
+    });
+    report.totals.evalTotal = 10;
+    report.totals.evalPassed = 9;
+    report.totals.evalFailed = 1;
+    report.score = { average: 0.91, minimum: 0.2 };
+    const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
+
+    await publishCheckRun(report, {
+      token: "token",
+      repository: "getsentry/vitest-evals",
+      sha: "abc123",
+      gate,
+    });
+
+    const [, request] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { body: string },
+    ];
+    const body = JSON.parse(request.body);
+    expect(body.conclusion).toBe("success");
+    expect(body.output.title).toContain("90.0%");
+    expect(body.output.summary).toContain("| Pass Rate | 90.0% |");
+    expect(body.output.summary).toContain("| Gate |");
   });
 
   test("caps Check Run summary at GitHub's summary length limit", async () => {

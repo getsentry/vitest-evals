@@ -118,8 +118,9 @@ The reporter action writes a plain ASCII job summary through
 `GITHUB_STEP_SUMMARY`, emits terse annotations for failed evals, and publishes a
 separate Check Run when `publish-check` is enabled and `checks: write`
 permission is configured. It can also reduce sharded eval JSON artifacts into
-one combined report.
-See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow.
+one combined report and gate CI on pass rate or average score.
+See [docs/github-actions.md](docs/github-actions.md) for the minimal workflow
+and score-gate options.
 
 ## Local Report UI
 

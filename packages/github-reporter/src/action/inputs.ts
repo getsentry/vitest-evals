@@ -8,6 +8,8 @@ export type ActionInputs = {
   checkName: string;
   githubToken?: string;
   failOnFailures: boolean;
+  minPassRate?: number;
+  minScoreAverage?: number;
   maxAnnotations?: number;
   maxFailures?: number;
 };
@@ -29,6 +31,8 @@ export function parseActionInputs(
     checkName: getInput(env, "check-name") || "vitest-evals",
     githubToken: getInput(env, "github-token"),
     failOnFailures: parseBooleanInput(getInput(env, "fail-on-failures"), false),
+    minPassRate: parseOptionalRatio(getInput(env, "min-pass-rate")),
+    minScoreAverage: parseOptionalRatio(getInput(env, "min-score-average")),
     maxAnnotations: parseOptionalInteger(getInput(env, "max-annotations")),
     maxFailures: parseOptionalInteger(getInput(env, "max-failures")),
   };
@@ -62,4 +66,15 @@ function parseOptionalInteger(value: string) {
     throw new Error(`Invalid integer input: ${value}`);
   }
   return Number(value);
+}
+
+function parseOptionalRatio(value: string) {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(`Invalid ratio input: ${value}`);
+  }
+  return parsed;
 }

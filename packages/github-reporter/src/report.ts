@@ -5,34 +5,44 @@ import {
 } from "@vitest-evals/core/node";
 import { renderWorkflowCommands } from "./annotations";
 import { collectEvalReport } from "./collect";
-import { publishCheckRun, type PublishCheckRunResult } from "./github";
+import {
+  type EvalGatePolicy,
+  type EvalGateResult,
+  evaluateEvalGate,
+  renderGateWorkflowCommand,
+} from "./gate";
+import { type PublishCheckRunResult, publishCheckRun } from "./github";
 import { mergeEvalReports } from "./merge";
-import { renderJobSummary, type SummaryOptions } from "./summary";
+import { type SummaryOptions, renderJobSummary } from "./summary";
 import type { EvalReport } from "./types";
 
 /** Options for reading eval JSON files and publishing GitHub report surfaces. */
-export type PublishEvalReportOptions = SummaryOptions & {
-  resultPatterns: string[];
-  cwd?: string;
-  workspace?: string;
-  summaryEnabled?: boolean;
-  summaryPath?: string;
-  annotations?: boolean;
-  checkRun?: boolean;
-  failOnCheckError?: boolean;
-  maxAnnotations?: number;
-  checkRunId?: number;
-  checkName?: string;
-  token?: string;
-  repository?: string;
-  sha?: string;
-  warn?: (message: string) => void;
-};
+export type PublishEvalReportOptions = SummaryOptions &
+  EvalGatePolicy & {
+    resultPatterns: string[];
+    cwd?: string;
+    workspace?: string;
+    summaryEnabled?: boolean;
+    summaryPath?: string;
+    annotations?: boolean;
+    checkRun?: boolean;
+    failOnCheckError?: boolean;
+    maxAnnotations?: number;
+    checkRunId?: number;
+    checkName?: string;
+    token?: string;
+    repository?: string;
+    sha?: string;
+    warn?: (message: string) => void;
+  };
 
 /** Result from publishing eval reports, including merged report data. */
 export type PublishEvalReportResult = {
   report: EvalReport;
   resultFiles: string[];
+  gate: EvalGateResult;
+  /** True when the configured gate policy rejects the report. */
+  shouldFail: boolean;
   checkRun?: PublishCheckRunResult;
 };
 
@@ -58,11 +68,17 @@ export async function publishEvalReport(
     }),
   );
   const report = mergeEvalReports(reports);
+  const gate = evaluateEvalGate(report, {
+    failOnFailures: options.failOnFailures,
+    minPassRate: options.minPassRate,
+    minScoreAverage: options.minScoreAverage,
+  });
   const summary = renderJobSummary(report, {
     maxFailures: options.maxFailures,
     maxOutputChars: options.maxOutputChars,
     maxReasonChars: options.maxReasonChars,
     maxToolCalls: options.maxToolCalls,
+    gate,
   });
 
   if (options.summaryEnabled !== false) {
@@ -74,6 +90,10 @@ export async function publishEvalReport(
   }
 
   if (options.annotations) {
+    const gateCommand = renderGateWorkflowCommand(gate);
+    if (gateCommand) {
+      console.log(gateCommand);
+    }
     for (const command of renderWorkflowCommands(report, {
       maxAnnotations: options.maxAnnotations,
     })) {
@@ -95,6 +115,7 @@ export async function publishEvalReport(
         repository: options.repository,
         sha: options.sha,
         token: options.token,
+        gate,
       });
 
       if (checkRun.status === "skipped") {
@@ -112,6 +133,8 @@ export async function publishEvalReport(
   return {
     report,
     resultFiles,
+    gate,
+    shouldFail: !gate.ok && gate.enforced,
     checkRun,
   };
 }
