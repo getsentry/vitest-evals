@@ -54,14 +54,18 @@ export function renderJobSummary(
   ];
 
   if (report.failures.length > 0) {
-    lines.push("### Failures", "");
+    const failureHeading =
+      options.gate?.ok === true ? "### Quality Misses" : "### Failures";
+    lines.push(failureHeading, "");
     failures.forEach((testCase, index) => {
       lines.push(...renderFailureDetails(testCase, index + 1, options), "");
     });
 
     if (report.failures.length > failures.length) {
+      const omittedLabel =
+        options.gate?.ok === true ? "quality misses" : "failures";
       lines.push(
-        `${report.failures.length - failures.length} more failures omitted from this summary.`,
+        `${report.failures.length - failures.length} more ${omittedLabel} omitted from this summary.`,
         "",
       );
     }
@@ -86,7 +90,7 @@ function renderSummaryTable(
   gate?: EvalGateResult,
 ) {
   const rows: Array<[string, string]> = [
-    ["Status", gate?.enforced ? gate.status : report.status],
+    ["Status", gate?.status ?? report.status],
     [
       "Evals",
       formatCountLine(

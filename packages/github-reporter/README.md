@@ -39,7 +39,8 @@ workflow annotations and warns instead of failing.
 ## Score and Pass-Rate Gates
 
 ```yaml
-- uses: getsentry/vitest-evals@v0
+- id: report
+  uses: getsentry/vitest-evals@v0
   with:
     results: eval-results/*.json
     publish-check: true
@@ -48,8 +49,10 @@ workflow annotations and warns instead of failing.
 
 - `fail-on-failures: true` requires every eval case to pass
 - `min-pass-rate` and `min-score-average` set aggregate floors in the `0`-`1` range
-- gated Check Runs use the gate decision for conclusion and title
+- `status`, Check Run conclusion/title, and step exit follow the gate
+- quality misses become warnings when the gate still passes
 - non-eval / infrastructure failures still fail hard
+- use `evals-failed` / `pass-rate` for raw tallies (`pass-rate` is a 0-1 ratio)
 
 ## Sharded Reports
 

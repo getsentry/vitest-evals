@@ -1,5 +1,5 @@
 import { buildCheckAnnotations } from "./annotations";
-import type { EvalGateResult } from "./gate";
+import { type EvalGateResult, evaluateEvalGate } from "./gate";
 import { type SummaryOptions, renderJobSummary } from "./summary";
 import type { EvalReport } from "./types";
 
@@ -12,6 +12,10 @@ export type PublishCheckRunOptions = SummaryOptions & {
   apiUrl?: string;
   checkRunId?: number;
   maxAnnotations?: number;
+  /**
+   * Suite gate decision. When omitted, the report is evaluated with the
+   * default advisory policy so title/conclusion stay consistent.
+   */
   gate?: EvalGateResult;
 };
 
@@ -108,26 +112,18 @@ function buildCheckRunPayload(
   report: EvalReport,
   options: PublishCheckRunOptions,
 ) {
+  const gate = options.gate ?? evaluateEvalGate(report);
   const annotations = buildCheckAnnotations(report, {
     maxAnnotations: options.maxAnnotations,
+    gate,
   });
-  // publishEvalReport always supplies a gate so title/conclusion stay policy-aware.
-  const title = options.gate?.title ?? legacyCheckTitle(report);
-  const conclusion =
-    options.gate !== undefined
-      ? options.gate.ok
-        ? "success"
-        : "failure"
-      : report.status === "passed"
-        ? "success"
-        : "failure";
 
   return {
     status: "completed",
-    conclusion,
+    conclusion: gate.ok ? "success" : "failure",
     completed_at: new Date().toISOString(),
     output: {
-      title,
+      title: gate.title,
       summary: truncateCheckSummary(
         renderJobSummary(report, {
           ...options,
@@ -135,24 +131,12 @@ function buildCheckRunPayload(
           maxReasonChars: options.maxReasonChars ?? 4000,
           maxOutputChars: options.maxOutputChars ?? 2000,
           maxToolCalls: options.maxToolCalls ?? 10,
-          gate: options.gate,
+          gate,
         }),
       ),
       annotations,
     },
   };
-}
-
-function legacyCheckTitle(report: EvalReport) {
-  if (report.failures.length === 0 && report.status === "passed") {
-    return "No eval failures";
-  }
-  if (report.failures.length === 0) {
-    return "Vitest run failed";
-  }
-  return `${report.failures.length} eval failure${
-    report.failures.length === 1 ? "" : "s"
-  }`;
 }
 
 function truncateCheckSummary(summary: string) {

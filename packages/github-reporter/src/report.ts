@@ -41,7 +41,10 @@ export type PublishEvalReportResult = {
   report: EvalReport;
   resultFiles: string[];
   gate: EvalGateResult;
-  /** True when the configured gate policy rejects the report. */
+  /**
+   * True when an enforced gate rejects the report. Advisory (ungated) runs
+   * never fail the step, matching `fail-on-failures: false` defaults.
+   */
   shouldFail: boolean;
   checkRun?: PublishCheckRunResult;
 };
@@ -96,6 +99,7 @@ export async function publishEvalReport(
     }
     for (const command of renderWorkflowCommands(report, {
       maxAnnotations: options.maxAnnotations,
+      gate,
     })) {
       console.log(command);
     }
@@ -134,7 +138,7 @@ export async function publishEvalReport(
     report,
     resultFiles,
     gate,
-    shouldFail: !gate.ok && gate.enforced,
+    shouldFail: gate.enforced && !gate.ok,
     checkRun,
   };
 }

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { formatPercent } from "../gate";
 import { publishEvalReport } from "../report";
 import { escapeCommandData, formatScore } from "../utils";
 import { parseActionInputs } from "./inputs";
@@ -32,12 +31,14 @@ async function main() {
     warn: (message) => console.log(`::warning::${escapeCommandData(message)}`),
   });
 
-  setOutput("status", result.report.status);
+  // `status` is the effective CI decision: with no gate it mirrors the raw
+  // report; with a gate it follows the floor. Counts stay in evals-*.
+  setOutput("status", result.gate.status);
   setOutput("results-count", result.resultFiles.length);
   setOutput("evals-total", result.report.totals.evalTotal);
   setOutput("evals-passed", result.report.totals.evalPassed);
   setOutput("evals-failed", result.report.totals.evalFailed);
-  setOutput("pass-rate", formatPercent(result.gate.passRate));
+  setOutput("pass-rate", formatRatio(result.gate.passRate));
   setOutput("score-average", formatScore(result.report.score?.average));
   setOutput("score-minimum", formatScore(result.report.score?.minimum));
   setOutput("gate-status", result.gate.status);
@@ -47,14 +48,19 @@ async function main() {
     setOutput("check-url", result.checkRun.htmlUrl);
   }
 
-  // Mirror the Check Run title into step logs and GITHUB_OUTPUT so workflows
-  // can surface it without scraping annotations or the summary page.
+  // Mirror the Check Run title into step logs so workflows can surface it
+  // without scraping annotations or the summary page.
   console.log(result.gate.title);
   console.log(result.gate.message);
 
   if (result.shouldFail) {
     process.exit(1);
   }
+}
+
+/** Format a 0-1 ratio like score outputs (`0.80`), or `n/a`. */
+function formatRatio(value: number | null) {
+  return formatScore(value);
 }
 
 function setOutput(name: string, value: string | number) {

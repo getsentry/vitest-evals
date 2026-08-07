@@ -50,7 +50,7 @@ inputs:
 
 outputs:
   status:
-    description: "Combined report status: passed or failed."
+    description: "Effective CI status: passed or failed. Follows the configured gate when set; otherwise mirrors the raw report."
   results-count:
     description: "Number of Vitest JSON result files included."
   evals-total:
@@ -60,13 +60,13 @@ outputs:
   evals-failed:
     description: "Failed eval cases included in the report."
   pass-rate:
-    description: "Eval pass rate for the combined report, formatted as a percentage."
+    description: "Eval pass rate as a 0-1 ratio (for example 0.80), or n/a."
   score-average:
     description: "Average eval score across the combined report."
   score-minimum:
     description: "Minimum eval score across the combined report."
   gate-status:
-    description: "Configured gate status: passed or failed."
+    description: "Same value as status. Kept for explicit gate wiring."
   gate-title:
     description: "Short gate title used for Check Runs and suite-level annotations."
   gate-message:

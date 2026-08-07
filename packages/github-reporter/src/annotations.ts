@@ -1,3 +1,4 @@
+import type { EvalGateResult } from "./gate";
 import type { EvalCase, EvalReport, ToolCallSummary } from "./types";
 import {
   compactLine,
@@ -11,6 +12,11 @@ import {
 /** Options for limiting rendered GitHub annotations. */
 export type AnnotationOptions = {
   maxAnnotations?: number;
+  /**
+   * Suite gate decision. When the gate passed, quality misses are demoted to
+   * warnings so a green score-gated check is not flooded with red failures.
+   */
+  gate?: EvalGateResult;
 };
 
 /** GitHub Check Run annotation payload. */
@@ -39,13 +45,14 @@ export function renderWorkflowCommands(
 ) {
   const maxAnnotations =
     options.maxAnnotations ?? DEFAULT_MAX_WORKFLOW_ANNOTATIONS;
+  const command = caseAnnotationCommand(options.gate);
 
   return report.failures
     .filter(hasAnnotationLocation)
     .slice(0, maxAnnotations)
     .map((testCase) =>
       formatWorkflowCommand({
-        command: "error",
+        command,
         properties: {
           file: testCase.displayFile,
           line: String(testCase.location.line),
@@ -66,6 +73,7 @@ export function buildCheckAnnotations(
     options.maxAnnotations ?? DEFAULT_MAX_CHECK_ANNOTATIONS,
     DEFAULT_MAX_CHECK_ANNOTATIONS,
   );
+  const annotationLevel = caseAnnotationLevel(options.gate);
 
   return report.failures
     .filter(hasAnnotationLocation)
@@ -74,7 +82,7 @@ export function buildCheckAnnotations(
       path: testCase.displayFile,
       start_line: testCase.location.line,
       end_line: testCase.location.line,
-      annotation_level: "failure",
+      annotation_level: annotationLevel,
       title: truncate(
         `${testCase.primaryFailure?.judgeName ?? "vitest-evals"} - ${testCase.displayName}`,
         255,
@@ -85,6 +93,18 @@ export function buildCheckAnnotations(
       ),
       raw_details: truncate(formatRawDetails(testCase), MAX_CHECK_FIELD_LENGTH),
     }));
+}
+
+function caseAnnotationCommand(
+  gate: EvalGateResult | undefined,
+): "error" | "warning" {
+  return gate?.ok ? "warning" : "error";
+}
+
+function caseAnnotationLevel(
+  gate: EvalGateResult | undefined,
+): "failure" | "warning" {
+  return gate?.ok ? "warning" : "failure";
 }
 
 function hasAnnotationLocation(

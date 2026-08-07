@@ -916,6 +916,23 @@ describe("renderWorkflowCommands", () => {
     ]);
   });
 
+  test("demotes case misses to warnings when the suite gate passed", () => {
+    const report = collectEvalReport(sampleJson, {
+      workspace: "/repo",
+    });
+    report.totals.evalTotal = 10;
+    report.totals.evalPassed = 9;
+    report.totals.evalFailed = 1;
+    report.score = { average: 0.91, minimum: 0.2 };
+    const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
+
+    expect(gate.ok).toBe(true);
+    expect(renderWorkflowCommands(report, { gate })[0]).toMatch(/^::warning /);
+    expect(buildCheckAnnotations(report, { gate })[0]?.annotation_level).toBe(
+      "warning",
+    );
+  });
+
   test("uses the canonical score formatter in annotations", () => {
     const json = structuredClone(sampleJson);
     const evalMeta = (json.testResults[0]?.assertionResults[0]?.meta as any)
@@ -1071,8 +1088,11 @@ describe("publishCheckRun", () => {
     const body = JSON.parse(request.body);
     expect(body.conclusion).toBe("success");
     expect(body.output.title).toContain("90.0%");
+    expect(body.output.summary).toContain("| Status | passed |");
     expect(body.output.summary).toContain("| Pass Rate | 90.0% |");
     expect(body.output.summary).toContain("| Gate |");
+    expect(body.output.summary).toContain("### Quality Misses");
+    expect(body.output.annotations[0]?.annotation_level).toBe("warning");
   });
 
   test("caps Check Run summary at GitHub's summary length limit", async () => {

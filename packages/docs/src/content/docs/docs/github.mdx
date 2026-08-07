@@ -63,9 +63,10 @@ suites that tolerate some misses, prefer a score floor:
     min-pass-rate: 0.8
 ```
 
-When a gate is configured, the Check Run conclusion and title follow the gate
-decision (for example `Eval pass rate 63.7% — required 80.0%`) instead of
-failing on any single case.
+When a gate is configured, `status`, the Check Run conclusion/title, and step
+exit all follow the gate decision (for example
+`Eval pass rate 63.7% — required 80.0%`) instead of failing on any single case.
+Quality misses stay visible as warnings when the suite is still above the floor.
 
 ## Sharded Evals
 
