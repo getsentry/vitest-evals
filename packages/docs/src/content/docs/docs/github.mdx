@@ -7,6 +7,9 @@ editUrl: false
 GitHub reporting is action-first. Run Vitest with JSON output, then publish the
 combined result with `getsentry/vitest-evals`.
 
+Use JSON as the eval artifact because it preserves `task.meta.eval` and
+`task.meta.harness`. JUnit XML does not carry the full eval metadata.
+
 ## Single Job
 
 Emit Vitest JSON and run the action with `if: always()` so failures still
@@ -68,10 +71,65 @@ the gate decision (for example `Eval pass rate 63.7% — required 80.0%`) instea
 of failing on any single case. Quality misses stay visible as warnings when the
 suite is still above the floor.
 
-On `pull_request`, the Check Run attaches to the PR head commit (not the
-temporary merge `GITHUB_SHA`) so it appears on the PR checks list. When the Check
-Run publishes successfully, the action step soft-fails by default so that check
-owns green/red; set `soft-fail: false` if you also want the workflow job red.
+## Check Run Ownership
+
+A Check Run is a **separate** GitHub check from the workflow job row. Use it
+when you want the PR checks list secondary line to show the gate title
+(for example `Eval pass rate 90.2% — floor 80.0%`) instead of canned job text.
+
+### Commit SHA on pull_request
+
+On `pull_request`, GitHub sets `GITHUB_SHA` to a temporary merge commit. PR
+checks and required status attach to the **head** commit. The action resolves
+the Check Run SHA in this order:
+
+1. explicit `sha` input
+2. `GITHUB_PR_HEAD_SHA` (optional override env)
+3. `pull_request.head.sha` from `GITHUB_EVENT_PATH`
+4. `GITHUB_SHA`
+
+You usually do not need to pass `sha`. If you must override:
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  with:
+    results: vitest-results.json
+    publish-check: true
+    sha: ${{ github.event.pull_request.head.sha || github.sha }}
+```
+
+### Soft-fail defaults
+
+Recommended defaults when `publish-check: true` and a gate is set:
+
+- the Check Run conclusion follows the gate
+- if the Check Run publishes successfully, the action step stays green
+  (`soft-fail` default) so the Check Run owns PR status
+- if Check Run publishing is skipped or fails, the step still fails on a
+  rejected gate so you do not silently lose the status signal
+- set `soft-fail: false` when you also want the workflow job red
+
+If the token or permission is missing, the action keeps the job summary and
+workflow annotations and warns instead of failing solely for the missing check.
+
+### Job summary only (no Check Run)
+
+If you only need the rich markdown report on the workflow job, leave
+`publish-check` off. That keeps everything under the normal workflow check and
+avoids a second Checks API entry on the PR.
+
+```yaml
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results.json
+    publish-summary: true
+    min-pass-rate: 0.8
+```
+
+Job-summary-only is also the cleanest way to keep status under a real workflow
+job name (for example `evals / score · <gate title>`) when you do not want a
+detached Checks API run.
 
 ## Sharded Evals
 
@@ -79,28 +137,83 @@ For sharded jobs, upload one JSON result per matrix job and publish once from a
 reducer job.
 
 ```yaml title=".github/workflows/evals.yml"
-- uses: actions/upload-artifact@v4
-  with:
-    name: vitest-evals-${{ matrix.shard }}
-    path: vitest-results-${{ matrix.shard }}.json
+jobs:
+  evals:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install
 
-- uses: actions/download-artifact@v4
-  with:
-    pattern: vitest-evals-*
-    path: eval-results
-    merge-multiple: true
+      - name: Run eval shard
+        # continue-on-error lets qualitative misses still upload JSON.
+        # Missing result files should still fail the shard.
+        id: run
+        continue-on-error: true
+        run: |
+          pnpm exec vitest run --config vitest.evals.config.ts \
+            --shard=${{ matrix.shard }}/4 \
+            --reporter=vitest-evals/reporter \
+            --reporter=json \
+            --outputFile.json=vitest-results-${{ matrix.shard }}.json
 
-- uses: getsentry/vitest-evals@v0
-  with:
-    results: eval-results/*.json
-    publish-check: true
-    min-pass-rate: 0.8
+      - name: Require eval results
+        if: steps.run.conclusion != 'skipped'
+        run: test -f vitest-results-${{ matrix.shard }}.json
+
+      # Optional: per-shard job summary (no Check Run)
+      - uses: getsentry/vitest-evals@v0
+        if: always()
+        with:
+          results: vitest-results-${{ matrix.shard }}.json
+          publish-summary: true
+          publish-check: false
+          fail-on-failures: false
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: vitest-evals-${{ matrix.shard }}
+          path: vitest-results-${{ matrix.shard }}.json
+
+  report:
+    if: always()
+    needs: [evals]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vitest-evals-*
+          path: eval-results
+          merge-multiple: true
+
+      - id: report
+        uses: getsentry/vitest-evals@v0
+        with:
+          results: eval-results/*.json
+          publish-check: true
+          check-name: eval score
+          min-pass-rate: 0.8
 ```
 
 Keep each shard’s JSON artifact distinct. The reducer job should be the only job
-that publishes the combined report. When the reducer owns the gate, shard jobs
-can use `continue-on-error` so qualitative misses still upload JSON while
-missing result files remain hard failures.
+that publishes the combined Check Run / gate. Shard jobs can publish their own
+job summaries so each matrix row shows its metric table and quality misses.
+
+When the reducer owns the gate, shard jobs can use `continue-on-error` so
+qualitative misses still upload JSON while missing result files remain hard
+failures.
 
 ## Permissions
 
@@ -108,6 +221,66 @@ Use `checks: write` when publishing Check Runs. Keep `contents: read` for
 checkout and avoid broader token permissions unless another workflow step needs
 them.
 
-For the full input table, soft-fail defaults, and per-shard summary pattern, see
-the repository guide at
-[`docs/github-actions.md`](https://github.com/getsentry/vitest-evals/blob/main/docs/github-actions.md).
+## Inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `results` | `vitest-results.json` | Vitest JSON result files. Supports paths, `*` and `**` globs, and newline-separated entries. |
+| `publish-summary` | `true` | Write a GitHub Actions job summary. |
+| `publish-annotations` | `true` | Emit GitHub workflow annotations for failed evals. |
+| `publish-check` | `false` | Publish one GitHub Check Run for the combined report. Attaches to PR head on `pull_request`. |
+| `check-name` | `vitest-evals` | Name of the GitHub Check Run. |
+| `github-token` | `${{ github.token }}` | Token used for Check Run publishing. |
+| `sha` | PR head, else `GITHUB_SHA` | Commit SHA for the Check Run. |
+| `fail-on-failures` | `false` | Fail the action when any eval case failed. Equivalent to `min-pass-rate: 1`. |
+| `soft-fail` | auto | Keep the step green when a published Check Run owns a failed gate. Defaults to true only after a successful Check Run publish. |
+| `min-pass-rate` | unset | Minimum fraction of eval cases that must pass (`0`-`1`). |
+| `min-score-average` | unset | Minimum average eval score across scored cases (`0`-`1`). |
+| `max-annotations` | unset | Maximum number of failure annotations to publish. Check Run annotations are capped at 50 by GitHub. |
+| `max-failures` | unset | Maximum number of detailed failures to include in summaries and checks. |
+
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `status` | Effective CI status: `passed` or `failed`. Follows the gate when one is configured; otherwise mirrors the raw report. |
+| `results-count` | Number of Vitest JSON result files included. |
+| `evals-total` | Total eval cases included in the report. |
+| `evals-passed` | Passed eval cases included in the report. |
+| `evals-failed` | Failed eval cases included in the report. |
+| `pass-rate` | Eval pass rate as a 0-1 ratio (`0.80`), or `n/a`. |
+| `score-average` | Average eval score across the combined report. |
+| `score-minimum` | Minimum eval score across the combined report. |
+| `gate-status` | Same value as `status` (kept for explicit gate wiring). |
+| `gate-title` | Short gate title used for Check Runs and suite-level annotations. |
+| `gate-message` | Human-readable gate decision. |
+| `check-url` | URL of the published GitHub Check Run, when available. |
+
+```yaml
+- id: report
+  uses: getsentry/vitest-evals@v0
+  with:
+    results: eval-results/*.json
+    publish-check: true
+    min-pass-rate: 0.8
+
+# ${{ steps.report.outputs.status }}
+# ${{ steps.report.outputs.gate-title }}
+# ${{ steps.report.outputs.pass-rate }}
+# ${{ steps.report.outputs.check-url }}
+```
+
+## Recommended Patterns
+
+Pick one ownership model and stick to it:
+
+1. **Check Run owns status** — `publish-check: true` + gate + default soft-fail.
+   Best when you want a custom secondary title on the PR checks list.
+2. **Workflow job owns status** — `publish-check: false` + job summary, and put
+   the gate in a real workflow job name. Best when you want clean suite
+   association and no detached Checks API entry.
+3. **Per-shard summaries + reducer gate** — each shard publishes summary only;
+   one reducer publishes the combined gate (Check Run or real job).
+
+Do not mix a detached Check Run gate with a second red workflow job unless you
+intentionally want both rows red (`soft-fail: false`).

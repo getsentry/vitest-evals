@@ -13,6 +13,7 @@ Canonical docs:
 
 - Overview: https://vitest-evals.sentry.dev/
 - Documentation: https://vitest-evals.sentry.dev/docs
+- GitHub reporting: https://vitest-evals.sentry.dev/docs/github
 - API reference: https://vitest-evals.sentry.dev/api
 - Repository: https://github.com/getsentry/vitest-evals
 
@@ -576,12 +577,18 @@ Use the same JSON artifacts for local investigation and GitHub reporting.
 
 ## GitHub Actions reporting
 
+Public guide: https://vitest-evals.sentry.dev/docs/github
+Repo guide: https://github.com/getsentry/vitest-evals/blob/main/docs/github-actions.md
+
 Use the action, not a raw CLI command, in workflow docs:
 
 ```yaml
 jobs:
   evals:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -602,6 +609,8 @@ jobs:
         if: always()
         with:
           results: vitest-results.json
+          publish-check: true
+          min-pass-rate: 0.8
 ```
 
 Action inputs:
@@ -613,32 +622,46 @@ Action inputs:
   `true`.
 - `publish-check`: create a GitHub Check Run for the combined report. Default:
   `false`. On `pull_request`, attaches to the PR head SHA (not the merge SHA).
+- `check-name`: Check Run name. Default: `vitest-evals`.
 - `sha`: optional commit SHA override for the Check Run.
-- `fail-on-failures`: fail the reporting step when the combined report failed.
-  Default: `false`.
+- `fail-on-failures`: fail the reporting step when any eval case failed.
+  Equivalent to `min-pass-rate: 1`. Default: `false`.
 - `soft-fail`: keep the step green when a published Check Run owns a failed
   gate. Defaults to true only after a successful Check Run publish.
 - `min-pass-rate` / `min-score-average`: optional aggregate floors in `0`-`1`.
 
-For Check Runs, grant `checks: write`:
+Check Run SHA resolution order on `pull_request`:
+
+1. explicit `sha` input
+2. `GITHUB_PR_HEAD_SHA`
+3. `pull_request.head.sha` from `GITHUB_EVENT_PATH`
+4. `GITHUB_SHA`
+
+Ownership model:
+
+- a Check Run is separate from the workflow job row
+- with `publish-check: true` + a gate, the Check Run conclusion/title follow the
+  gate and soft-fail keeps the step green so the check owns PR status
+- if publishing is skipped or fails, the step still fails on a rejected gate
+- leave `publish-check` off for job-summary-only mode (no detached Checks API
+  entry; status stays under the real workflow job)
+
+For Check Runs, grant `checks: write`.
+
+For sharded evals, upload one JSON artifact per matrix job, optionally publish a
+per-shard job summary (`publish-check: false`), and publish one combined gate
+from a reducer job:
 
 ```yaml
-permissions:
-  contents: read
-  checks: write
+# per shard
+- uses: getsentry/vitest-evals@v0
+  if: always()
+  with:
+    results: vitest-results-${{ matrix.shard }}.json
+    publish-summary: true
+    publish-check: false
 
-steps:
-  - uses: getsentry/vitest-evals@v0
-    if: always()
-    with:
-      results: vitest-results.json
-      publish-check: true
-```
-
-For sharded evals, upload one JSON artifact per matrix job and publish a single
-combined report from a reducer job:
-
-```yaml
+# reducer
 - uses: actions/download-artifact@v4
   with:
     pattern: vitest-evals-*
@@ -649,8 +672,14 @@ combined report from a reducer job:
   with:
     results: eval-results/*.json
     publish-check: true
-    fail-on-failures: true
+    min-pass-rate: 0.8
 ```
+
+Recommended patterns:
+
+1. Check Run owns status (`publish-check: true` + gate + default soft-fail)
+2. Workflow job owns status (`publish-check: false` + real job name / summary)
+3. Per-shard summaries + one reducer gate
 
 ## Replay
 
