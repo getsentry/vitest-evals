@@ -1,6 +1,6 @@
 {
   "name": "@vitest-evals/report-ui",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "Local React report UI for vitest-evals JSON artifacts.",
   "repository": {
     "type": "git",
