@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
-import { formatDuration } from "../model";
+import { useEffect, useRef } from "react";
+import { caseToMarkdown } from "../case-markdown";
+import { formatDuration, formatJson } from "../model";
 import type { DetailTab } from "../types";
 import { TabButton } from "../ui";
+import { CopyButton } from "./CopyButton";
+import { FileOpenMenu } from "./FileOpenMenu";
 import { OverviewTab } from "./OverviewTab";
 import { RawTab } from "./RawTab";
 import { Fact, FactsGrid, ScoreValue, StatusMark } from "./ReportPrimitives";
@@ -109,14 +112,24 @@ export function CaseDrawer({
                   {testCase.displayName}
                 </h2>
               </div>
-              <p className="mt-2 truncate text-sm leading-snug text-muted">
-                {testCase.displayFile}
-              </p>
-              <div className="mt-3 flex items-baseline gap-2 sm:hidden">
-                <span className="text-[0.68rem] font-semibold uppercase text-muted">
-                  Score
-                </span>
-                <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+              <div className="mt-2 flex min-w-0 items-center gap-1.5">
+                <p className="min-w-0 truncate text-sm leading-snug text-muted">
+                  {testCase.displayFile}
+                </p>
+                <FileOpenMenu testCase={testCase} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <CopyButton
+                  label="Copy as Markdown"
+                  text={caseToMarkdown(testCase, run)}
+                />
+                <CopyButton label="Copy JSON" text={formatJson(testCase)} />
+                <div className="flex items-baseline gap-2 sm:hidden">
+                  <span className="text-[0.68rem] font-semibold uppercase text-muted">
+                    Score
+                  </span>
+                  <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+                </div>
               </div>
             </div>
             <div className="flex min-w-0 shrink-0 items-start justify-end gap-4">
