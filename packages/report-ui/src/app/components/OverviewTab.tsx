@@ -1,8 +1,18 @@
 import type { HarnessRun, ReportCase } from "@vitest-evals/core";
-import { formatDuration, formatNumber } from "../model";
+import {
+  caseExpected,
+  caseInput,
+  formatDuration,
+  formatNumber,
+} from "../model";
+import { estimateUsageCost, formatUsd } from "../pricing";
+import { useReportMeta } from "../report-meta";
 import { EmptyState } from "../ui";
+import { CostHelp } from "./CostHelp";
 import { DetailContent, DetailSection } from "./DetailLayout";
-import { Fact, FactsGrid, JsonBlock, ScoreValue } from "./ReportPrimitives";
+import { FailureList } from "./FailureList";
+import { JsonInspector } from "./JsonInspector";
+import { Fact, FactsGrid, ScoreValue } from "./ReportPrimitives";
 
 export function OverviewTab({
   testCase,
@@ -13,8 +23,24 @@ export function OverviewTab({
 }) {
   return (
     <DetailContent>
+      <DetailSection title="Dataset">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="min-w-0">
+            <p className="mb-2 text-[0.68rem] font-semibold uppercase text-muted">
+              Input
+            </p>
+            <JsonInspector value={caseInput(testCase)} />
+          </div>
+          <div className="min-w-0">
+            <p className="mb-2 text-[0.68rem] font-semibold uppercase text-muted">
+              Expected
+            </p>
+            <JsonInspector value={caseExpected(testCase)} />
+          </div>
+        </div>
+      </DetailSection>
       <DetailSection title="Output">
-        <JsonBlock value={testCase.eval?.output ?? run?.output} />
+        <JsonInspector value={testCase.eval?.output ?? run?.output} />
       </DetailSection>
       <DetailSection title="Judge evidence">
         <ScoreTable testCase={testCase} />
@@ -23,17 +49,7 @@ export function OverviewTab({
         <UsageGrid run={run} />
       </DetailSection>
       <DetailSection title="Failures">
-        {testCase.failureMessages.length > 0 ? (
-          <ul className="list-disc space-y-2 pl-5 text-sm text-ink">
-            {testCase.failureMessages.map((message) => (
-              <li className="break-words" key={message}>
-                {message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState>No failure messages</EmptyState>
-        )}
+        <FailureList messages={testCase.failureMessages} />
       </DetailSection>
     </DetailContent>
   );
@@ -140,7 +156,9 @@ function EvidenceLine({ label, value }: { label: string; value: string }) {
 }
 
 function UsageGrid({ run }: { run: HarnessRun | undefined }) {
+  const { pricing } = useReportMeta();
   const usage = run?.usage;
+  const cost = estimateUsageCost(usage ?? {}, pricing);
   return (
     <FactsGrid compact>
       <Fact label="Provider" value={usage?.provider ?? "n/a"} />
@@ -149,6 +167,19 @@ function UsageGrid({ run }: { run: HarnessRun | undefined }) {
       <Fact label="Output" value={formatNumber(usage?.outputTokens)} />
       <Fact label="Reasoning" value={formatNumber(usage?.reasoningTokens)} />
       <Fact label="Total" value={formatNumber(usage?.totalTokens)} />
+      <Fact
+        label="Est. cost"
+        value={
+          cost ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span>{formatUsd(cost.totalUsd)}</span>
+              <CostHelp cost={cost} pricing={pricing} />
+            </span>
+          ) : (
+            "n/a"
+          )
+        }
+      />
       <Fact label="Retries" value={formatNumber(usage?.retries)} />
       <Fact label="Run time" value={formatDuration(run?.timings?.totalMs)} />
     </FactsGrid>
