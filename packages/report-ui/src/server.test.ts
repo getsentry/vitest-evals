@@ -1,8 +1,8 @@
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import { parseCliArgs } from "./cli-options";
 import { serveReportWorkspace } from "./server";
 
@@ -88,6 +88,7 @@ describe("serveReportWorkspace", () => {
       assetsDir,
       host: "127.0.0.1",
       port: 0,
+      workspaceRoot: "/repo",
     });
 
     try {
@@ -95,6 +96,12 @@ describe("serveReportWorkspace", () => {
       await expect(dataResponse.json()).resolves.toMatchObject({
         schemaVersion: 1,
         cases: [{ id: "case-1" }],
+      });
+
+      const metaResponse = await fetch(`${server.url}/data/meta.json`);
+      await expect(metaResponse.json()).resolves.toMatchObject({
+        workspaceRoot: "/repo",
+        pricing: { source: "fallback" },
       });
 
       const htmlResponse = await fetch(server.url);

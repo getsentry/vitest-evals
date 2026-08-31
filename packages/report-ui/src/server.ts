@@ -1,15 +1,17 @@
 import { readFile, stat } from "node:fs/promises";
 import {
-  createServer,
   type IncomingMessage,
   type Server,
   type ServerResponse,
+  createServer,
 } from "node:http";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import { readReportWorkspace } from "@vitest-evals/core/node";
+import { FALLBACK_PRICING, type ReportUiMeta } from "./app/pricing.js";
 import { currentModuleUrl } from "./esm-runtime.js";
+import { loadPricingTable } from "./pricing-catalog.js";
 
 /** Options for serving a report UI from one or more JSON result inputs. */
 export type ServeReportUiOptions = {
@@ -26,6 +28,8 @@ export type ServeReportWorkspaceOptions = {
   host?: string;
   port?: number;
   assetsDir?: string;
+  workspaceRoot?: string;
+  pricing?: ReportUiMeta["pricing"];
 };
 
 /** Handle returned by the local report UI server. */
@@ -53,7 +57,9 @@ export async function serveReportUi(
     assetsDir: options.assetsDir,
     host: options.host,
     port: options.port,
+    pricing: await loadPricingTable(),
     resultFiles,
+    workspaceRoot: resolve(options.workspace ?? options.cwd ?? process.cwd()),
   });
 }
 
@@ -65,7 +71,11 @@ export async function serveReportWorkspace(
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const assetsDir = resolve(options.assetsDir ?? defaultAssetsDir());
-  const server = createServer(createRequestHandler(workspace, assetsDir));
+  const meta: ReportUiMeta = {
+    pricing: options.pricing ?? FALLBACK_PRICING,
+    workspaceRoot: options.workspaceRoot,
+  };
+  const server = createServer(createRequestHandler(workspace, assetsDir, meta));
 
   await listen(server, port, host);
 
@@ -78,7 +88,11 @@ export async function serveReportWorkspace(
   };
 }
 
-function createRequestHandler(workspace: ReportWorkspace, assetsDir: string) {
+function createRequestHandler(
+  workspace: ReportWorkspace,
+  assetsDir: string,
+  meta: ReportUiMeta,
+) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const requestUrl = new URL(
@@ -88,6 +102,11 @@ function createRequestHandler(workspace: ReportWorkspace, assetsDir: string) {
 
       if (requestUrl.pathname === "/data/workspace.json") {
         sendJson(response, workspace);
+        return;
+      }
+
+      if (requestUrl.pathname === "/data/meta.json") {
+        sendJson(response, meta);
         return;
       }
 
