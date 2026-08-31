@@ -1,11 +1,15 @@
+import { Link } from "@tanstack/react-router";
 import type { ReportRun } from "@vitest-evals/core";
+import type { ReactNode } from "react";
 import {
+  type CaseStatusFilter,
   formatDuration,
   formatNumber,
   formatScore,
   type summarizeWorkspace,
 } from "../model";
-import { cx, toneTextClass, type Tone } from "../ui";
+import { toReportSearch } from "../search";
+import { type Tone, cx, toneTextClass } from "../ui";
 import {
   executedCaseCount,
   passRate,
@@ -50,8 +54,10 @@ export function ReportHeader({
 }
 
 export function SummaryBar({
+  currentStatus,
   summary,
 }: {
+  currentStatus: CaseStatusFilter;
   summary: ReturnType<typeof summarizeWorkspace>;
 }) {
   const verdictTone = passRateTone(summary);
@@ -80,12 +86,15 @@ export function SummaryBar({
             </span>
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-            <span>
+            <StatusFilterLink
+              active={currentStatus === "failed"}
+              status="failed"
+            >
               <strong className="font-semibold text-fail">
                 {summary.failed}
               </strong>{" "}
               failed
-            </span>
+            </StatusFilterLink>
             <span>
               <strong className="font-semibold text-ink">
                 {summary.caseCount}
@@ -112,9 +121,27 @@ export function SummaryBar({
           </div>
           <OutcomeBar summary={summary} />
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <OutcomeStat label="Passed" tone="good" value={summary.passed} />
-            <OutcomeStat label="Failed" tone="bad" value={summary.failed} />
-            <OutcomeStat label="Skipped" tone="empty" value={summary.skipped} />
+            <OutcomeStat
+              active={currentStatus === "passed"}
+              label="Passed"
+              status="passed"
+              tone="good"
+              value={summary.passed}
+            />
+            <OutcomeStat
+              active={currentStatus === "failed"}
+              label="Failed"
+              status="failed"
+              tone="bad"
+              value={summary.failed}
+            />
+            <OutcomeStat
+              active={currentStatus === "skipped"}
+              label="Skipped"
+              status="skipped"
+              tone="empty"
+              value={summary.skipped}
+            />
           </div>
         </div>
 
@@ -142,9 +169,11 @@ export function SummaryBar({
 }
 
 export function RunStrip({
+  currentStatus,
   runs,
   selectedRunId,
 }: {
+  currentStatus: CaseStatusFilter;
   runs: ReportRun[];
   selectedRunId: string;
 }) {
@@ -180,18 +209,26 @@ export function RunStrip({
               </div>
             </div>
             <div className="grid shrink-0 grid-cols-2 gap-3 text-right text-xs text-muted">
-              <span>
+              <RunStatusLink
+                active={selectedRunId === run.id && currentStatus === "passed"}
+                runId={run.id}
+                status="passed"
+              >
                 <strong className="block font-semibold text-pass">
                   {run.totals.evalPassed}
                 </strong>
                 passed
-              </span>
-              <span>
+              </RunStatusLink>
+              <RunStatusLink
+                active={selectedRunId === run.id && currentStatus === "failed"}
+                runId={run.id}
+                status="failed"
+              >
                 <strong className="block font-semibold text-fail">
                   {run.totals.evalFailed}
                 </strong>
                 failed
-              </span>
+              </RunStatusLink>
             </div>
           </div>
         ))}
@@ -245,11 +282,15 @@ function OutcomeBar({
 }
 
 function OutcomeStat({
+  active,
   label,
+  status,
   tone,
   value,
 }: {
+  active: boolean;
   label: string;
+  status: CaseStatusFilter;
   tone: Tone;
   value: number;
 }) {
@@ -259,13 +300,81 @@ function OutcomeStat({
         className={cx("size-2 shrink-0 rounded-[2px]", statusFillClass(tone))}
         aria-hidden="true"
       />
-      <span className="min-w-0 text-xs text-muted">
+      <StatusFilterLink
+        active={active}
+        className="min-w-0 text-xs"
+        status={status}
+      >
         <strong className={cx("font-semibold", toneTextClass(tone))}>
           {value}
         </strong>{" "}
         {label.toLowerCase()}
-      </span>
+      </StatusFilterLink>
     </div>
+  );
+}
+
+function StatusFilterLink({
+  active,
+  children,
+  className,
+  status,
+}: {
+  active: boolean;
+  children: ReactNode;
+  className?: string;
+  status: CaseStatusFilter;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-selected-line",
+        active && "underline",
+        className,
+      )}
+      search={(previous) =>
+        toReportSearch({
+          ...previous,
+          status: active ? "all" : status,
+        })
+      }
+      to="/"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function RunStatusLink({
+  active,
+  children,
+  runId,
+  status,
+}: {
+  active: boolean;
+  children: ReactNode;
+  runId: string;
+  status: CaseStatusFilter;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-selected-line",
+        active && "underline",
+      )}
+      search={(previous) =>
+        toReportSearch({
+          ...previous,
+          run: active ? "all" : runId,
+          status: active ? "all" : status,
+        })
+      }
+      to="/"
+    >
+      {children}
+    </Link>
   );
 }
 
