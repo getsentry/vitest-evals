@@ -2,6 +2,7 @@ import type { HarnessRun, ReportCase } from "@vitest-evals/core";
 import { formatDuration, formatNumber } from "../model";
 import { EmptyState } from "../ui";
 import { DetailContent, DetailSection } from "./DetailLayout";
+import { FailureList } from "./FailureList";
 import { Fact, FactsGrid, JsonBlock, ScoreValue } from "./ReportPrimitives";
 
 export function OverviewTab({
@@ -23,17 +24,7 @@ export function OverviewTab({
         <UsageGrid run={run} />
       </DetailSection>
       <DetailSection title="Failures">
-        {testCase.failureMessages.length > 0 ? (
-          <ul className="list-disc space-y-2 pl-5 text-sm text-ink">
-            {testCase.failureMessages.map((message) => (
-              <li className="break-words" key={message}>
-                {message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState>No failure messages</EmptyState>
-        )}
+        <FailureList messages={testCase.failureMessages} />
       </DetailSection>
     </DetailContent>
   );
