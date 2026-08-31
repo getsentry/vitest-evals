@@ -12,22 +12,27 @@ import {
 import {
   type HubEvent,
   type RerunJobView,
+  formatElapsed,
   formatRerunCommand,
+  jobElapsedMs,
   postCancel,
   postReload,
   postRerun,
   rerunRequest,
 } from "../rerun";
 import { cx } from "../ui";
+import { formatVitestLog } from "../vitest-log";
 import { CopyButton } from "./CopyButton";
 
 type RerunSessionValue = {
   jobs: RerunJobView[];
+  now: number;
   requestRerun: (testCase: ReportCase) => void;
 };
 
 const RerunSessionContext = createContext<RerunSessionValue>({
   jobs: [],
+  now: 0,
   requestRerun: () => undefined,
 });
 
@@ -43,7 +48,17 @@ export function RerunSessionProvider({
   onDump: () => void;
 }) {
   const [jobs, setJobs] = useState<RerunJobView[]>([]);
+  const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState<ReportCase>();
+  const running = jobs.some((job) => job.status === "running");
+
+  useEffect(() => {
+    if (!running) {
+      return;
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   useEffect(() => {
     const source = new EventSource("/api/events");
@@ -83,7 +98,10 @@ export function RerunSessionProvider({
     setPending(testCase);
   }, []);
 
-  const value = useMemo(() => ({ jobs, requestRerun }), [jobs, requestRerun]);
+  const value = useMemo(
+    () => ({ jobs, now, requestRerun }),
+    [jobs, now, requestRerun],
+  );
 
   return (
     <RerunSessionContext.Provider value={value}>
@@ -106,6 +124,8 @@ export function RerunSessionProvider({
                   command: formatRerunCommand(rerunRequest(testCase)),
                   status: "err",
                   log: "",
+                  startedAt: Date.now(),
+                  endedAt: Date.now(),
                   error: result.error ?? "Re-run failed",
                 },
                 ...current,
@@ -116,6 +136,7 @@ export function RerunSessionProvider({
       ) : null}
       <TaskTray
         jobs={jobs}
+        now={now}
         onCancel={async (jobId) => {
           const result = await postCancel(jobId);
           if (result.job) {
@@ -226,11 +247,13 @@ function RerunConfirm({
 
 function TaskTray({
   jobs,
+  now,
   onCancel,
   onClearDone,
   onReload,
 }: {
   jobs: RerunJobView[];
+  now: number;
   onCancel: (jobId: string) => void;
   onClearDone: () => void;
   onReload: () => void;
@@ -238,8 +261,15 @@ function TaskTray({
   const trayRef = useRef<HTMLElement | null>(null);
   const [openId, setOpenId] = useState<string>();
   const [dismissed, setDismissed] = useState(false);
-  const running = jobs.filter((job) => job.status === "running").length;
+  const runningJobs = jobs.filter((job) => job.status === "running");
+  const running = runningJobs.length;
   const doneCount = jobs.length - running;
+  const runningElapsed =
+    runningJobs.length === 0
+      ? undefined
+      : formatElapsed(
+          Math.max(...runningJobs.map((job) => jobElapsedMs(job, now))),
+        );
 
   useEffect(() => {
     if (running > 0) {
@@ -278,8 +308,15 @@ function TaskTray({
         onClick={() => setDismissed(false)}
       >
         Tasks
-        <span className="ml-2 font-normal text-muted">
-          {running > 0 ? `${running} running` : `${jobs.length} done`}
+        <span className="ml-2 inline-flex items-center gap-1.5 font-normal text-muted">
+          {running > 0 && runningElapsed ? (
+            <>
+              <TaskSpinner className="text-warn" />
+              {runningElapsed}
+            </>
+          ) : (
+            `${jobs.length} done`
+          )}
         </span>
       </button>
     );
@@ -298,7 +335,16 @@ function TaskTray({
       <div className="flex items-center gap-2 border-b border-line-subtle px-3 py-2">
         <div className="min-w-0 flex-1 text-xs font-semibold text-ink">
           Tasks
-          <span className="ml-2 font-normal text-muted">{running} running</span>
+          <span className="ml-2 inline-flex items-center gap-1.5 font-normal text-muted">
+            {running > 0 && runningElapsed ? (
+              <>
+                <TaskSpinner className="text-warn" />
+                {running} · {runningElapsed}
+              </>
+            ) : (
+              `${running} running`
+            )}
+          </span>
         </div>
         <button
           className="h-6 rounded px-1.5 text-[0.7rem] font-semibold text-muted-strong hover:bg-panel-subtle hover:text-ink"
@@ -338,21 +384,24 @@ function TaskTray({
                   type="button"
                   onClick={() => setOpenId(open ? "" : job.id)}
                 >
-                  <span
-                    className={cx(
-                      "size-2 shrink-0 rounded-full",
-                      job.status === "running" && "bg-warn",
-                      job.status === "ok" && "bg-pass",
-                      job.status === "err" && "bg-fail",
-                      job.status === "cancelled" && "bg-muted",
-                    )}
-                    aria-hidden="true"
-                  />
+                  {job.status === "running" ? (
+                    <TaskSpinner className="text-warn" />
+                  ) : (
+                    <span
+                      className={cx(
+                        "size-2 shrink-0 rounded-full",
+                        job.status === "ok" && "bg-pass",
+                        job.status === "err" && "bg-fail",
+                        job.status === "cancelled" && "bg-muted",
+                      )}
+                      aria-hidden="true"
+                    />
+                  )}
                   <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
                     {job.title}
                   </span>
                   <span className="shrink-0 text-[0.68rem] text-muted">
-                    {jobStatusLabel(job.status)}
+                    {jobClock(job, now)}
                   </span>
                 </button>
                 {job.status === "running" ? (
@@ -377,8 +426,8 @@ function TaskTray({
 function JobLog({ job }: { job: RerunJobView }) {
   const logRef = useRef<HTMLPreElement>(null);
   const pinRef = useRef(true);
+  const logText = formatVitestLog(job.log) || job.error || "";
 
-  const logText = job.log;
   useEffect(() => {
     const log = logRef.current;
     if (log && pinRef.current && logText.length >= 0) {
@@ -387,10 +436,18 @@ function JobLog({ job }: { job: RerunJobView }) {
   }, [logText]);
 
   return (
-    <div className="min-w-0 bg-panel-subtle">
+    <div className="min-w-0">
+      <div className="flex items-center gap-1 border-t border-line-subtle bg-panel-subtle px-2 py-1">
+        <CopyButton label="Command" size="compact" text={job.command} />
+        <CopyButton
+          label="Logs"
+          size="compact"
+          text={logText || "Waiting for vitest output…"}
+        />
+      </div>
       <pre
         ref={logRef}
-        className="max-h-40 min-w-0 overflow-auto px-3 py-2 font-mono text-[0.68rem] leading-snug break-all whitespace-pre-wrap text-muted-strong"
+        className="max-h-56 min-w-0 overflow-auto bg-ink px-3 py-2 font-mono text-[0.72rem] leading-relaxed break-words whitespace-pre-wrap text-panel"
         onScroll={() => {
           const log = logRef.current;
           if (!log) {
@@ -400,21 +457,34 @@ function JobLog({ job }: { job: RerunJobView }) {
             log.scrollHeight - log.scrollTop - log.clientHeight < 24;
         }}
       >
-        {job.log || job.error || "Waiting for vitest output…"}
+        {logText || "Waiting for vitest output…"}
       </pre>
     </div>
   );
 }
 
-function jobStatusLabel(status: RerunJobView["status"]) {
-  if (status === "running") {
-    return "Running";
+function jobClock(job: RerunJobView, now: number): string {
+  const elapsed = formatElapsed(jobElapsedMs(job, now));
+  if (job.status === "running") {
+    return elapsed;
   }
-  if (status === "ok") {
-    return "Done";
+  if (job.status === "ok") {
+    return `Done · ${elapsed}`;
   }
-  if (status === "cancelled") {
-    return "Cancelled";
+  if (job.status === "cancelled") {
+    return `Cancelled · ${elapsed}`;
   }
-  return "Failed";
+  return `Failed · ${elapsed}`;
+}
+
+export function TaskSpinner({ className }: { className?: string }) {
+  return (
+    <span
+      className={cx(
+        "inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent",
+        className,
+      )}
+      aria-hidden="true"
+    />
+  );
 }

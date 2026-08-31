@@ -4,6 +4,9 @@ export type ReportUiCliOptions = {
   workspace?: string;
   host: string;
   port: number;
+  junit?: string;
+  comment?: string;
+  serve: boolean;
   help: boolean;
 };
 
@@ -20,6 +23,7 @@ export function parseCliArgs(
     inputs: [],
     host: "127.0.0.1",
     port: 0,
+    serve: true,
     help: false,
   };
 
@@ -37,6 +41,15 @@ export function parseCliArgs(
         break;
       case "--port":
         options.port = readInteger(args, ++index, arg);
+        break;
+      case "--junit":
+        options.junit = readValue(args, ++index, arg);
+        break;
+      case "--comment":
+        options.comment = readValue(args, ++index, arg);
+        break;
+      case "--no-serve":
+        options.serve = false;
         break;
       case "--help":
       case "-h":
