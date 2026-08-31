@@ -1,21 +1,32 @@
 import type { ReportCase } from "@vitest-evals/core";
+import { useState } from "react";
 import { DetailContent, DetailSection } from "./DetailLayout";
-import { JsonBlock } from "./ReportPrimitives";
+import { JsonInspector } from "./JsonInspector";
 
 export function RawTab({ testCase }: { testCase: ReportCase }) {
+  const [mode, setMode] = useState<"tree" | "text">("tree");
+
   return (
     <DetailContent>
       <DetailSection title="Case JSON">
-        <JsonBlock value={testCase} />
+        <JsonInspector mode={mode} value={testCase} onModeChange={setMode} />
       </DetailSection>
       {testCase.harness?.run?.artifacts ? (
         <DetailSection title="Artifacts">
-          <JsonBlock value={testCase.harness.run.artifacts} />
+          <JsonInspector
+            mode={mode}
+            value={testCase.harness.run.artifacts}
+            onModeChange={setMode}
+          />
         </DetailSection>
       ) : null}
       {testCase.harness?.run?.errors?.length ? (
         <DetailSection title="Errors">
-          <JsonBlock value={testCase.harness.run.errors} />
+          <JsonInspector
+            mode={mode}
+            value={testCase.harness.run.errors}
+            onModeChange={setMode}
+          />
         </DetailSection>
       ) : null}
     </DetailContent>

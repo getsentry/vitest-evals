@@ -50,7 +50,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
+        "h-8 w-full rounded-md border border-line-subtle bg-panel px-2.5 text-sm text-ink outline-none",
         "placeholder:text-muted focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}
@@ -63,7 +63,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
     <select
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
+        "h-8 w-auto max-w-full rounded-md border border-line-subtle bg-panel px-2.5 text-sm text-ink outline-none",
         "focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}
