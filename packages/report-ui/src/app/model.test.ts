@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import {
   buildSpanTree,
   buildTranscript,
@@ -10,6 +10,7 @@ import {
   filterReportCases,
   formatScore,
   scoreTone,
+  sortReportCases,
   summarizeWorkspace,
 } from "./model";
 
@@ -233,6 +234,59 @@ describe("summarizeWorkspace", () => {
   });
 });
 
+describe("sortReportCases", () => {
+  test("orders failed cases first when sorting by status", () => {
+    expect(
+      sortReportCases(workspace.cases, "status", "asc").map(
+        (testCase) => testCase.status,
+      ),
+    ).toEqual(["failed", "passed"]);
+  });
+
+  test("orders higher scores first when sorting score descending", () => {
+    expect(
+      sortReportCases(workspace.cases, "score", "desc").map(
+        (testCase) => testCase.eval?.avgScore,
+      ),
+    ).toEqual([1, 0.2]);
+  });
+
+  test("orders models alphabetically", () => {
+    expect(
+      sortReportCases(
+        [
+          {
+            ...workspace.cases[0]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gpt-4o" },
+              },
+            },
+          },
+          {
+            ...workspace.cases[1]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gemini-2.5-flash" },
+              },
+            },
+          },
+        ],
+        "model",
+        "asc",
+      ).map((testCase) => testCase.harness?.run?.usage?.model),
+    ).toEqual(["gemini-2.5-flash", "gpt-4o"]);
+  });
+});
+
 describe("filterReportCases", () => {
   test("filters by status, run, and search query", () => {
     expect(
@@ -260,6 +314,32 @@ describe("filterReportCases", () => {
         query: "pi-ai",
       }),
     ).toEqual([]);
+  });
+
+  test("searches recorded model ids", () => {
+    expect(
+      filterReportCases(
+        [
+          {
+            ...workspace.cases[0]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gemini-2.5-flash" },
+              },
+            },
+          },
+        ],
+        {
+          status: "all",
+          runId: "all",
+          query: "gemini-2.5",
+        },
+      ),
+    ).toHaveLength(1);
   });
 });
 
