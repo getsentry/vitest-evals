@@ -1,18 +1,28 @@
-import type { ReactNode } from "react";
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
+import type { ReactNode } from "react";
+import { relativeDisplayPath, resolveOpenPath } from "../display-path";
+import { judgeTally } from "../judge-score";
 import {
+  type CaseFilters,
+  type CaseSortColumn,
+  type CaseSortDirection,
+  type CaseStatusFilter,
+  caseModel,
   caseToolCallCount,
   caseTotalTokens,
   formatDuration,
   formatNumber,
-  type CaseFilters,
-  type CaseStatusFilter,
 } from "../model";
+import { estimateUsageCost, formatUsd } from "../pricing";
+import { useReportMeta } from "../report-meta";
 import { EmptyState, Field, Input, Select, cx } from "../ui";
+import { CostHelp } from "./CostHelp";
+import { FileOpenMenu } from "./FileOpenMenu";
+import { InstantTooltip } from "./InstantTooltip";
 import { ScoreValue, StatusMark } from "./ReportPrimitives";
 
 type CaseColumn = {
-  id: string;
+  id: CaseSortColumn;
   header: string;
   className: string;
 };
@@ -39,6 +49,11 @@ const CASE_COLUMNS: CaseColumn[] = [
     className: "min-w-[220px]",
   },
   {
+    id: "model",
+    header: "Model",
+    className: "w-[148px]",
+  },
+  {
     id: "score",
     header: "Score",
     className: "w-[82px] text-right",
@@ -54,6 +69,11 @@ const CASE_COLUMNS: CaseColumn[] = [
     className: "w-[92px] text-right",
   },
   {
+    id: "cost",
+    header: "Cost",
+    className: "w-[88px] text-right",
+  },
+  {
     id: "tools",
     header: "Tools",
     className: "w-[72px] text-right",
@@ -63,19 +83,27 @@ const CASE_COLUMNS: CaseColumn[] = [
 export function CaseWorkbench({
   cases,
   filters,
+  modelOptions,
   runs,
   selectedCaseId,
+  sortColumn,
+  sortDirection,
   totalCases,
   onFiltersChange,
   onSelectCase,
+  onSortChange,
 }: {
   cases: ReportCase[];
   filters: CaseFilters;
+  modelOptions: string[];
   runs: ReportRun[];
   selectedCaseId: string | undefined;
+  sortColumn: CaseSortColumn | undefined;
+  sortDirection: CaseSortDirection;
   totalCases: number;
   onFiltersChange: (filters: CaseFilters) => void;
   onSelectCase: (testCase: ReportCase) => void;
+  onSortChange: (column: CaseSortColumn) => void;
 }) {
   return (
     <section className="min-h-[620px] min-w-0 bg-panel">
@@ -92,6 +120,7 @@ export function CaseWorkbench({
         </div>
         <CaseFilterControls
           filters={filters}
+          modelOptions={modelOptions}
           runs={runs}
           onFiltersChange={onFiltersChange}
         />
@@ -99,7 +128,10 @@ export function CaseWorkbench({
       <CaseTable
         cases={cases}
         selectedCaseId={selectedCaseId}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
         onSelectCase={onSelectCase}
+        onSortChange={onSortChange}
       />
     </section>
   );
@@ -107,15 +139,18 @@ export function CaseWorkbench({
 
 function CaseFilterControls({
   filters,
+  modelOptions,
   runs,
   onFiltersChange,
 }: {
   filters: CaseFilters;
+  modelOptions: string[];
   runs: ReportRun[];
   onFiltersChange: (filters: CaseFilters) => void;
 }) {
+  const { workspaceRoot } = useReportMeta();
   return (
-    <div className="mt-3 grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_220px]">
+    <div className="mt-3 grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_minmax(160px,1fr)_220px]">
       <Field label="Search" htmlFor="case-search">
         <Input
           id="case-search"
@@ -123,7 +158,7 @@ function CaseFilterControls({
           onChange={(event) =>
             onFiltersChange({ ...filters, query: event.target.value })
           }
-          placeholder="Case, file, judge"
+          placeholder="Case, file, judge, model"
         />
       </Field>
       <Field label="Status" htmlFor="case-status">
@@ -144,6 +179,25 @@ function CaseFilterControls({
           ))}
         </Select>
       </Field>
+      <Field label="Model" htmlFor="case-model">
+        <Select
+          id="case-model"
+          value={filters.model}
+          onChange={(event) =>
+            onFiltersChange({
+              ...filters,
+              model: event.target.value,
+            })
+          }
+        >
+          <option value="all">All models</option>
+          {modelOptions.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </Select>
+      </Field>
       <Field label="Run" htmlFor="case-run">
         <Select
           id="case-run"
@@ -155,7 +209,8 @@ function CaseFilterControls({
           <option value="all">All runs</option>
           {runs.map((run) => (
             <option key={run.id} value={run.id}>
-              {run.source ?? run.id}
+              {relativeDisplayPath(run.source ?? run.id, workspaceRoot) ||
+                run.id}
             </option>
           ))}
         </Select>
@@ -167,11 +222,17 @@ function CaseFilterControls({
 function CaseTable({
   cases,
   selectedCaseId,
+  sortColumn,
+  sortDirection,
   onSelectCase,
+  onSortChange,
 }: {
   cases: ReportCase[];
   selectedCaseId: string | undefined;
+  sortColumn: CaseSortColumn | undefined;
+  sortDirection: CaseSortDirection;
   onSelectCase: (testCase: ReportCase) => void;
+  onSortChange: (column: CaseSortColumn) => void;
 }) {
   if (cases.length === 0) {
     return <EmptyState>No matching eval cases</EmptyState>;
@@ -179,17 +240,45 @@ function CaseTable({
 
   return (
     <div className="h-[clamp(320px,calc(100vh-360px),720px)] overflow-auto">
-      <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+      <table className="w-full min-w-[960px] table-fixed border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-panel text-left text-[0.68rem] font-semibold uppercase text-muted-strong shadow-[0_1px_0_var(--color-line-subtle)]">
           <tr>
-            {CASE_COLUMNS.map((column) => (
-              <th
-                className={cx("px-4 py-2.5", column.className)}
-                key={column.id}
-              >
-                {column.header}
-              </th>
-            ))}
+            {CASE_COLUMNS.map((column) => {
+              const active = sortColumn === column.id;
+              return (
+                <th
+                  aria-sort={
+                    active
+                      ? sortDirection === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
+                  }
+                  className={cx("p-0", column.className)}
+                  key={column.id}
+                >
+                  <button
+                    className={cx(
+                      "flex w-full items-center gap-1 px-4 py-2.5 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected-line",
+                      column.className.includes("text-right")
+                        ? "justify-end"
+                        : "justify-start",
+                      active ? "text-ink" : "text-muted-strong",
+                    )}
+                    type="button"
+                    onClick={() => onSortChange(column.id)}
+                  >
+                    <span>{column.header}</span>
+                    <span
+                      aria-hidden="true"
+                      className="font-mono text-[0.6rem]"
+                    >
+                      {active ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}
+                    </span>
+                  </button>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -216,6 +305,15 @@ function CaseRow({
   testCase: ReportCase;
   onSelectCase: (testCase: ReportCase) => void;
 }) {
+  const { pricing, workspaceRoot } = useReportMeta();
+  const model = caseModel(testCase);
+  const displayFile =
+    relativeDisplayPath(testCase.displayFile, workspaceRoot) ||
+    testCase.displayFile;
+  const usageCost = estimateUsageCost(
+    testCase.harness?.run?.usage ?? {},
+    pricing,
+  );
   const selectCase = () => onSelectCase(testCase);
 
   return (
@@ -233,18 +331,38 @@ function CaseRow({
         </CaseCellButton>
       </td>
       <td className="min-w-0 p-0 align-middle">
+        <div className="flex min-w-0 items-stretch">
+          <CaseCellButton
+            className="min-w-0 flex-1 text-left"
+            label={`Open ${testCase.displayName}`}
+            onClick={selectCase}
+            selected={selected}
+            tabIndex={0}
+          >
+            <span className="block truncate font-medium text-ink">
+              {testCase.displayName}
+            </span>
+            <span className="mt-1 block truncate text-xs text-muted">
+              {displayFile}
+            </span>
+          </CaseCellButton>
+          <div className="flex items-center bg-panel pr-2 group-hover:bg-panel-subtle">
+            <FileOpenMenu
+              file={
+                resolveOpenPath(testCase.file, workspaceRoot) ?? testCase.file
+              }
+            />
+          </div>
+        </div>
+      </td>
+      <td className="min-w-0 p-0 align-middle">
         <CaseCellButton
-          className="text-left"
+          className="text-left font-mono text-[0.78rem]"
           label={`Open ${testCase.displayName}`}
           onClick={selectCase}
-          selected={selected}
-          tabIndex={0}
         >
-          <span className="block truncate font-medium text-ink">
-            {testCase.displayName}
-          </span>
-          <span className="mt-1 block truncate text-xs text-muted">
-            {testCase.displayFile}
+          <span className="block truncate" title={model}>
+            {model ?? "n/a"}
           </span>
         </CaseCellButton>
       </td>
@@ -254,7 +372,10 @@ function CaseRow({
           label={`Open ${testCase.displayName}`}
           onClick={selectCase}
         >
-          <ScoreValue score={testCase.eval?.avgScore} />
+          <ScoreValue
+            score={testCase.eval?.avgScore}
+            tally={judgeTally(testCase)}
+          />
         </CaseCellButton>
       </td>
       <td className="min-w-0 p-0 align-middle">
@@ -272,8 +393,30 @@ function CaseRow({
           label={`Open ${testCase.displayName}`}
           onClick={selectCase}
         >
-          {formatNumber(caseTotalTokens(testCase))}
+          {usageCost ? (
+            <InstantTooltip content={formatUsd(usageCost.totalUsd)}>
+              {formatNumber(caseTotalTokens(testCase))}
+            </InstantTooltip>
+          ) : (
+            formatNumber(caseTotalTokens(testCase))
+          )}
         </CaseCellButton>
+      </td>
+      <td className="min-w-0 p-0 align-middle">
+        <div className="flex items-center justify-end gap-1">
+          <CaseCellButton
+            className="text-right font-mono text-[0.86rem] tabular-nums text-ink"
+            label={`Open ${testCase.displayName}`}
+            onClick={selectCase}
+          >
+            {usageCost ? formatUsd(usageCost.totalUsd) : "n/a"}
+          </CaseCellButton>
+          {usageCost ? (
+            <div className="bg-panel pr-3 group-hover:bg-panel-subtle">
+              <CostHelp align="right" cost={usageCost} pricing={pricing} />
+            </div>
+          ) : null}
+        </div>
       </td>
       <td className="min-w-0 p-0 align-middle">
         <CaseCellButton
