@@ -1,15 +1,20 @@
-import { describe, expect, test } from "vitest";
 import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import {
   buildSpanTree,
   buildTranscript,
+  caseExpected,
+  caseInput,
+  caseScoreTone,
   caseToolCallCount,
   caseToolCalls,
   caseTotalTokens,
+  compactValue,
   filterReportCases,
   formatScore,
   scoreTone,
+  sortReportCases,
   summarizeWorkspace,
 } from "./model";
 
@@ -233,12 +238,66 @@ describe("summarizeWorkspace", () => {
   });
 });
 
+describe("sortReportCases", () => {
+  test("orders failed cases first when sorting by status", () => {
+    expect(
+      sortReportCases(workspace.cases, "status", "asc").map(
+        (testCase) => testCase.status,
+      ),
+    ).toEqual(["failed", "passed"]);
+  });
+
+  test("orders higher scores first when sorting score descending", () => {
+    expect(
+      sortReportCases(workspace.cases, "score", "desc").map(
+        (testCase) => testCase.eval?.avgScore,
+      ),
+    ).toEqual([1, 0.2]);
+  });
+
+  test("orders models alphabetically", () => {
+    expect(
+      sortReportCases(
+        [
+          {
+            ...workspace.cases[0]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gpt-4o" },
+              },
+            },
+          },
+          {
+            ...workspace.cases[1]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gemini-2.5-flash" },
+              },
+            },
+          },
+        ],
+        "model",
+        "asc",
+      ).map((testCase) => testCase.harness?.run?.usage?.model),
+    ).toEqual(["gemini-2.5-flash", "gpt-4o"]);
+  });
+});
+
 describe("filterReportCases", () => {
   test("filters by status, run, and search query", () => {
     expect(
       filterReportCases(workspace.cases, {
         status: "failed",
         runId: "shard-a.json",
+        model: "all",
         query: "fraud",
       }),
     ).toEqual([workspace.cases[0]]);
@@ -249,6 +308,7 @@ describe("filterReportCases", () => {
       filterReportCases(workspace.cases, {
         status: "all",
         runId: "all",
+        model: "all",
         query: "StructuredOutputJudge",
       }),
     ).toEqual(workspace.cases);
@@ -257,9 +317,65 @@ describe("filterReportCases", () => {
       filterReportCases(workspace.cases, {
         status: "all",
         runId: "all",
+        model: "all",
         query: "pi-ai",
       }),
     ).toEqual([]);
+  });
+
+  test("searches recorded model ids", () => {
+    expect(
+      filterReportCases(
+        [
+          {
+            ...workspace.cases[0]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gemini-2.5-flash" },
+              },
+            },
+          },
+        ],
+        {
+          status: "all",
+          runId: "all",
+          model: "all",
+          query: "gemini-2.5",
+        },
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("filters by recorded model id", () => {
+    expect(
+      filterReportCases(
+        [
+          {
+            ...workspace.cases[0]!,
+            harness: {
+              name: "pi-ai",
+              run: {
+                errors: [],
+                output: {},
+                session: { events: [] },
+                usage: { model: "gemini-2.5-flash" },
+              },
+            },
+          },
+          workspace.cases[1]!,
+        ],
+        {
+          status: "all",
+          runId: "all",
+          model: "gemini-2.5-flash",
+          query: "",
+        },
+      ),
+    ).toHaveLength(1);
   });
 });
 
@@ -380,6 +496,36 @@ describe("case helpers", () => {
     expect(scoreTone(1)).toBe("good");
     expect(scoreTone(0.7)).toBe("warn");
     expect(scoreTone(0.2)).toBe("bad");
+    expect(
+      caseScoreTone({
+        ancestorTitles: [],
+        displayFile: "a.ts",
+        displayName: "fail",
+        failureMessages: [],
+        file: "/a.ts",
+        fullName: "fail",
+        id: "fail",
+        runId: "run",
+        status: "failed",
+        title: "fail",
+        eval: { avgScore: 0.75, scores: [] },
+      }),
+    ).toBe("bad");
+    expect(
+      caseScoreTone({
+        ancestorTitles: [],
+        displayFile: "a.ts",
+        displayName: "pass",
+        failureMessages: [],
+        file: "/a.ts",
+        fullName: "pass",
+        id: "pass",
+        runId: "run",
+        status: "passed",
+        title: "pass",
+        eval: { avgScore: 0.75, scores: [] },
+      }),
+    ).toBe("good");
   });
 
   test("builds transcripts from session events, not traces", () => {
@@ -562,5 +708,30 @@ describe("case helpers", () => {
       ["message", "user", "Refund invoice inv_123"],
       ["message", "assistant", "Approved"],
     ]);
+  });
+});
+
+describe("caseInput and caseExpected", () => {
+  test("reads recorded eval fields and falls back to transcript or judge metadata", () => {
+    expect(
+      caseInput({
+        ...workspace.cases[0]!,
+        eval: { avgScore: 1, input: "recorded input", scores: [] },
+      }),
+    ).toBe("recorded input");
+
+    expect(
+      caseExpected({
+        ...workspace.cases[0]!,
+        eval: {
+          avgScore: 1,
+          scores: [
+            { name: "judge", score: 1, metadata: { expected: "Paris" } },
+          ],
+        },
+      }),
+    ).toBe("Paris");
+
+    expect(compactValue({ status: "approved" })).toBe('{"status":"approved"}');
   });
 });
