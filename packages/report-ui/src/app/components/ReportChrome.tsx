@@ -1,11 +1,24 @@
+import { Link } from "@tanstack/react-router";
 import type { ReportRun } from "@vitest-evals/core";
+import type { ReactNode } from "react";
 import {
+  type WorkspaceDelta,
+  formatSignedScore,
+  formatSignedUsd,
+} from "../compare";
+import {
+  type CaseStatusFilter,
   formatDuration,
   formatNumber,
   formatScore,
   type summarizeWorkspace,
 } from "../model";
-import { cx, toneTextClass, type Tone } from "../ui";
+import { formatUsd } from "../pricing";
+import { useReportMeta } from "../report-meta";
+import { toReportSearch } from "../search";
+import { type Tone, cx, toneTextClass } from "../ui";
+import { CostHelp } from "./CostHelp";
+import { PathLabel } from "./PathLabel";
 import {
   executedCaseCount,
   passRate,
@@ -15,15 +28,23 @@ import {
 export function ReportHeader({
   caseCount,
   runCount,
+  visibleCaseCount,
 }: {
   caseCount: number;
   runCount: number;
+  visibleCaseCount: number;
 }) {
   return (
     <header className="mb-4">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2 text-[0.68rem] font-semibold uppercase text-muted-strong">
-          <span className="font-mono text-ink">vitest-evals</span>
+          <Link
+            className="font-mono text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-selected-line"
+            search={() => toReportSearch({})}
+            to="/"
+          >
+            vitest-evals
+          </Link>
           <span className="h-1 w-1 rounded-full bg-line" aria-hidden="true" />
           <span>report viewer</span>
         </div>
@@ -43,6 +64,15 @@ export function ReportHeader({
             </strong>{" "}
             cases
           </span>
+          {visibleCaseCount !== caseCount ? (
+            <span>
+              showing{" "}
+              <strong className="font-semibold text-ink">
+                {formatNumber(visibleCaseCount)}
+              </strong>{" "}
+              of {formatNumber(caseCount)}
+            </span>
+          ) : null}
         </div>
       </div>
     </header>
@@ -50,10 +80,17 @@ export function ReportHeader({
 }
 
 export function SummaryBar({
+  currentStatus,
+  estimatedCostUsd,
+  runDelta,
   summary,
 }: {
+  currentStatus: CaseStatusFilter;
+  estimatedCostUsd?: number;
+  runDelta?: WorkspaceDelta;
   summary: ReturnType<typeof summarizeWorkspace>;
 }) {
+  const { pricing } = useReportMeta();
   const verdictTone = passRateTone(summary);
 
   return (
@@ -80,12 +117,15 @@ export function SummaryBar({
             </span>
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-            <span>
+            <StatusFilterLink
+              active={currentStatus === "failed"}
+              status="failed"
+            >
               <strong className="font-semibold text-fail">
                 {summary.failed}
               </strong>{" "}
               failed
-            </span>
+            </StatusFilterLink>
             <span>
               <strong className="font-semibold text-ink">
                 {summary.caseCount}
@@ -98,6 +138,18 @@ export function SummaryBar({
                 {formatScore(summary.averageScore)}
               </strong>
             </span>
+            {runDelta ? (
+              <span>
+                vs previous{" "}
+                <strong className="font-semibold text-ink">
+                  {formatSignedScore(runDelta.passRate)}
+                </strong>
+                <span className="text-muted">
+                  {" "}
+                  · {formatSignedUsd(runDelta.costUsd)}
+                </span>
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -112,13 +164,31 @@ export function SummaryBar({
           </div>
           <OutcomeBar summary={summary} />
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <OutcomeStat label="Passed" tone="good" value={summary.passed} />
-            <OutcomeStat label="Failed" tone="bad" value={summary.failed} />
-            <OutcomeStat label="Skipped" tone="empty" value={summary.skipped} />
+            <OutcomeStat
+              active={currentStatus === "passed"}
+              label="Passed"
+              status="passed"
+              tone="good"
+              value={summary.passed}
+            />
+            <OutcomeStat
+              active={currentStatus === "failed"}
+              label="Failed"
+              status="failed"
+              tone="bad"
+              value={summary.failed}
+            />
+            <OutcomeStat
+              active={currentStatus === "skipped"}
+              label="Skipped"
+              status="skipped"
+              tone="empty"
+              value={summary.skipped}
+            />
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line-subtle pt-4 sm:grid-cols-4 xl:border-l xl:border-t-0 xl:py-1 xl:pl-5 xl:pt-0">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line-subtle pt-4 sm:grid-cols-3 xl:border-l xl:border-t-0 xl:grid-cols-5 xl:py-1 xl:pl-5 xl:pt-0">
           <SummaryCounter
             label="Runtime"
             value={formatDuration(summary.durationMs)}
@@ -126,6 +196,11 @@ export function SummaryBar({
           <SummaryCounter
             label="Tokens"
             value={formatNumber(summary.totalTokens)}
+          />
+          <SummaryCounter
+            hint={<CostHelp align="right" pricing={pricing} />}
+            label="Cost"
+            value={formatUsd(estimatedCostUsd)}
           />
           <SummaryCounter
             label="Tools"
@@ -142,9 +217,11 @@ export function SummaryBar({
 }
 
 export function RunStrip({
+  currentStatus,
   runs,
   selectedRunId,
 }: {
+  currentStatus: CaseStatusFilter;
   runs: ReportRun[];
   selectedRunId: string;
 }) {
@@ -171,8 +248,8 @@ export function RunStrip({
                 aria-hidden="true"
               />
               <div className="min-w-0">
-                <strong className="block truncate text-sm font-semibold">
-                  {run.source ?? run.id}
+                <strong className="block text-sm font-semibold">
+                  <PathLabel path={run.source ?? run.id} />
                 </strong>
                 <span className="block text-xs text-muted">
                   {formatDuration(run.durationMs)}
@@ -180,18 +257,26 @@ export function RunStrip({
               </div>
             </div>
             <div className="grid shrink-0 grid-cols-2 gap-3 text-right text-xs text-muted">
-              <span>
+              <RunStatusLink
+                active={selectedRunId === run.id && currentStatus === "passed"}
+                runId={run.id}
+                status="passed"
+              >
                 <strong className="block font-semibold text-pass">
                   {run.totals.evalPassed}
                 </strong>
                 passed
-              </span>
-              <span>
+              </RunStatusLink>
+              <RunStatusLink
+                active={selectedRunId === run.id && currentStatus === "failed"}
+                runId={run.id}
+                status="failed"
+              >
                 <strong className="block font-semibold text-fail">
                   {run.totals.evalFailed}
                 </strong>
                 failed
-              </span>
+              </RunStatusLink>
             </div>
           </div>
         ))}
@@ -200,11 +285,20 @@ export function RunStrip({
   );
 }
 
-function SummaryCounter({ label, value }: { label: string; value: string }) {
+function SummaryCounter({
+  hint,
+  label,
+  value,
+}: {
+  hint?: ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="min-w-0">
-      <dt className="text-[0.68rem] font-semibold uppercase text-muted">
+      <dt className="flex items-center gap-1.5 whitespace-nowrap text-[0.68rem] font-semibold uppercase text-muted">
         {label}
+        {hint ? <span className="normal-case">{hint}</span> : null}
       </dt>
       <dd className="mt-1 truncate font-mono text-lg font-semibold tabular-nums text-ink">
         {value}
@@ -245,11 +339,15 @@ function OutcomeBar({
 }
 
 function OutcomeStat({
+  active,
   label,
+  status,
   tone,
   value,
 }: {
+  active: boolean;
   label: string;
+  status: CaseStatusFilter;
   tone: Tone;
   value: number;
 }) {
@@ -259,13 +357,81 @@ function OutcomeStat({
         className={cx("size-2 shrink-0 rounded-[2px]", statusFillClass(tone))}
         aria-hidden="true"
       />
-      <span className="min-w-0 text-xs text-muted">
+      <StatusFilterLink
+        active={active}
+        className="min-w-0 text-xs"
+        status={status}
+      >
         <strong className={cx("font-semibold", toneTextClass(tone))}>
           {value}
         </strong>{" "}
         {label.toLowerCase()}
-      </span>
+      </StatusFilterLink>
     </div>
+  );
+}
+
+function StatusFilterLink({
+  active,
+  children,
+  className,
+  status,
+}: {
+  active: boolean;
+  children: ReactNode;
+  className?: string;
+  status: CaseStatusFilter;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-selected-line",
+        active && "underline",
+        className,
+      )}
+      search={(previous) =>
+        toReportSearch({
+          ...previous,
+          status: active ? "all" : status,
+        })
+      }
+      to="/"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function RunStatusLink({
+  active,
+  children,
+  runId,
+  status,
+}: {
+  active: boolean;
+  children: ReactNode;
+  runId: string;
+  status: CaseStatusFilter;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-selected-line",
+        active && "underline",
+      )}
+      search={(previous) =>
+        toReportSearch({
+          ...previous,
+          run: active ? "all" : runId,
+          status: active ? "all" : status,
+        })
+      }
+      to="/"
+    >
+      {children}
+    </Link>
   );
 }
 
