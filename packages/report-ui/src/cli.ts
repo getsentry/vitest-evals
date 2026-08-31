@@ -1,7 +1,15 @@
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readReportWorkspace } from "@vitest-evals/core/node";
+import {
+  formatJunitXml,
+  formatPullRequestComment,
+} from "./app/ci-artifacts.js";
 import { parseCliArgs } from "./cli-options";
 import { currentModuleUrl } from "./esm-runtime.js";
-import { serveReportUi, type ReportUiServer } from "./server";
+import { loadPricingTable } from "./pricing-catalog.js";
+import { type ReportUiServer, serveReportWorkspace } from "./server";
 
 type ShutdownSignal = "SIGINT" | "SIGTERM";
 
@@ -34,19 +42,50 @@ export async function runReportUiCli(
     return;
   }
 
-  const server = await serveReportUi({
-    inputs: optionsFromArgs.inputs,
-    workspace: optionsFromArgs.workspace ?? cwd,
-    cwd,
+  if (
+    !optionsFromArgs.serve &&
+    !optionsFromArgs.junit &&
+    !optionsFromArgs.comment
+  ) {
+    throw new Error("Pass --junit, --comment, or omit --no-serve.");
+  }
+
+  const workspaceRoot = optionsFromArgs.workspace ?? cwd;
+  const { workspace, resultFiles } = await readReportWorkspace(
+    optionsFromArgs.inputs,
+    { cwd, workspace: workspaceRoot },
+  );
+  const pricing = await loadPricingTable();
+
+  if (optionsFromArgs.junit) {
+    const path = resolve(cwd, optionsFromArgs.junit);
+    await writeFile(path, formatJunitXml(workspace));
+    writeLine(options.stdout, `Wrote JUnit report: ${path}`);
+  }
+  if (optionsFromArgs.comment) {
+    const path = resolve(cwd, optionsFromArgs.comment);
+    await writeFile(path, formatPullRequestComment(workspace, pricing));
+    writeLine(options.stdout, `Wrote pull-request comment: ${path}`);
+  }
+
+  writeLine(
+    options.stdout,
+    `Loaded ${workspace.cases.length} eval case(s) from ${resultFiles.length} result file(s).`,
+  );
+
+  if (!optionsFromArgs.serve) {
+    return;
+  }
+
+  const server = await serveReportWorkspace(workspace, {
     host: optionsFromArgs.host,
     port: optionsFromArgs.port,
+    pricing,
+    resultFiles,
+    workspaceRoot: resolve(workspaceRoot),
   });
 
   writeLine(options.stdout, `vitest-evals report UI: ${server.url}`);
-  writeLine(
-    options.stdout,
-    `Loaded ${server.workspace.cases.length} eval case(s) from ${server.resultFiles.length} result file(s).`,
-  );
   writeLine(options.stdout, "Press Ctrl-C to stop.");
 
   installShutdownHandlers(server);
@@ -85,6 +124,9 @@ function usage(commandName: string) {
     "  --workspace <path>   Workspace path used for relative source files",
     "  --host <host>        Host to bind (default: 127.0.0.1)",
     "  --port <port>        Port to bind (default: 0, an available port)",
+    "  --junit <path>       Write a JUnit XML report",
+    "  --comment <path>     Write a Markdown pull-request comment",
+    "  --no-serve           Write artifacts and exit without opening the UI",
   ].join("\n");
 }
 
