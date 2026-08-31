@@ -1,5 +1,4 @@
 import {
-  toolCalls,
   type HarnessRun,
   type JsonValue,
   type NormalizedError,
@@ -9,7 +8,9 @@ import {
   type TranscriptMessageEvent,
   type TranscriptToolCallEvent,
   type TranscriptToolResultEvent,
+  toolCalls,
 } from "@vitest-evals/core";
+import { type PricingTable, estimateUsageCost } from "./pricing";
 
 export type CaseStatusFilter = "all" | ReportCase["status"];
 
@@ -17,6 +18,28 @@ export type CaseFilters = {
   query: string;
   status: CaseStatusFilter;
   runId: string;
+  model: string;
+};
+
+export type CaseSortColumn =
+  | "status"
+  | "case"
+  | "model"
+  | "score"
+  | "duration"
+  | "tokens"
+  | "cost"
+  | "tools";
+
+export type CaseSortDirection = "asc" | "desc";
+
+const STATUS_RANK: Record<ReportCase["status"], number> = {
+  failed: 0,
+  passed: 1,
+  pending: 2,
+  todo: 3,
+  skipped: 4,
+  disabled: 5,
 };
 
 export type WorkspaceSummary = {
@@ -95,6 +118,80 @@ export function summarizeWorkspace(
   };
 }
 
+/** Sorts filtered cases for the report ledger. */
+export function sortReportCases(
+  cases: ReportCase[],
+  column: CaseSortColumn | undefined,
+  direction: CaseSortDirection,
+  pricing?: PricingTable,
+) {
+  if (!column) {
+    return cases;
+  }
+
+  const ranked = [...cases].sort((left, right) => {
+    const comparison = compareCaseColumn(left, right, column, pricing);
+    return direction === "desc" ? -comparison : comparison;
+  });
+  return ranked;
+}
+
+function compareCaseColumn(
+  left: ReportCase,
+  right: ReportCase,
+  column: CaseSortColumn,
+  pricing?: PricingTable,
+) {
+  switch (column) {
+    case "status":
+      return STATUS_RANK[left.status] - STATUS_RANK[right.status];
+    case "case":
+      return left.displayName.localeCompare(right.displayName);
+    case "model":
+      return (caseModel(left) ?? "").localeCompare(caseModel(right) ?? "");
+    case "score":
+      return compareNullableNumber(left.eval?.avgScore, right.eval?.avgScore);
+    case "duration":
+      return compareNullableNumber(left.durationMs, right.durationMs);
+    case "tokens":
+      return compareNullableNumber(
+        caseTotalTokens(left),
+        caseTotalTokens(right),
+      );
+    case "cost":
+      return compareNullableNumber(
+        pricing
+          ? estimateUsageCost(left.harness?.run?.usage ?? {}, pricing)?.totalUsd
+          : undefined,
+        pricing
+          ? estimateUsageCost(right.harness?.run?.usage ?? {}, pricing)
+              ?.totalUsd
+          : undefined,
+      );
+    case "tools":
+      return compareNullableNumber(
+        caseToolCallCount(left),
+        caseToolCallCount(right),
+      );
+  }
+}
+
+function compareNullableNumber(
+  left: number | null | undefined,
+  right: number | null | undefined,
+) {
+  if (left == null && right == null) {
+    return 0;
+  }
+  if (left == null) {
+    return 1;
+  }
+  if (right == null) {
+    return -1;
+  }
+  return left - right;
+}
+
 /** Filters cases for the report explorer. */
 export function filterReportCases(cases: ReportCase[], filters: CaseFilters) {
   const query = filters.query.trim().toLowerCase();
@@ -103,6 +200,9 @@ export function filterReportCases(cases: ReportCase[], filters: CaseFilters) {
       return false;
     }
     if (filters.runId !== "all" && testCase.runId !== filters.runId) {
+      return false;
+    }
+    if (filters.model !== "all" && caseModel(testCase) !== filters.model) {
       return false;
     }
     if (!query) {
@@ -116,6 +216,22 @@ export function filterReportCases(cases: ReportCase[], filters: CaseFilters) {
 /** Returns every tool call captured for a report case. */
 export function caseToolCalls(testCase: ReportCase) {
   return toolCallsForCase(testCase);
+}
+
+/** Returns the recorded application model for a report case. */
+export function caseModel(testCase: ReportCase) {
+  return testCase.harness?.run?.usage?.model;
+}
+
+/** Unique recorded models, sorted for the ledger filter. */
+export function uniqueCaseModels(cases: ReportCase[]) {
+  return [
+    ...new Set(
+      cases
+        .map((testCase) => caseModel(testCase))
+        .filter((model): model is string => Boolean(model)),
+    ),
+  ].sort();
 }
 
 /** Returns the best available token total for a report case. */
@@ -390,6 +506,7 @@ function searchableCaseText(testCase: ReportCase) {
     testCase.fullName,
     testCase.displayFile,
     testCase.source,
+    caseModel(testCase),
     ...(testCase.eval?.scores ?? []).map((score) => score.name ?? ""),
   ]
     .filter(Boolean)
