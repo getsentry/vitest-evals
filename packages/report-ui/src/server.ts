@@ -1,15 +1,18 @@
 import { readFile, stat } from "node:fs/promises";
 import {
-  createServer,
   type IncomingMessage,
   type Server,
   type ServerResponse,
+  createServer,
 } from "node:http";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import { readReportWorkspace } from "@vitest-evals/core/node";
+import { FALLBACK_PRICING, type ReportUiMeta } from "./app/pricing.js";
 import { currentModuleUrl } from "./esm-runtime.js";
+import { loadPricingTable } from "./pricing-catalog.js";
+import { createRerunHub } from "./rerun-hub.js";
 
 /** Options for serving a report UI from one or more JSON result inputs. */
 export type ServeReportUiOptions = {
@@ -26,6 +29,8 @@ export type ServeReportWorkspaceOptions = {
   host?: string;
   port?: number;
   assetsDir?: string;
+  workspaceRoot?: string;
+  pricing?: ReportUiMeta["pricing"];
 };
 
 /** Handle returned by the local report UI server. */
@@ -53,7 +58,9 @@ export async function serveReportUi(
     assetsDir: options.assetsDir,
     host: options.host,
     port: options.port,
+    pricing: await loadPricingTable(),
     resultFiles,
+    workspaceRoot: resolve(options.workspace ?? options.cwd ?? process.cwd()),
   });
 }
 
@@ -65,7 +72,14 @@ export async function serveReportWorkspace(
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const assetsDir = resolve(options.assetsDir ?? defaultAssetsDir());
-  const server = createServer(createRequestHandler(workspace, assetsDir));
+  const meta: ReportUiMeta = {
+    pricing: options.pricing ?? FALLBACK_PRICING,
+    workspaceRoot: options.workspaceRoot,
+  };
+  const handler = createRequestHandler(workspace, assetsDir, meta, {
+    resultFiles: options.resultFiles ?? [],
+  });
+  const server = createServer(handler.handle);
 
   await listen(server, port, host);
 
@@ -74,32 +88,122 @@ export async function serveReportWorkspace(
     workspace,
     resultFiles: options.resultFiles ?? [],
     server,
-    close: () => close(server),
+    close: async () => {
+      handler.close();
+      await close(server);
+    },
   };
 }
 
-function createRequestHandler(workspace: ReportWorkspace, assetsDir: string) {
-  return async (request: IncomingMessage, response: ServerResponse) => {
-    try {
-      const requestUrl = new URL(
-        request.url ?? "/",
-        `http://${request.headers.host ?? "localhost"}`,
-      );
+function createRequestHandler(
+  workspace: ReportWorkspace,
+  assetsDir: string,
+  meta: ReportUiMeta,
+  options: { resultFiles: string[] },
+) {
+  let currentWorkspace = workspace;
+  const hub = createRerunHub({
+    resultFiles: options.resultFiles,
+    getWorkspace: () => currentWorkspace,
+    setWorkspace: (next) => {
+      currentWorkspace = next;
+    },
+    workspaceRoot: meta.workspaceRoot,
+  });
 
-      if (requestUrl.pathname === "/data/workspace.json") {
-        sendJson(response, workspace);
-        return;
+  return {
+    close: () => hub.close(),
+    handle: async (request: IncomingMessage, response: ServerResponse) => {
+      try {
+        const requestUrl = new URL(
+          request.url ?? "/",
+          `http://${request.headers.host ?? "localhost"}`,
+        );
+
+        if (requestUrl.pathname === "/api/rerun") {
+          if (request.method !== "POST") {
+            sendText(
+              response,
+              405,
+              "Method not allowed\n",
+              "text/plain; charset=utf-8",
+            );
+            return;
+          }
+          let body: unknown;
+          try {
+            body = await readJsonBody(request);
+          } catch {
+            sendJson(response, { ok: false, error: "Invalid JSON" }, 400);
+            return;
+          }
+          const result = await hub.startJob(body);
+          sendJson(response, result, result.status ?? (result.ok ? 202 : 400));
+          return;
+        }
+
+        if (requestUrl.pathname === "/api/rerun/cancel") {
+          if (request.method !== "POST") {
+            sendText(
+              response,
+              405,
+              "Method not allowed\n",
+              "text/plain; charset=utf-8",
+            );
+            return;
+          }
+          let cancelBody: unknown;
+          try {
+            cancelBody = await readJsonBody(request);
+          } catch {
+            sendJson(response, { ok: false, error: "Invalid JSON" }, 400);
+            return;
+          }
+          const result = hub.cancelJob(cancelBody);
+          sendJson(response, result, result.status ?? (result.ok ? 200 : 400));
+          return;
+        }
+
+        if (requestUrl.pathname === "/api/reload") {
+          if (request.method !== "POST") {
+            sendText(
+              response,
+              405,
+              "Method not allowed\n",
+              "text/plain; charset=utf-8",
+            );
+            return;
+          }
+          const result = await hub.reloadDump();
+          sendJson(response, result, result.status ?? (result.ok ? 200 : 500));
+          return;
+        }
+
+        if (requestUrl.pathname === "/api/events") {
+          hub.subscribe(response);
+          return;
+        }
+
+        if (requestUrl.pathname === "/data/workspace.json") {
+          sendJson(response, currentWorkspace);
+          return;
+        }
+
+        if (requestUrl.pathname === "/data/meta.json") {
+          sendJson(response, meta);
+          return;
+        }
+
+        if (requestUrl.pathname === "/healthz") {
+          sendText(response, 200, "ok\n", "text/plain; charset=utf-8");
+          return;
+        }
+
+        await serveAsset(requestUrl.pathname, assetsDir, response);
+      } catch (error) {
+        sendInternalServerError(response, error);
       }
-
-      if (requestUrl.pathname === "/healthz") {
-        sendText(response, 200, "ok\n", "text/plain; charset=utf-8");
-        return;
-      }
-
-      await serveAsset(requestUrl.pathname, assetsDir, response);
-    } catch (error) {
-      sendInternalServerError(response, error);
-    }
+    },
   };
 }
 
@@ -168,9 +272,31 @@ async function sendFile(response: ServerResponse, filePath: string) {
   response.end(body);
 }
 
-function sendJson(response: ServerResponse, value: unknown) {
+function sendJson(response: ServerResponse, value: unknown, statusCode = 200) {
   const body = `${JSON.stringify(value)}\n`;
-  sendText(response, 200, body, "application/json; charset=utf-8");
+  sendText(response, statusCode, body, "application/json; charset=utf-8");
+}
+
+function readJsonBody(request: IncomingMessage) {
+  return new Promise<unknown>((resolveBody, rejectBody) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => {
+      chunks.push(chunk);
+    });
+    request.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) {
+        resolveBody(undefined);
+        return;
+      }
+      try {
+        resolveBody(JSON.parse(raw) as unknown);
+      } catch (error) {
+        rejectBody(error);
+      }
+    });
+    request.on("error", rejectBody);
+  });
 }
 
 function sendText(
