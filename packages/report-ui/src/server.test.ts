@@ -1,8 +1,8 @@
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import { parseCliArgs } from "./cli-options";
 import { serveReportWorkspace } from "./server";
 
@@ -67,6 +67,7 @@ describe("parseCliArgs", () => {
       workspace: "/repo",
       host: "0.0.0.0",
       port: 4444,
+      serve: true,
       help: false,
     });
   });
@@ -74,6 +75,16 @@ describe("parseCliArgs", () => {
   test("falls back to vitest-results.json", () => {
     expect(parseCliArgs([], {})).toMatchObject({
       inputs: ["vitest-results.json"],
+    });
+  });
+
+  test("parses artifact flags and --no-serve", () => {
+    expect(
+      parseCliArgs(["--junit", "out.xml", "--comment", "pr.md", "--no-serve"]),
+    ).toMatchObject({
+      junit: "out.xml",
+      comment: "pr.md",
+      serve: false,
     });
   });
 });
@@ -88,6 +99,7 @@ describe("serveReportWorkspace", () => {
       assetsDir,
       host: "127.0.0.1",
       port: 0,
+      workspaceRoot: "/repo",
     });
 
     try {
@@ -95,6 +107,12 @@ describe("serveReportWorkspace", () => {
       await expect(dataResponse.json()).resolves.toMatchObject({
         schemaVersion: 1,
         cases: [{ id: "case-1" }],
+      });
+
+      const metaResponse = await fetch(`${server.url}/data/meta.json`);
+      await expect(metaResponse.json()).resolves.toMatchObject({
+        workspaceRoot: "/repo",
+        pricing: { source: "fallback" },
       });
 
       const htmlResponse = await fetch(server.url);
@@ -105,6 +123,46 @@ describe("serveReportWorkspace", () => {
         "text/javascript",
       );
       await expect(assetResponse.text()).resolves.toContain("console.log");
+
+      const rerunResponse = await fetch(`${server.url}/api/rerun`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: "/tmp/outside.eval.ts",
+          title: "nope",
+        }),
+      });
+      expect(rerunResponse.status).toBe(400);
+      await expect(rerunResponse.json()).resolves.toMatchObject({
+        ok: false,
+        error: "File is outside the workspace.",
+      });
+
+      const eventsResponse = await fetch(`${server.url}/api/events`);
+      expect(eventsResponse.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      const reader = eventsResponse.body?.getReader();
+      const first = await reader?.read();
+      expect(new TextDecoder().decode(first?.value)).toContain('"hello"');
+      await reader?.cancel();
+
+      const cancelResponse = await fetch(`${server.url}/api/rerun/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "missing" }),
+      });
+      expect(cancelResponse.status).toBe(404);
+      await expect(cancelResponse.json()).resolves.toMatchObject({
+        ok: false,
+        error: "No running job.",
+      });
+
+      const reloadResponse = await fetch(`${server.url}/api/reload`, {
+        method: "POST",
+      });
+      expect(reloadResponse.status).toBe(200);
+      await expect(reloadResponse.json()).resolves.toMatchObject({ ok: true });
     } finally {
       await server.close();
     }
@@ -124,6 +182,17 @@ describe("serveReportWorkspace", () => {
     try {
       const response = await fetch(`${server.url}/cases/case-1`);
       await expect(response.text()).resolves.toContain("spa");
+
+      const rerunResponse = await fetch(`${server.url}/api/rerun`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: "evals/refund.eval.ts", title: "ok" }),
+      });
+      expect(rerunResponse.status).toBe(400);
+      await expect(rerunResponse.json()).resolves.toMatchObject({
+        ok: false,
+        error: "No workspace root. Restart the report with --workspace.",
+      });
     } finally {
       await server.close();
     }
