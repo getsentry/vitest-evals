@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import {
   buildSpanTree,
   buildTranscript,
@@ -10,6 +10,7 @@ import {
   filterReportCases,
   formatScore,
   scoreTone,
+  sortReportCases,
   summarizeWorkspace,
 } from "./model";
 
@@ -230,6 +231,24 @@ describe("summarizeWorkspace", () => {
         ],
       }).durationMs,
     ).toBeUndefined();
+  });
+});
+
+describe("sortReportCases", () => {
+  test("orders failed cases first when sorting by status", () => {
+    expect(
+      sortReportCases(workspace.cases, "status", "asc").map(
+        (testCase) => testCase.status,
+      ),
+    ).toEqual(["failed", "passed"]);
+  });
+
+  test("orders higher scores first when sorting score descending", () => {
+    expect(
+      sortReportCases(workspace.cases, "score", "desc").map(
+        (testCase) => testCase.eval?.avgScore,
+      ),
+    ).toEqual([1, 0.2]);
   });
 });
 
