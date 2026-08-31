@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
 import {
-  ReportWorkspaceSchema,
   type ReportWorkspace,
+  ReportWorkspaceSchema,
 } from "@vitest-evals/core";
+import { useEffect, useMemo, useState } from "react";
 import { CaseDrawer } from "./components/CaseDrawer";
 import { CaseWorkbench } from "./components/CaseWorkbench";
 import { ReportHeader, RunStrip, SummaryBar } from "./components/ReportChrome";
 import {
-  filterReportCases,
-  summarizeWorkspace,
   type CaseFilters,
+  type CaseSortColumn,
+  filterReportCases,
+  sortReportCases,
+  summarizeWorkspace,
 } from "./model";
-import type { DetailTab } from "./types";
+import { useReportSearch } from "./report-state";
 
 type LoadState =
   | { status: "loading" }
@@ -45,45 +47,39 @@ export function App() {
 }
 
 function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
-  const [filters, setFilters] = useState<CaseFilters>({
-    query: "",
-    status: "all",
-    runId: "all",
-  });
-  const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(
-    () => workspace.cases.find((testCase) => testCase.status === "failed")?.id,
+  const { search, setSearch } = useReportSearch();
+  const filters = useMemo<CaseFilters>(
+    () => ({
+      query: search.q,
+      status: search.status,
+      runId: search.run,
+    }),
+    [search.q, search.run, search.status],
   );
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
 
   const filteredCases = useMemo(
     () => filterReportCases(workspace.cases, filters),
     [workspace.cases, filters],
   );
+  const visibleCases = useMemo(
+    () => sortReportCases(filteredCases, search.sort, search.dir),
+    [filteredCases, search.sort, search.dir],
+  );
   const visibleRuns = useMemo(
-    () => visibleWorkspaceRuns(workspace.runs, filters, filteredCases),
-    [workspace.runs, filters, filteredCases],
+    () => visibleWorkspaceRuns(workspace.runs, filters, visibleCases),
+    [workspace.runs, filters, visibleCases],
   );
   const summary = useMemo(
     () =>
       summarizeWorkspace({
         ...workspace,
-        cases: filteredCases,
+        cases: visibleCases,
         runs: visibleRuns,
       }),
-    [workspace, filteredCases, visibleRuns],
+    [workspace, visibleCases, visibleRuns],
   );
-  const selectedCase = resolveSelectedCase(selectedCaseId, filteredCases);
-
-  useEffect(() => {
-    const nextSelectedCaseId = resolveSelectedCaseId(
-      selectedCaseId,
-      filteredCases,
-    );
-    if (nextSelectedCaseId !== selectedCaseId) {
-      setSelectedCaseId(nextSelectedCaseId);
-    }
-  }, [filteredCases, selectedCaseId]);
+  const selectedCase = resolveSelectedCase(search.case, workspace.cases);
+  const isDrawerOpen = Boolean(search.case && selectedCase);
 
   return (
     <main className="min-h-screen bg-canvas text-ink">
@@ -96,41 +92,81 @@ function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
           className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
           aria-label="Report workspace"
         >
-          <SummaryBar summary={summary} />
-          <RunStrip runs={visibleRuns} selectedRunId={filters.runId} />
+          <SummaryBar currentStatus={search.status} summary={summary} />
+          <RunStrip
+            currentStatus={search.status}
+            runs={visibleRuns}
+            selectedRunId={search.run}
+          />
           <CaseWorkbench
-            cases={filteredCases}
+            cases={visibleCases}
             filters={filters}
             runs={workspace.runs}
             selectedCaseId={selectedCase?.id}
+            sortColumn={search.sort}
+            sortDirection={search.dir}
             totalCases={workspace.cases.length}
-            onFiltersChange={setFilters}
-            onSelectCase={(testCase) => {
-              setSelectedCaseId(testCase.id);
-              setDetailTab("overview");
-              setIsDrawerOpen(true);
-            }}
+            onFiltersChange={(nextFilters) =>
+              setSearch({
+                q: nextFilters.query,
+                run: nextFilters.runId,
+                status: nextFilters.status,
+              })
+            }
+            onSelectCase={(testCase) =>
+              setSearch(
+                { case: testCase.id, tab: "overview" },
+                { replace: false },
+              )
+            }
+            onSortChange={(column) =>
+              setSearch(nextSortSearch(search.sort, search.dir, column))
+            }
           />
         </section>
 
         <CaseDrawer
-          detailTab={detailTab}
+          detailTab={search.tab}
           open={isDrawerOpen}
           runs={workspace.runs}
           testCase={selectedCase}
-          onClose={() => setIsDrawerOpen(false)}
-          onTabChange={setDetailTab}
+          onClose={() =>
+            setSearch({ case: undefined, tab: "overview" }, { replace: false })
+          }
+          onTabChange={(tab) => setSearch({ tab })}
         />
       </div>
     </main>
   );
 }
 
+export function nextSortSearch(
+  currentColumn: CaseSortColumn | undefined,
+  currentDirection: "asc" | "desc",
+  column: CaseSortColumn,
+) {
+  if (currentColumn !== column) {
+    return {
+      sort: column,
+      dir: defaultSortDirection(column),
+    };
+  }
+
+  return {
+    sort: column,
+    dir: currentDirection === "asc" ? ("desc" as const) : ("asc" as const),
+  };
+}
+
+function defaultSortDirection(column: CaseSortColumn): "asc" | "desc" {
+  return column === "case" || column === "status" ? "asc" : "desc";
+}
+
 export function resolveSelectedCase(
   selectedCaseId: string | undefined,
-  filteredCases: ReportWorkspace["cases"],
+  cases: ReportWorkspace["cases"],
 ) {
-  return filteredCases.find((testCase) => testCase.id === selectedCaseId);
+  return cases.find((testCase) => testCase.id === selectedCaseId);
 }
 
 export function resolveSelectedCaseId(
