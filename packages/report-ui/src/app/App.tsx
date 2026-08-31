@@ -1,22 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
 import {
-  ReportWorkspaceSchema,
   type ReportWorkspace,
+  ReportWorkspaceSchema,
 } from "@vitest-evals/core";
+import { useEffect, useMemo, useState } from "react";
 import { CaseDrawer } from "./components/CaseDrawer";
 import { CaseWorkbench } from "./components/CaseWorkbench";
 import { ReportHeader, RunStrip, SummaryBar } from "./components/ReportChrome";
 import {
-  filterReportCases,
-  summarizeWorkspace,
   type CaseFilters,
+  type CaseSortColumn,
+  filterReportCases,
+  sortReportCases,
+  summarizeWorkspace,
 } from "./model";
-import type { DetailTab } from "./types";
+import { estimateWorkspaceCost } from "./pricing";
+import {
+  DEFAULT_REPORT_META,
+  type ReportMeta,
+  ReportMetaContext,
+  readReportMeta,
+} from "./report-meta";
+import { useReportSearch } from "./report-state";
 
 type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; workspace: ReportWorkspace };
+  | { status: "ready"; workspace: ReportWorkspace; meta: ReportMeta };
 
 export function App() {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
@@ -41,96 +50,147 @@ export function App() {
     );
   }
 
-  return <ReportApp workspace={loadState.workspace} />;
+  return <ReportApp meta={loadState.meta} workspace={loadState.workspace} />;
 }
 
-function ReportApp({ workspace }: { workspace: ReportWorkspace }) {
-  const [filters, setFilters] = useState<CaseFilters>({
-    query: "",
-    status: "all",
-    runId: "all",
-  });
-  const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(
-    () => workspace.cases.find((testCase) => testCase.status === "failed")?.id,
+function ReportApp({
+  meta,
+  workspace,
+}: {
+  meta: ReportMeta;
+  workspace: ReportWorkspace;
+}) {
+  const { search, setSearch } = useReportSearch();
+  const filters = useMemo<CaseFilters>(
+    () => ({
+      query: search.q,
+      status: search.status,
+      runId: search.run,
+    }),
+    [search.q, search.run, search.status],
   );
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
 
   const filteredCases = useMemo(
     () => filterReportCases(workspace.cases, filters),
     [workspace.cases, filters],
   );
-  const visibleRuns = useMemo(
-    () => visibleWorkspaceRuns(workspace.runs, filters, filteredCases),
-    [workspace.runs, filters, filteredCases],
+  const visibleCases = useMemo(
+    () => sortReportCases(filteredCases, search.sort, search.dir),
+    [filteredCases, search.sort, search.dir],
   );
-  const summary = useMemo(
+  const workspaceSummary = useMemo(
+    () => summarizeWorkspace(workspace),
+    [workspace],
+  );
+  const estimatedCostUsd = useMemo(
     () =>
-      summarizeWorkspace({
-        ...workspace,
-        cases: filteredCases,
-        runs: visibleRuns,
-      }),
-    [workspace, filteredCases, visibleRuns],
+      estimateWorkspaceCost(
+        workspace.cases.map((testCase) => testCase.harness?.run?.usage ?? {}),
+        meta.pricing,
+      ),
+    [meta.pricing, workspace.cases],
   );
-  const selectedCase = resolveSelectedCase(selectedCaseId, filteredCases);
-
-  useEffect(() => {
-    const nextSelectedCaseId = resolveSelectedCaseId(
-      selectedCaseId,
-      filteredCases,
-    );
-    if (nextSelectedCaseId !== selectedCaseId) {
-      setSelectedCaseId(nextSelectedCaseId);
-    }
-  }, [filteredCases, selectedCaseId]);
+  const selectedCase = resolveSelectedCase(search.case, workspace.cases);
+  const isDrawerOpen = Boolean(search.case && selectedCase);
 
   return (
-    <main className="min-h-screen bg-canvas text-ink">
-      <div className="mx-auto w-full max-w-[1800px] px-4 py-6 md:px-6">
-        <ReportHeader
-          caseCount={summary.caseCount}
-          runCount={summary.runCount}
-        />
-        <section
-          className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
-          aria-label="Report workspace"
-        >
-          <SummaryBar summary={summary} />
-          <RunStrip runs={visibleRuns} selectedRunId={filters.runId} />
-          <CaseWorkbench
-            cases={filteredCases}
-            filters={filters}
-            runs={workspace.runs}
-            selectedCaseId={selectedCase?.id}
-            totalCases={workspace.cases.length}
-            onFiltersChange={setFilters}
-            onSelectCase={(testCase) => {
-              setSelectedCaseId(testCase.id);
-              setDetailTab("overview");
-              setIsDrawerOpen(true);
-            }}
+    <ReportMetaContext.Provider value={meta}>
+      <main className="min-h-screen bg-canvas text-ink">
+        <div className="mx-auto w-full max-w-[1800px] px-4 py-6 md:px-6">
+          <ReportHeader
+            caseCount={workspaceSummary.caseCount}
+            runCount={workspaceSummary.runCount}
+            visibleCaseCount={visibleCases.length}
           />
-        </section>
+          <section
+            className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
+            aria-label="Report workspace"
+          >
+            <SummaryBar
+              currentStatus={search.status}
+              estimatedCostUsd={estimatedCostUsd}
+              summary={workspaceSummary}
+            />
+            <RunStrip
+              currentStatus={search.status}
+              runs={workspace.runs}
+              selectedRunId={search.run}
+            />
+            <CaseWorkbench
+              cases={visibleCases}
+              filters={filters}
+              runs={workspace.runs}
+              selectedCaseId={selectedCase?.id}
+              sortColumn={search.sort}
+              sortDirection={search.dir}
+              totalCases={workspace.cases.length}
+              onFiltersChange={(nextFilters) =>
+                setSearch({
+                  q: nextFilters.query,
+                  run: nextFilters.runId,
+                  status: nextFilters.status,
+                })
+              }
+              onSelectCase={(testCase) =>
+                setSearch(
+                  { case: testCase.id, tab: "overview" },
+                  { replace: false },
+                )
+              }
+              onSortChange={(column) =>
+                setSearch(nextSortSearch(search.sort, search.dir, column))
+              }
+            />
+          </section>
 
-        <CaseDrawer
-          detailTab={detailTab}
-          open={isDrawerOpen}
-          runs={workspace.runs}
-          testCase={selectedCase}
-          onClose={() => setIsDrawerOpen(false)}
-          onTabChange={setDetailTab}
-        />
-      </div>
-    </main>
+          <CaseDrawer
+            detailTab={search.tab}
+            open={isDrawerOpen}
+            runs={workspace.runs}
+            testCase={selectedCase}
+            onClose={() =>
+              setSearch(
+                { case: undefined, tab: "overview" },
+                { replace: false },
+              )
+            }
+            onTabChange={(tab) => setSearch({ tab })}
+          />
+        </div>
+      </main>
+    </ReportMetaContext.Provider>
   );
+}
+
+export function nextSortSearch(
+  currentColumn: CaseSortColumn | undefined,
+  currentDirection: "asc" | "desc",
+  column: CaseSortColumn,
+) {
+  if (currentColumn !== column) {
+    return {
+      sort: column,
+      dir: defaultSortDirection(column),
+    };
+  }
+
+  return {
+    sort: column,
+    dir: currentDirection === "asc" ? ("desc" as const) : ("asc" as const),
+  };
+}
+
+function defaultSortDirection(column: CaseSortColumn): "asc" | "desc" {
+  return column === "case" || column === "model" || column === "status"
+    ? "asc"
+    : "desc";
 }
 
 export function resolveSelectedCase(
   selectedCaseId: string | undefined,
-  filteredCases: ReportWorkspace["cases"],
+  cases: ReportWorkspace["cases"],
 ) {
-  return filteredCases.find((testCase) => testCase.id === selectedCaseId);
+  return cases.find((testCase) => testCase.id === selectedCaseId);
 }
 
 export function resolveSelectedCaseId(
@@ -193,12 +253,20 @@ export async function loadWorkspace(
   signal: AbortSignal,
 ): Promise<LoadState | undefined> {
   try {
-    const response = await fetch("/data/workspace.json", { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const [workspaceResponse, metaResponse] = await Promise.all([
+      fetch("/data/workspace.json", { signal }),
+      fetch("/data/meta.json", { signal }),
+    ]);
+    if (!workspaceResponse.ok) {
+      throw new Error(`HTTP ${workspaceResponse.status}`);
     }
-    const workspace = ReportWorkspaceSchema.parse(await response.json());
-    return { status: "ready", workspace };
+    const workspace = ReportWorkspaceSchema.parse(
+      await workspaceResponse.json(),
+    );
+    const meta = metaResponse.ok
+      ? readReportMeta(await metaResponse.json())
+      : DEFAULT_REPORT_META;
+    return { status: "ready", meta, workspace };
   } catch (error) {
     if (signal.aborted) {
       return undefined;

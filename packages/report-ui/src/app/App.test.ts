@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   loadWorkspace,
+  nextSortSearch,
   resolveSelectedCase,
   resolveSelectedCaseId,
   summarizeVisibleWorkspace,
@@ -38,6 +39,27 @@ const cases: ReportWorkspace["cases"] = [
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("nextSortSearch", () => {
+  test("starts a new column with its default direction and toggles the active one", () => {
+    expect(nextSortSearch(undefined, "asc", "score")).toEqual({
+      dir: "desc",
+      sort: "score",
+    });
+    expect(nextSortSearch("score", "desc", "score")).toEqual({
+      dir: "asc",
+      sort: "score",
+    });
+    expect(nextSortSearch("score", "asc", "case")).toEqual({
+      dir: "asc",
+      sort: "case",
+    });
+    expect(nextSortSearch(undefined, "asc", "model")).toEqual({
+      dir: "asc",
+      sort: "model",
+    });
+  });
 });
 
 describe("case selection", () => {
