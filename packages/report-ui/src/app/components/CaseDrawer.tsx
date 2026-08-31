@@ -1,9 +1,16 @@
-import { useEffect, useRef } from "react";
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
-import { formatDuration } from "../model";
+import { useEffect, useRef } from "react";
+import { caseToMarkdown } from "../case-markdown";
+import { judgeTally } from "../judge-score";
+import { caseModel, formatDuration, formatJson } from "../model";
+import { estimateUsageCost, formatUsd } from "../pricing";
+import { useReportMeta } from "../report-meta";
 import type { DetailTab } from "../types";
 import { TabButton } from "../ui";
+import { CopyButton } from "./CopyButton";
+import { CostHelp } from "./CostHelp";
 import { OverviewTab } from "./OverviewTab";
+import { PathLabel } from "./PathLabel";
 import { RawTab } from "./RawTab";
 import { Fact, FactsGrid, ScoreValue, StatusMark } from "./ReportPrimitives";
 import { TranscriptTab } from "./TranscriptTab";
@@ -75,8 +82,12 @@ export function CaseDrawer({
     return null;
   }
 
+  const { pricing } = useReportMeta();
   const run = runs.find((candidate) => candidate.id === testCase.runId);
   const harnessRun = testCase.harness?.run;
+  const model = caseModel(testCase);
+  const usageCost = estimateUsageCost(harnessRun?.usage ?? {}, pricing);
+  const failureText = testCase.failureMessages.join("\n\n");
 
   return (
     <dialog
@@ -109,22 +120,77 @@ export function CaseDrawer({
                   {testCase.displayName}
                 </h2>
               </div>
-              <p className="mt-2 truncate text-sm leading-snug text-muted">
-                {testCase.displayFile}
-              </p>
-              <div className="mt-3 flex items-baseline gap-2 sm:hidden">
-                <span className="text-[0.68rem] font-semibold uppercase text-muted">
-                  Score
-                </span>
-                <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+              <div className="mt-2 min-w-0 text-sm leading-snug text-muted">
+                <PathLabel file={testCase.file} path={testCase.displayFile} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <CopyButton
+                  label="Copy as Markdown"
+                  text={caseToMarkdown(testCase, run)}
+                />
+                <CopyButton label="Copy JSON" text={formatJson(testCase)} />
+                {failureText ? (
+                  <CopyButton label="Copy failure" text={failureText} />
+                ) : null}
+                <div className="grid gap-1 sm:hidden">
+                  {model ? (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[0.68rem] font-semibold uppercase text-muted">
+                        Model
+                      </span>
+                      <span className="truncate font-mono text-sm font-semibold text-ink">
+                        {model}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[0.68rem] font-semibold uppercase text-muted">
+                      Score
+                    </span>
+                    <ScoreValue
+                      score={testCase.eval?.avgScore}
+                      size="lg"
+                      tally={judgeTally(testCase)}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex min-w-0 shrink-0 items-start justify-end gap-4">
+              {model ? (
+                <div className="hidden min-w-0 max-w-[220px] text-right sm:block">
+                  <span className="block text-[0.68rem] font-semibold uppercase text-muted">
+                    Model
+                  </span>
+                  <span className="mt-1 block truncate font-mono text-sm font-semibold text-ink">
+                    {model}
+                  </span>
+                </div>
+              ) : null}
+              {usageCost ? (
+                <div className="hidden min-w-16 text-right sm:block">
+                  <span className="flex items-center justify-end gap-1.5 text-[0.68rem] font-semibold uppercase text-muted">
+                    Cost
+                    <CostHelp
+                      align="right"
+                      cost={usageCost}
+                      pricing={pricing}
+                    />
+                  </span>
+                  <span className="mt-1 block font-mono text-sm font-semibold tabular-nums text-ink">
+                    {formatUsd(usageCost.totalUsd)}
+                  </span>
+                </div>
+              ) : null}
               <div className="hidden min-w-16 text-right sm:block">
                 <span className="block text-[0.68rem] font-semibold uppercase text-muted">
                   Score
                 </span>
-                <ScoreValue score={testCase.eval?.avgScore} size="lg" />
+                <ScoreValue
+                  score={testCase.eval?.avgScore}
+                  size="lg"
+                  tally={judgeTally(testCase)}
+                />
               </div>
               <button
                 className="relative grid size-8 place-items-center border border-transparent text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
@@ -147,7 +213,10 @@ export function CaseDrawer({
         </header>
 
         <FactsGrid columns={2}>
-          <Fact label="Run" value={run?.source ?? testCase.runId} />
+          <Fact
+            label="Run"
+            value={<PathLabel path={run?.source ?? testCase.runId} />}
+          />
           <Fact label="Duration" value={formatDuration(testCase.durationMs)} />
         </FactsGrid>
 
