@@ -353,12 +353,14 @@ duration, and metadata. Tool-result events have `type: "tool_result"`, required
 - `outputTokens`
 - `reasoningTokens`
 - `totalTokens`
+- `costUsd`
 - `toolCalls`
 - `retries`
 - `metadata`
 
-Do not add first-class cost fields to usage. Provider-specific cost estimates
-belong in `usage.metadata`.
+Set `costUsd` to the provider-reported cost or the suite's estimate in US
+dollars. Omit it when cost is unknown. Use `0` only when the run is known to be
+free. Keep provider-specific pricing details in `usage.metadata`.
 
 ## First-party harness adapters
 
@@ -461,6 +463,7 @@ The common judge context includes:
 - `session`
 - `toolCalls`
 - `harness`
+- `runJudge` when a judge harness is configured
 - `signal`
 
 Create a deterministic judge:
@@ -515,9 +518,38 @@ order, avoiding extra calls, or matching arguments.
 `StructuredOutputJudge()` checks JSON-safe structured output fields. Use it
 when correctness depends on app-facing output shape or values.
 
-Built-ins are deterministic contract checks. For model-graded evals, put model
-selection, prompt text, rubrics, parsing, and thresholding inside a custom
-judge.
+Built-ins other than `FactualityJudge()` are deterministic checks. For a
+model-backed judge, keep the prompt, rubric, parsing, and threshold in the
+judge. Put the provider call in a separate `judgeHarness`, then call it through
+`ctx.runJudge(...)`. This records tokens and cost as judge usage instead of
+application usage.
+
+```ts
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { createJudge } from "vitest-evals";
+
+const judgeHarness = aiSdkJudgeHarness({ model: rubricModel });
+
+const RubricJudge = createJudge({
+  name: "RubricJudge",
+  judgeHarness,
+  async assess(ctx) {
+    if (!ctx.runJudge) {
+      throw new Error("RubricJudge requires a judge harness.");
+    }
+
+    const verdict = await ctx.runJudge({
+      prompt: formatRubricPrompt(ctx),
+      responseFormat: { type: "json" },
+    });
+    return parseVerdict(verdict);
+  },
+});
+```
+
+Use a first-party judge harness from the matching adapter package, or
+`createJudgeHarness(...)` for another provider. Return a full `HarnessRun` when
+usage is available. Each `runJudge(...)` call is recorded separately.
 
 ## Case criteria guidance
 
@@ -555,7 +587,7 @@ The reporter surfaces:
 - judge metadata/rationales
 - app output summaries
 - tool activity
-- usage summaries
+- separate application, judge, and total token and USD cost summaries
 - replay metadata
 - non-eval failures without pretending the run passed
 
@@ -570,8 +602,9 @@ pnpm exec vitest-evals serve eval-results/
 ```
 
 The command accepts JSON files, simple globs, and directories. It opens a local
-React report viewer for run summaries, eval cases, scores, harness sessions,
-tool calls, session transcripts, trace span details, and raw case metadata.
+report viewer for run summaries, eval cases, scores, application and judge
+usage, harness sessions, tool calls, transcripts, trace details, and raw case
+metadata. Unknown costs stay `n/a`; partial costs are not shown as totals.
 
 Use the same JSON artifacts for local investigation and GitHub reporting.
 
@@ -629,6 +662,10 @@ Action inputs:
 - `soft-fail`: keep the step green when a published Check Run owns a failed
   gate. Defaults to true only after a successful Check Run publish.
 - `min-pass-rate` / `min-score-average`: optional aggregate floors in `0`-`1`.
+
+The job summary and Check Run show application usage, judge usage, and their
+combined total separately. If either side has usage but no cost, the combined
+cost is omitted.
 
 Check Run SHA resolution order on `pull_request`:
 
@@ -735,13 +772,14 @@ transcript events, usage, and partial output when execution fails.
 - Keep expected values in case rows, explicit matcher options, or judge config.
 - Prefer deterministic judges for contracts such as tool calls and structured
   output.
-- Keep model-graded judge prompts and rubrics inside custom judges.
+- Keep model-graded prompts and rubrics in the judge. Run provider calls through
+  `ctx.runJudge(...)` and a separate `judgeHarness`.
 - Run the app once per eval case, then judge the captured result.
 - Publish CI results with `getsentry/vitest-evals@v0`.
 - For sharded CI, emit distinct JSON artifacts per shard and combine them in
   one reducer reporting job.
-- Put provider-specific cost estimates in `usage.metadata`, not as first-class
-  `UsageSummary` fields.
+- Put known USD cost in `usage.costUsd`. Keep provider-specific pricing details
+  in `usage.metadata`.
 
 ## Quick command reference
 

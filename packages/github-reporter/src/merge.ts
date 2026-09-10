@@ -1,4 +1,4 @@
-import type { EvalReport, UsageSummary } from "./types";
+import type { AggregatedUsageSummary, EvalReport } from "./types";
 
 /** Merges multiple collected eval reports into one combined report. */
 export function mergeEvalReports(reports: EvalReport[]): EvalReport {
@@ -44,17 +44,29 @@ export function mergeEvalReports(reports: EvalReport[]): EvalReport {
           }
         : undefined,
     usage: mergeUsage(reports.map((report) => report.usage)),
+    judgeUsage: mergeUsage(reports.map((report) => report.judgeUsage)),
     cases,
     failures,
   };
 }
 
-function mergeUsage(usages: Array<Required<UsageSummary>>) {
+function mergeUsage(usages: AggregatedUsageSummary[]): AggregatedUsageSummary {
+  const costs = usages
+    .map((usage) => usage.costUsd)
+    .filter((cost): cost is number => cost !== undefined);
+  const costComplete = !usages.some(
+    (usage) =>
+      usage.costUsd === undefined &&
+      (usage.totalTokens > 0 || usage.toolCalls > 0),
+  );
   return {
     inputTokens: sum(usages, (usage) => usage.inputTokens),
     outputTokens: sum(usages, (usage) => usage.outputTokens),
     reasoningTokens: sum(usages, (usage) => usage.reasoningTokens),
     totalTokens: sum(usages, (usage) => usage.totalTokens),
+    ...(costComplete && costs.length > 0
+      ? { costUsd: costs.reduce((total, cost) => total + cost, 0) }
+      : {}),
     toolCalls: sum(usages, (usage) => usage.toolCalls),
   };
 }

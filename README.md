@@ -128,8 +128,8 @@ soft-fail defaults, and score-gate options.
 
 Use `vitest-evals serve` to inspect one or more JSON reports locally. It
 accepts files, simple globs, and directories of JSON artifacts, then serves a
-React SPA with run summaries, eval cases, harness output, sessions, tools, and
-trace details.
+React SPA with run summaries, eval cases, separate application and judge usage,
+harness output, sessions, tools, and trace details.
 
 ```sh
 pnpm exec vitest-evals serve vitest-results.json
@@ -232,9 +232,9 @@ Harness-backed suites stay close to plain Vitest:
   `ctx.runJudge(...)` from a configured `judgeHarness`
 - pass scenario-specific judge criteria explicitly to matcher options, or bind
   suite-wide criteria on the judge instance
-- reporter output, replay, usage, tool calls, and spans come from the
-  normalized run. First-party harnesses attach native spans when
-  provider/runtime data is available; `createHarness(...)` attaches a fallback
+- reporter output separates application, judge, and combined token and
+  `costUsd` usage from normalized runs. First-party harnesses attach native
+  spans when provider/runtime data is available; `createHarness(...)` attaches a fallback
   run span when a custom harness does not return traces itself. Span attributes
   include typed OpenTelemetry GenAI semantic keys while keeping
   provider-specific keys JSON-safe.

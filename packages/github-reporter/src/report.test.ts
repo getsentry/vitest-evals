@@ -63,6 +63,19 @@ const sampleJson: VitestJsonReport = {
                 {
                   name: "StructuredOutputJudge",
                   score: 0.2,
+                  judgeRuns: [
+                    {
+                      output: "denied",
+                      session: { events: [] },
+                      usage: {
+                        inputTokens: 80,
+                        outputTokens: 20,
+                        totalTokens: 100,
+                        costUsd: 0.02,
+                      },
+                      errors: [],
+                    },
+                  ],
                   metadata: {
                     rationale:
                       "status mismatch\nExpected status=approved, got status=denied",
@@ -82,6 +95,7 @@ const sampleJson: VitestJsonReport = {
                 },
                 usage: {
                   totalTokens: 1220,
+                  costUsd: 0.08,
                   toolCalls: 2,
                 },
                 timings: {
@@ -162,8 +176,15 @@ describe("collectEvalReport", () => {
       average: 0.2,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1220);
-    expect(report.usage.toolCalls).toBe(2);
+    expect(report.usage).toMatchObject({
+      totalTokens: 1220,
+      costUsd: 0.08,
+      toolCalls: 2,
+    });
+    expect(report.judgeUsage).toMatchObject({
+      totalTokens: 100,
+      costUsd: 0.02,
+    });
     expect(report.failures[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",
       displayName: "refund agent > rejects fraud",
@@ -392,6 +413,9 @@ describe("mergeEvalReports", () => {
       minimum: 0.2,
     });
     expect(report.usage.totalTokens).toBe(1520);
+    expect(report.usage.costUsd).toBeUndefined();
+    expect(report.judgeUsage.totalTokens).toBe(100);
+    expect(report.judgeUsage.costUsd).toBe(0.02);
     expect(report.usage.toolCalls).toBe(3);
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
@@ -727,7 +751,7 @@ describe("evaluateEvalGate", () => {
     expect(gate.enforced).toBe(true);
     expect(gate.passRate).toBe(0.8);
     expect(gate.title).toContain("80.0%");
-    expect(gate.message).toContain("pass rate floor 80.0%");
+    expect(gate.message).toContain("minimum pass rate 80.0%");
   });
 
   test("fails a suite below the pass-rate floor with a titled annotation", () => {
@@ -742,7 +766,7 @@ describe("evaluateEvalGate", () => {
     expect(gate.ok).toBe(false);
     expect(gate.title).toBe("Eval pass rate 63.7% — required 80.0%");
     expect(renderGateWorkflowCommand(gate)).toBe(
-      "::error title=Eval pass rate 63.7%25 — required 80.0%25::eval pass rate below floor: 65/102 passed (63.7%25), avg score 0.72; required >= 80.0%25",
+      "::error title=Eval pass rate 63.7%25 — required 80.0%25::pass rate is below the minimum: 65/102 passed (63.7%25), average score 0.72; minimum 80.0%25",
     );
   });
 
@@ -758,8 +782,8 @@ describe("evaluateEvalGate", () => {
     const gate = evaluateEvalGate(report, { minPassRate: 0.8 });
 
     expect(gate.ok).toBe(false);
-    expect(gate.title).toBe("Eval report hard failure");
-    expect(gate.message).toContain("non-eval test failure");
+    expect(gate.title).toBe("Eval run failed");
+    expect(gate.message).toContain("test failure outside eval cases");
   });
 
   test("treats fail-on-failures as a 100% pass-rate floor", () => {
@@ -897,12 +921,18 @@ describe("renderJobSummary", () => {
       "<summary>1. refund agent &gt; rejects fraud - StructuredOutputJudge - 0.20</summary>",
     );
     expect(summary).toContain("| Metric | Value |");
-    expect(summary).toContain("| Status | failed |");
-    expect(summary).toContain("| Evals | 0 passed, 1 failed, 1 total |");
-    expect(summary).toContain("| Pass Rate | 0.0% |");
+    expect(summary).toContain("| Status | Failed |");
+    expect(summary).toContain("| Eval cases | 0 passed, 1 failed, 1 total |");
+    expect(summary).toContain("| Pass rate | 0.0% |");
     expect(summary).not.toContain("| Tests |");
-    expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
-    expect(summary).not.toContain("| Usage |");
+    expect(summary).toContain("| Score | average 0.20, lowest 0.20 |");
+    expect(summary).toContain(
+      "| App usage | 1,220 tokens, $0.08, 2 tool calls |",
+    );
+    expect(summary).toContain("| Judge usage | 100 tokens, $0.02 |");
+    expect(summary).toContain(
+      "| Total usage | 1,320 tokens, $0.10, 2 tool calls |",
+    );
     expect(summary).toContain("## Scores");
     expect(summary.indexOf("## Scores")).toBeLessThan(
       summary.indexOf("## Results"),
@@ -914,14 +944,14 @@ describe("renderJobSummary", () => {
     const details = summary.match(/<details>[\s\S]*?<\/details>/)?.[0] ?? "";
     expect(details.match(/```/g)).toHaveLength(2);
     expect(details).toContain("```text\nResult\n------");
-    expect(details).toContain("Case      1. refund agent > rejects fraud");
-    expect(details).toContain("Location  apps/demo/evals/refund.eval.ts:42");
-    expect(details).toContain("Usage     1,220 tokens, 2 tools, 4.1s");
+    expect(details).toContain("Case        1. refund agent > rejects fraud");
+    expect(details).toContain("Location    apps/demo/evals/refund.eval.ts:42");
+    expect(details).toContain("Usage       1,220 tokens, 2 tool calls, 4.1s");
     expect(details).toContain("Reason\n------");
     expect(details).toContain("Expected status=approved, got status=denied");
     expect(details).toContain("Judge                  Score");
     expect(details).toContain("StructuredOutputJudge  0.20");
-    expect(details).toContain("Final Output\n------------");
+    expect(details).toContain("Output\n------");
     expect(details).toContain('"reason": "invoice is not refundable"');
     expect(details).toContain("Tool           Status");
     expect(details).toContain(
@@ -931,6 +961,86 @@ describe("renderJobSummary", () => {
     expect(details).not.toContain("Tool Calls\n----------");
     expect(details).not.toContain("Reason:\n\n```text");
     expect(details).not.toContain("Final:\n\n```text");
+  });
+
+  test("does not present a partial cost as the combined total", () => {
+    const json = structuredClone(sampleJson);
+    const usage = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .harness.run.usage;
+    usage.costUsd = undefined;
+
+    const summary = renderJobSummary(
+      collectEvalReport(json, { workspace: "/repo" }),
+    );
+
+    expect(summary).toContain(
+      "| App usage | 1,220 tokens, cost unavailable, 2 tool calls |",
+    );
+    expect(summary).toContain("| Judge usage | 100 tokens, $0.02 |");
+    expect(summary).toContain(
+      "| Total usage | 1,320 tokens, cost unavailable, 2 tool calls |",
+    );
+  });
+
+  test("does not present a partial cost within one usage category", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "second case";
+    secondAssertion.fullName = "refund agent second case";
+    (secondAssertion.meta as any).harness.run.usage = {
+      totalTokens: 50,
+    };
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1270);
+    expect(report.usage.costUsd).toBeUndefined();
+  });
+
+  test("does not let empty usage hide a known sibling cost", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "deterministic case";
+    secondAssertion.fullName = "refund agent deterministic case";
+    (secondAssertion.meta as any).harness.run.usage = {};
+    (secondAssertion.meta as any).harness.run.session.events = [];
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1220);
+    expect(report.usage.costUsd).toBe(0.08);
+  });
+
+  test("treats eval-only tool calls as application usage with unknown cost", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "eval-only tools";
+    secondAssertion.fullName = "refund agent eval-only tools";
+    secondAssertion.meta = {
+      eval: {
+        avgScore: 1,
+        scores: [],
+        toolCalls: [
+          { name: "lookupInvoice", status: "ok" },
+          { name: "notifyCustomer", status: "ok" },
+        ],
+      },
+    };
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1220);
+    expect(report.usage.toolCalls).toBe(4);
+    expect(report.usage.costUsd).toBeUndefined();
   });
 
   test("surfaces non-eval failures without pretending the run passed", () => {
@@ -973,12 +1083,14 @@ describe("renderJobSummary", () => {
       }),
     );
 
-    expect(summary).toContain("| Status | failed |");
-    expect(summary).toContain("| Evals | 0 passed, 0 failed, 0 total |");
+    expect(summary).toContain("| Status | Failed |");
+    expect(summary).toContain("| Eval cases | 0 passed, 0 failed, 0 total |");
     expect(summary).not.toContain("| Tests |");
-    expect(summary).toContain("| Other Failures | 1 non-eval test failure |");
+    expect(summary).toContain(
+      "| Other test failures | 1 test failure outside eval cases |",
+    );
     expect(summary).toContain("## Results");
-    expect(summary).toContain("No eval metadata was found");
+    expect(summary).toContain("No eval results were found");
   });
 
   test("escapes table cell control characters", () => {
@@ -988,7 +1100,7 @@ describe("renderJobSummary", () => {
     report.status = "failed \\ | escaped" as typeof report.status;
 
     expect(renderJobSummary(report)).toContain(
-      String.raw`| Status | failed \\ \| escaped |`,
+      String.raw`| Status | Failed \\ \| escaped |`,
     );
   });
 });
@@ -1293,10 +1405,10 @@ describe("publishCheckRun", () => {
     const body = JSON.parse(request.body);
     expect(body.conclusion).toBe("success");
     expect(body.output.title).toContain("90.0%");
-    expect(body.output.summary).toContain("| Status | passed |");
-    expect(body.output.summary).toContain("| Pass Rate | 90.0% |");
-    expect(body.output.summary).toContain("| Gate |");
-    expect(body.output.summary).toContain("### Quality Misses");
+    expect(body.output.summary).toContain("| Status | Passed |");
+    expect(body.output.summary).toContain("| Pass rate | 90.0% |");
+    expect(body.output.summary).toContain("| Requirements |");
+    expect(body.output.summary).toContain("### Cases Below Target");
     expect(body.output.annotations[0]?.annotation_level).toBe("warning");
   });
 

@@ -313,8 +313,17 @@ export function openaiAgentsJudgeHarness(
         ...(outputType ? { outputType } : {}),
       });
       const result = await runner.run(agent, prompt, { signal });
+      const output = normalizeContent(resolveOpenAiAgentsJudgeOutput(result));
+      const usage = resolveUsage(result);
 
-      return resolveOpenAiAgentsJudgeOutput(result);
+      return {
+        output,
+        session: resolveSession(prompt, result, output, usage, {
+          runtimeEvents: [],
+        }),
+        usage,
+        errors: [],
+      };
     },
   });
 }

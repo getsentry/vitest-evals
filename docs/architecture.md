@@ -94,10 +94,10 @@ not return traces themselves. Span attributes include typed OpenTelemetry GenAI
 semantic keys for common model, agent, tool, and token fields while still
 allowing provider-specific attributes.
 
-`UsageSummary` is intentionally limited to stable usage units such as tokens,
-tool counts, retries, provider, and model. Provider-specific cost estimates are
-not normalized because pricing semantics vary by runtime and can be stale; if a
-harness needs to retain them, store them under `usage.metadata`.
+`UsageSummary` standardizes tokens, USD cost, tool counts, retries, provider,
+and model. Harnesses report provider-supplied or suite-estimated cost through
+`costUsd`; omit it when cost is unknown, and use zero only for known-free runs.
+Provider-specific pricing details remain under `usage.metadata`.
 
 ### `packages/vitest-evals/src/index.ts`
 
@@ -141,7 +141,10 @@ adapters. Custom judges should use `createJudge("Name", assess)` for stable
 reporter labels, or `createJudge({ name, judgeHarness, assess })` when the
 judge should carry a reusable judge-side harness default.
 `createJudgeHarness(...)` is the shared abstraction for judge-side provider
-shims.
+shims. Each `ctx.runJudge(...)` call returns the normalized judge output while
+core records the complete judge harness run on the resulting score. Multiple
+calls from one judge remain separate runs. The GitHub reporter aggregates tokens
+and `costUsd` separately for application and judge usage, plus a derived total.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -171,7 +174,11 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 `packages/core` owns dependency-light primitives shared by the Vitest
 integration, GitHub reporter, and report UI. Its main entry stays browser-safe,
 while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
-report consumers. It exports stable schemas, TypeScript types, and helpers for:
+report consumers. The collected workspace is versioned. Judge runs and standardized cost change
+its persisted shape in schema version 2; readers reject unsupported versions
+instead of silently misreading them. Raw Vitest `task.meta` is strict but not
+independently versioned, so producers and artifact readers must use compatible
+package releases. Core exports schemas, TypeScript types, and helpers for:
 
 - JSON-safe values
 - normalized harness runs, sessions, transcript-derived tool calls, usage,
@@ -238,8 +245,10 @@ For each eval test in a harness-backed suite:
    `usage`, `timings`, `artifacts`, and `errors`.
 6. Core stores that run on `task.meta.harness` for the reporter.
 7. Automatic suite-level judges run against the normalized run/session pair.
-8. The eval test asserts on the same returned result and session.
-9. The reporter renders the recorded metadata without re-executing the harness.
+8. Each judge-harness invocation is stored under its judge score as `judgeRuns`.
+9. The eval test asserts on the same returned result and session.
+10. The reporter renders the recorded metadata and includes judge usage in totals
+   without re-executing either harness.
 
 Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
 and reuse registered input, metadata, and harness context

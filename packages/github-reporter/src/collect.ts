@@ -1,5 +1,6 @@
 import {
   type HarnessRun,
+  type UsageSummary as HarnessUsageSummary,
   type ReportCase,
   type ToolCall,
   type TranscriptToolCallEvent,
@@ -7,13 +8,13 @@ import {
   collectReportWorkspace,
 } from "@vitest-evals/core";
 import type {
+  AggregatedUsageSummary,
   CollectOptions,
   EvalCase,
   EvalFailure,
   EvalReport,
   EvalScore,
   ToolCallSummary,
-  UsageSummary,
   VitestJsonReport,
 } from "./types";
 import { compactLine, stringifyValue } from "./utils";
@@ -36,7 +37,8 @@ export function collectEvalReport(
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
-  const usage = sumUsage(cases);
+  const usage = sumAppUsage(cases);
+  const judgeUsage = sumJudgeUsage(cases);
   const durationMs = workspace.runs[0]?.durationMs;
 
   return {
@@ -63,6 +65,7 @@ export function collectEvalReport(
           }
         : undefined,
     usage,
+    judgeUsage,
     cases,
     failures,
   };
@@ -231,29 +234,91 @@ function stringifyReason(value: unknown) {
   return typeof value === "string" ? value : stringifyValue(value, 4000);
 }
 
-function sumUsage(cases: EvalCase[]) {
-  const usage: Required<UsageSummary> = {
+function emptyUsage(): AggregatedUsageSummary {
+  return {
     inputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
     toolCalls: 0,
   };
+}
 
-  for (const testCase of cases) {
-    const caseUsage = testCase.harness?.usage;
-    usage.inputTokens += caseUsage?.inputTokens ?? 0;
-    usage.outputTokens += caseUsage?.outputTokens ?? 0;
-    usage.reasoningTokens += caseUsage?.reasoningTokens ?? 0;
-    usage.totalTokens +=
-      caseUsage?.totalTokens ??
-      (caseUsage?.inputTokens ?? 0) +
-        (caseUsage?.outputTokens ?? 0) +
-        (caseUsage?.reasoningTokens ?? 0);
-    usage.toolCalls += toolCallCount(testCase);
+function addRunUsage(
+  total: AggregatedUsageSummary,
+  usage: HarnessUsageSummary | undefined,
+) {
+  total.inputTokens += usage?.inputTokens ?? 0;
+  total.outputTokens += usage?.outputTokens ?? 0;
+  total.reasoningTokens += usage?.reasoningTokens ?? 0;
+  total.totalTokens +=
+    usage?.totalTokens ??
+    (usage?.inputTokens ?? 0) +
+      (usage?.outputTokens ?? 0) +
+      (usage?.reasoningTokens ?? 0);
+  if (usage?.costUsd !== undefined) {
+    total.costUsd = (total.costUsd ?? 0) + usage.costUsd;
   }
+  total.toolCalls += usage?.toolCalls ?? 0;
+}
 
+function sumAppUsage(cases: EvalCase[]) {
+  const usage = emptyUsage();
+  const runUsages = cases
+    .map(appUsageForCase)
+    .filter((item): item is HarnessUsageSummary => item !== undefined);
+  for (const runUsage of runUsages) {
+    addRunUsage(usage, runUsage);
+  }
+  omitPartialCost(usage, runUsages);
   return usage;
+}
+
+function appUsageForCase(testCase: EvalCase): HarnessUsageSummary | undefined {
+  const usage = testCase.harness?.usage;
+  const effectiveToolCalls = toolCallCount(testCase);
+  if (!usage && effectiveToolCalls === 0) {
+    return undefined;
+  }
+  return {
+    ...usage,
+    ...(effectiveToolCalls > 0 ? { toolCalls: effectiveToolCalls } : {}),
+  };
+}
+
+function sumJudgeUsage(cases: EvalCase[]) {
+  const usage = emptyUsage();
+  const runUsages: Array<HarnessUsageSummary | undefined> = [];
+  for (const testCase of cases) {
+    for (const score of testCase.eval?.scores ?? []) {
+      for (const run of score.judgeRuns ?? []) {
+        runUsages.push(run.usage);
+        addRunUsage(usage, run.usage);
+      }
+    }
+  }
+  omitPartialCost(usage, runUsages);
+  return usage;
+}
+
+function omitPartialCost(
+  total: AggregatedUsageSummary,
+  usages: Array<HarnessUsageSummary | undefined>,
+) {
+  if (usages.some(hasUsageWithoutCost)) {
+    total.costUsd = undefined;
+  }
+}
+
+function hasUsageWithoutCost(usage: HarnessUsageSummary | undefined) {
+  return (
+    usage?.costUsd === undefined &&
+    ((usage?.totalTokens ??
+      (usage?.inputTokens ?? 0) +
+        (usage?.outputTokens ?? 0) +
+        (usage?.reasoningTokens ?? 0)) > 0 ||
+      (usage?.toolCalls ?? 0) > 0)
+  );
 }
 
 function toolCallCount(testCase: EvalCase) {

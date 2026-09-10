@@ -1,13 +1,14 @@
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { readReportWorkspace } from "@vitest-evals/core/node";
 import { parseCliArgs } from "./cli-options";
 import { serveReportWorkspace } from "./server";
 
 const workspace: ReportWorkspace = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   runs: [
     {
       id: "vitest-results.json",
@@ -76,6 +77,28 @@ describe("parseCliArgs", () => {
       inputs: ["vitest-results.json"],
     });
   });
+
+  test("keeps the visual fixture compatible with the current report schema", async () => {
+    const fixture = resolve(
+      process.cwd(),
+      "packages/report-ui/fixtures/vitest-results.visual.json",
+    );
+    const { workspace } = await readReportWorkspace([fixture], {
+      workspace: "/repo",
+    });
+
+    expect(workspace.cases).toHaveLength(5);
+    expect(workspace.cases[0]?.harness?.run?.usage).toMatchObject({
+      totalTokens: 1220,
+      costUsd: 0.084,
+    });
+    expect(
+      workspace.cases[0]?.eval?.scores?.[0]?.judgeRuns?.[0]?.usage,
+    ).toMatchObject({
+      totalTokens: 96,
+      costUsd: 0.012,
+    });
+  });
 });
 
 describe("serveReportWorkspace", () => {
@@ -93,7 +116,7 @@ describe("serveReportWorkspace", () => {
     try {
       const dataResponse = await fetch(`${server.url}/data/workspace.json`);
       await expect(dataResponse.json()).resolves.toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: 2,
         cases: [{ id: "case-1" }],
       });
 

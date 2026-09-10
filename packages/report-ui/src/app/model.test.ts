@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import {
   buildSpanTree,
   buildTranscript,
@@ -14,7 +14,7 @@ import {
 } from "./model";
 
 const workspace: ReportWorkspace = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   runs: [
     {
       id: "shard-a.json",
@@ -49,7 +49,20 @@ const workspace: ReportWorkspace = {
       failureMessages: ["Score: 0.20 below threshold: 1.00"],
       eval: {
         avgScore: 0.2,
-        scores: [{ name: "StructuredOutputJudge", score: 0.2 }],
+        scores: [
+          {
+            name: "StructuredOutputJudge",
+            score: 0.2,
+            judgeRuns: [
+              {
+                output: { choice: "C" },
+                usage: { totalTokens: 100, costUsd: 0.02 },
+                session: { events: [] },
+                errors: [],
+              },
+            ],
+          },
+        ],
       },
       harness: {
         name: "pi-ai",
@@ -57,6 +70,7 @@ const workspace: ReportWorkspace = {
           output: { status: "denied" },
           usage: {
             totalTokens: 1220,
+            costUsd: 0.08,
             toolCalls: 1,
           },
           session: {
@@ -139,9 +153,53 @@ describe("summarizeWorkspace", () => {
       passed: 1,
       failed: 1,
       averageScore: 0.6,
-      totalTokens: 1220,
+      appTokens: 1220,
+      judgeTokens: 100,
+      totalTokens: 1320,
+      appCostUsd: 0.08,
+      judgeCostUsd: 0.02,
+      totalCostUsd: 0.1,
       toolCallCount: 2,
       durationMs: 4500,
+    });
+  });
+
+  test("does not let an empty usage run hide a known sibling cost", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const emptyUsageCase = structuredClone(workspace.cases[0]!);
+    emptyUsageCase.id = "case-empty-usage";
+    emptyUsageCase.harness!.run!.usage = {};
+    emptyUsageCase.harness!.run!.session.events = [];
+    emptyUsageCase.eval = undefined;
+
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        cases: [testCase, emptyUsageCase],
+      }),
+    ).toMatchObject({
+      appTokens: 1220,
+      appCostUsd: 0.08,
+      totalCostUsd: 0.1,
+    });
+  });
+
+  test("treats session-only tool calls as usage with unknown cost", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const sessionOnlyCase = structuredClone(workspace.cases[0]!);
+    sessionOnlyCase.id = "case-session-only";
+    sessionOnlyCase.harness!.run!.usage = {};
+    sessionOnlyCase.eval = undefined;
+
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        cases: [testCase, sessionOnlyCase],
+      }),
+    ).toMatchObject({
+      appTokens: 1220,
+      appCostUsd: undefined,
+      totalCostUsd: undefined,
     });
   });
 

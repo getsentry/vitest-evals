@@ -1,6 +1,6 @@
 import { DefaultReporter, VerboseReporter } from "vitest/node";
 import c from "tinyrainbow";
-import type { ToolCall } from "./harness";
+import type { HarnessRun, ToolCall, UsageSummary } from "./harness";
 import { toolCalls } from "./harness";
 
 const TEST_NAME_SEPARATOR = c.dim(" > ");
@@ -50,7 +50,7 @@ export default class DefaultEvalReporter extends VerboseReporter {
     }
 
     if (meta.harness) {
-      this.logHarnessTestCase(test, meta.harness);
+      this.logHarnessTestCase(test, meta.harness, meta.eval);
       if (testResult.state !== "failed" && meta.eval?.scores?.length) {
         this.logJudgeScoreDetails(meta.eval.scores);
       }
@@ -119,19 +119,16 @@ export default class DefaultEvalReporter extends VerboseReporter {
       run: {
         session: Parameters<typeof toolCalls>[0];
         output?: unknown;
-        usage?: {
-          totalTokens?: number;
-          inputTokens?: number;
-          outputTokens?: number;
-          reasoningTokens?: number;
-          toolCalls?: number;
-        };
+        usage?: UsageSummary;
         errors?: unknown[];
       };
     },
+    evalMeta?: {
+      scores?: Array<{ judgeRuns?: HarnessRun[] }>;
+    },
   ): void {
     let title = this.getFormattedTestTitle(test);
-    const summary = this.formatHarnessSummary(harnessMeta);
+    const summary = this.formatHarnessSummary(harnessMeta, evalMeta);
     if (summary) {
       title += c.dim(` [${summary}]`);
     }
@@ -144,32 +141,35 @@ export default class DefaultEvalReporter extends VerboseReporter {
     }
   }
 
-  private formatHarnessSummary(harnessMeta: {
-    name: string;
-    run: {
-      session: Parameters<typeof toolCalls>[0];
-      usage?: {
-        totalTokens?: number;
-        inputTokens?: number;
-        outputTokens?: number;
-        reasoningTokens?: number;
-        toolCalls?: number;
+  private formatHarnessSummary(
+    harnessMeta: {
+      name: string;
+      run: {
+        session: Parameters<typeof toolCalls>[0];
+        usage?: UsageSummary;
+        errors?: unknown[];
       };
-      errors?: unknown[];
-    };
-  }) {
+    },
+    evalMeta?: {
+      scores?: Array<{ judgeRuns?: HarnessRun[] }>;
+    },
+  ) {
     const parts: string[] = [];
-    const totalTokens =
-      harnessMeta.run.usage?.totalTokens ??
-      (harnessMeta.run.usage?.inputTokens ?? 0) +
-        (harnessMeta.run.usage?.outputTokens ?? 0) +
-        (harnessMeta.run.usage?.reasoningTokens ?? 0);
+    const appUsage = summarizeUsage(harnessMeta.run.usage);
+    const judgeRuns = (evalMeta?.scores ?? []).flatMap(
+      (score) => score.judgeRuns ?? [],
+    );
+    const judgeUsage = summarizeRunUsage(judgeRuns);
     const totalTools =
       harnessMeta.run.usage?.toolCalls ??
       toolCalls(harnessMeta.run.session).length;
 
-    if (totalTokens > 0) {
-      parts.push(`${totalTokens} tok`);
+    if (appUsage) {
+      parts.push(`app ${formatUsage(appUsage)}`);
+    }
+    if (judgeUsage) {
+      parts.push(`judge ${formatUsage(judgeUsage)}`);
+      parts.push(`total ${formatUsage(sumUsage(appUsage, judgeUsage))}`);
     }
     if (totalTools > 0) {
       parts.push(`${totalTools} tool${totalTools === 1 ? "" : "s"}`);
@@ -794,4 +794,62 @@ export default class DefaultEvalReporter extends VerboseReporter {
     title += test.fullName ?? this.getTestName(test.task, TEST_NAME_SEPARATOR);
     return title;
   }
+}
+
+function summarizeRunUsage(runs: HarnessRun[]) {
+  if (runs.length === 0) {
+    return undefined;
+  }
+  const totalTokens = runs.reduce(
+    (total, run) => total + usageTokens(run.usage),
+    0,
+  );
+  const costUsd = runs.every((run) => run.usage.costUsd !== undefined)
+    ? runs.reduce((total, run) => total + (run.usage.costUsd ?? 0), 0)
+    : undefined;
+  return totalTokens > 0 || costUsd !== undefined
+    ? { totalTokens, costUsd }
+    : undefined;
+}
+
+function summarizeUsage(usage: UsageSummary | undefined) {
+  if (!usage) {
+    return undefined;
+  }
+  const totalTokens = usageTokens(usage);
+  return totalTokens > 0 || usage.costUsd !== undefined
+    ? { totalTokens, costUsd: usage.costUsd }
+    : undefined;
+}
+
+function sumUsage(app: UsageSummary | undefined, judge: UsageSummary) {
+  const appCostKnown = !app || app.costUsd !== undefined;
+  const judgeCostKnown = judge.costUsd !== undefined;
+  return {
+    totalTokens: usageTokens(app) + usageTokens(judge),
+    ...(appCostKnown && judgeCostKnown
+      ? { costUsd: (app?.costUsd ?? 0) + (judge.costUsd ?? 0) }
+      : {}),
+  };
+}
+
+function formatUsage(usage: UsageSummary) {
+  const parts: string[] = [];
+  const totalTokens = usageTokens(usage);
+  if (totalTokens > 0) {
+    parts.push(`${totalTokens} tok`);
+  }
+  if (usage.costUsd !== undefined) {
+    parts.push(`$${usage.costUsd.toFixed(usage.costUsd < 0.01 ? 4 : 2)}`);
+  }
+  return parts.join(" / ");
+}
+
+function usageTokens(usage: UsageSummary | undefined) {
+  return (
+    usage?.totalTokens ??
+    (usage?.inputTokens ?? 0) +
+      (usage?.outputTokens ?? 0) +
+      (usage?.reasoningTokens ?? 0)
+  );
 }

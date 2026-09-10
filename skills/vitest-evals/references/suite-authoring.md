@@ -44,8 +44,8 @@ describeEval("refund agent", { harness }, (it) => {
 ## Normalized Run Checklist
 
 - `run.output` is JSON-serializable or omitted.
-- `run.session.messages` contains user, assistant, and tool records worth reporting.
-- `run.usage` includes provider/model/token/tool data when available.
+- `run.session.events` contains the ordered messages and tool activity worth reporting.
+- `run.usage` includes provider, model, tokens, tools, and `costUsd` when known.
 - `run.artifacts` contains only JSON-safe diagnostics set through `context.setArtifact(...)`.
 - `run.errors` is an array, even on success.
 

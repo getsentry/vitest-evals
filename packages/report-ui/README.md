@@ -11,7 +11,8 @@ pnpm exec vitest-evals serve eval-results/
 The product CLI accepts Vitest JSON result files, simple `*` and `**` globs,
 and directories containing JSON files. It collects them into the shared
 `ReportWorkspace` model from `@vitest-evals/core`, serves the SPA locally, and
-exposes the collected data at `/data/workspace.json`.
+exposes the collected data at `/data/workspace.json`. The viewer separates
+application, judge, and total token and cost usage at workspace and case level.
 
 For visual QA, build and serve the intentionally awkward fixture:
 

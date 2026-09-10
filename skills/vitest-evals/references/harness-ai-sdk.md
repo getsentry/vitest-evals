@@ -5,7 +5,7 @@ Open this for `ai` package integrations such as `generateText`, `generateObject`
 ## Install And Import
 
 ```sh
-npm install -D ai vitest-evals @vitest-evals/harness-ai-sdk
+pnpm add -D ai vitest-evals @vitest-evals/harness-ai-sdk
 ```
 
 ```ts
@@ -44,14 +44,26 @@ const harness = aiSdkHarness({
 Agent factories receive `{ input, context }` before execution so apps can
 derive instructions or seeded state without side-channel setup.
 
-When LLM-backed judges need shared provider setup, keep that helper in the
-judge module. Do not put judge-model calls on the app harness:
+Use a separate judge harness for rubric calls. This keeps rubric usage out of
+application usage and lets reporters show both totals:
 
 ```ts
-const verdict = await generateText({
-  model: rubricModel,
-  prompt: formatJudgePrompt(ctx),
-}).then((result) => result.text);
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { createJudge } from "vitest-evals";
+
+const judgeHarness = aiSdkJudgeHarness({ model: rubricModel });
+
+const RubricJudge = createJudge({
+  name: "RubricJudge",
+  judgeHarness,
+  async assess(ctx) {
+    if (!ctx.runJudge) {
+      throw new Error("RubricJudge requires a judge harness.");
+    }
+    const verdict = await ctx.runJudge({ prompt: formatJudgePrompt(ctx) });
+    return parseVerdict(verdict);
+  },
+});
 ```
 
 ## Normalization Behavior

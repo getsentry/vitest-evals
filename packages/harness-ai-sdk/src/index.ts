@@ -166,18 +166,39 @@ async function runAiSdkJudgeHarness(
     input.responseFormat?.type === "json" &&
     input.responseFormat.schema !== undefined
   ) {
-    const { object } = await generateObject({
+    const result = await generateObject({
       ...requestOptions,
       schema: jsonSchema(
         input.responseFormat.schema as Parameters<typeof jsonSchema>[0],
       ),
     });
 
-    return object;
+    return createAiSdkJudgeRun(input, result, normalizeContent(result.object));
   }
 
-  const { text } = await generateText(requestOptions);
-  return text;
+  const result = await generateText(requestOptions);
+  return createAiSdkJudgeRun(input, result, result.text);
+}
+
+function createAiSdkJudgeRun(
+  input: JudgeHarnessInput,
+  result: unknown,
+  output: JsonValue | undefined,
+): HarnessRun {
+  const usage = resolveUsage(result);
+  return {
+    output,
+    session: resolveSession(
+      input.prompt,
+      result,
+      output,
+      new Map(),
+      [],
+      undefined,
+    ),
+    usage,
+    errors: [],
+  };
 }
 
 function formatAiSdkJudgeSystemPrompt(

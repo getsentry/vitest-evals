@@ -33,9 +33,13 @@ import type { JudgeHarness } from "./judges/judgeHarness";
 import { createRunJudge } from "./judges/judgeHarness";
 import { wrapText } from "./wrapText";
 
+type RecordedJudgeResult = JudgeResult & {
+  judgeRuns?: HarnessRun[];
+};
+
 type EvalTaskMeta = {
   eval?: {
-    scores: (JudgeResult & { name: string })[];
+    scores: (RecordedJudgeResult & { name: string })[];
     avgScore: number;
     output?: unknown;
     toolCalls?: ToolCall[];
@@ -449,14 +453,17 @@ expect.extend({
   ) {
     const { threshold = 1.0, ...context } = (options ??
       {}) as JudgeAssertionOptions<TJudgeOptions>;
+    const judgeRuns: HarnessRun[] = [];
     const judgeOptions = buildJudgeAssertionOptions(
       received,
       judge,
       context,
       isEvalTaskLike(this.task) ? this.task : undefined,
+      judgeRuns,
     );
 
-    const result = await judge.assess(judgeOptions);
+    const assessed = await judge.assess(judgeOptions);
+    const result = attachJudgeRuns(assessed, judgeRuns);
 
     const score = result.score ?? 0;
     const pass = threshold === null ? true : score >= threshold;
@@ -597,10 +604,12 @@ async function applyAutomaticJudges<
 ) {
   const runToolCalls = toolCalls(run.session);
   const scores = await Promise.all(
-    judges.map((judge) => {
+    judges.map(async (judge) => {
+      const judgeRuns: HarnessRun[] = [];
       const runJudge = createRunJudge(
         resolveJudgeHarnessForJudge(judge, judgeHarness),
         signal,
+        (judgeRun) => judgeRuns.push(judgeRun),
       );
       const judgeOptions = {
         input,
@@ -613,7 +622,8 @@ async function applyAutomaticJudges<
         runJudge,
       } as unknown as JudgeContext<TInput, TOutput, THarness>;
 
-      return Promise.resolve(judge.assess(judgeOptions));
+      const result = await judge.assess(judgeOptions);
+      return attachJudgeRuns(result, judgeRuns);
     }),
   );
 
@@ -695,7 +705,7 @@ function appendJudgeScore(
     thresholdFailed,
     toolCalls: judgeToolCalls,
   }: {
-    score: JudgeResult & { name: string };
+    score: RecordedJudgeResult & { name: string };
     output?: unknown;
     thresholdFailed: boolean;
     toolCalls?: ToolCall[];
@@ -762,6 +772,13 @@ function formatJudgeTextOutput(run: HarnessRun) {
     : JSON.stringify(assistantOutput);
 }
 
+function attachJudgeRuns(
+  result: JudgeResult,
+  judgeRuns: HarnessRun[],
+): RecordedJudgeResult {
+  return judgeRuns.length > 0 ? { ...result, judgeRuns } : result;
+}
+
 function buildJudgeAssertionOptions<
   TJudgeOptions extends JudgeContext<any, any, any> = JudgeContext,
 >(
@@ -769,6 +786,7 @@ function buildJudgeAssertionOptions<
   judge: Judge<TJudgeOptions>,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
   task?: EvalTaskLike,
+  judgeRuns: HarnessRun[] = [],
 ): TJudgeOptions {
   const registeredContext = resolveRegisteredJudgeRunContext(
     received,
@@ -779,7 +797,11 @@ function buildJudgeAssertionOptions<
   const judgeHarness =
     options.judgeHarness ??
     resolveJudgeHarnessForJudge(judge, registeredContext?.judgeHarness);
-  const runJudge = createRunJudge(judgeHarness, registeredContext?.signal);
+  const runJudge = createRunJudge(
+    judgeHarness,
+    registeredContext?.signal,
+    (judgeRun) => judgeRuns.push(judgeRun),
+  );
   const signal = registeredContext?.signal;
   const input =
     options.input ??

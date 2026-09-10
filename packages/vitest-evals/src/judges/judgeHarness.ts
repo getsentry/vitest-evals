@@ -153,33 +153,43 @@ export async function runJudgeHarness(
   input: JudgeHarnessInput,
   options: RunJudgeOptions = {},
 ): Promise<JudgeHarnessOutput> {
-  const artifacts: HarnessContext["artifacts"] = {};
-  const run = await judgeHarness.run(input, {
-    signal: options.signal,
-    artifacts,
-    setArtifact: (name, value) => {
-      artifacts[name] = value;
-    },
-  });
-
-  return run.output !== undefined
-    ? run.output
-    : resolveJudgeHarnessAssistantOutput(run);
+  return resolveJudgeHarnessOutput(
+    await executeJudgeHarness(judgeHarness, input, options),
+  );
 }
 
 /** Binds a judge harness to the current eval run context. */
 export function createRunJudge(
   judgeHarness: JudgeHarness | undefined,
   signal?: AbortSignal,
+  onRun?: (run: HarnessRun<JudgeHarnessOutput>) => void,
 ): RunJudge | undefined {
   if (!judgeHarness) {
     return undefined;
   }
 
-  return (input, options) =>
-    runJudgeHarness(judgeHarness, input, {
+  return async (input, options) => {
+    const run = await executeJudgeHarness(judgeHarness, input, {
       signal: options?.signal ?? signal,
     });
+    onRun?.(run);
+    return resolveJudgeHarnessOutput(run);
+  };
+}
+
+async function executeJudgeHarness(
+  judgeHarness: JudgeHarness,
+  input: JudgeHarnessInput,
+  options: RunJudgeOptions,
+) {
+  const artifacts: HarnessContext["artifacts"] = {};
+  return judgeHarness.run(input, {
+    signal: options.signal,
+    artifacts,
+    setArtifact: (name, value) => {
+      artifacts[name] = value;
+    },
+  });
 }
 
 function normalizeJudgeHarnessResult(
@@ -233,8 +243,10 @@ function createJudgeHarnessMessages(
   ];
 }
 
-function resolveJudgeHarnessAssistantOutput(
+function resolveJudgeHarnessOutput(
   run: HarnessRun<JudgeHarnessOutput>,
 ): JudgeHarnessOutput {
-  return latestAssistantMessageContent(run.session) ?? "";
+  return run.output !== undefined
+    ? run.output
+    : (latestAssistantMessageContent(run.session) ?? "");
 }

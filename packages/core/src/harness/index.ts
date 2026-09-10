@@ -39,6 +39,7 @@ export const UsageSummarySchema = z
     outputTokens: FiniteNumberSchema.optional(),
     reasoningTokens: FiniteNumberSchema.optional(),
     totalTokens: FiniteNumberSchema.optional(),
+    costUsd: FiniteNumberSchema.nonnegative().optional(),
     toolCalls: FiniteNumberSchema.optional(),
     retries: FiniteNumberSchema.optional(),
     metadata: JsonObjectSchema.optional(),
@@ -59,11 +60,13 @@ export type UsageSummary = {
   reasoningTokens?: number;
   /** Total token count reported by the provider or adapter. */
   totalTokens?: number;
+  /** USD-denominated cost attributed to this run. Omit when unknown; zero means known free. */
+  costUsd?: number;
   /** Count of tool calls observed during the run. */
   toolCalls?: number;
   /** Retry count observed during the run. */
   retries?: number;
-  /** Provider-specific JSON-safe usage details. Cost estimates belong here. */
+  /** Provider-specific JSON-safe usage details. */
   metadata?: Record<string, JsonValue>;
 };
 

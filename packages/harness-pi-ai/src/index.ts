@@ -151,7 +151,22 @@ export function piAiJudgeHarness<TApi extends Api>(
         },
       );
 
-      return resolvePiAiJudgeText(message);
+      const output = resolvePiAiJudgeText(message);
+      const usage = resolveUsage(message, 0);
+      return {
+        output,
+        session: resolveSession(
+          message,
+          [
+            { type: "message", role: "user", content: prompt },
+            { type: "message", role: "assistant", content: output },
+          ],
+          output,
+          usage,
+        ),
+        usage,
+        errors: [],
+      };
     },
   });
 }
@@ -1804,6 +1819,7 @@ function resolveUsage(result: unknown, toolCallCount: number): UsageSummary {
     outputTokens: numberField(usageRecord.outputTokens),
     reasoningTokens: numberField(usageRecord.reasoningTokens),
     totalTokens: numberField(usageRecord.totalTokens),
+    costUsd: resolveCostUsd(usageRecord),
     toolCalls: numberField(usageRecord.toolCalls),
     retries: numberField(usageRecord.retries),
     metadata: collectUsageMetadata(usageRecord),
@@ -1844,9 +1860,22 @@ const USAGE_SUMMARY_KEYS = new Set([
   "outputTokens",
   "reasoningTokens",
   "totalTokens",
+  "costUsd",
   "toolCalls",
   "retries",
 ]);
+
+function resolveCostUsd(usage: Record<string, unknown>) {
+  const direct = numberField(usage.costUsd);
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const cost = usage.cost;
+  return cost && typeof cost === "object" && !Array.isArray(cost)
+    ? numberField((cost as Record<string, unknown>).total)
+    : undefined;
+}
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : undefined;

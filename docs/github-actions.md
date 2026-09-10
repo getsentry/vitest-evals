@@ -8,7 +8,13 @@ Public docs mirror this guide at
 [vitest-evals.sentry.dev/docs/github](https://vitest-evals.sentry.dev/docs/github).
 
 Use JSON as the eval artifact because it preserves `task.meta.eval` and
-`task.meta.harness`; JUnit XML does not carry the full eval metadata.
+`task.meta.harness`; JUnit XML does not carry the full eval metadata. Usage
+reports show separate application, judge, and combined token and `costUsd`
+totals. A combined cost is shown only when every usage category reports cost;
+omitted cost means unknown, while zero means known free. Judge runs remain
+attached to their scores for detailed usage data. Keep the package producing
+the JSON artifact and the `getsentry/vitest-evals` action on compatible
+releases; raw Vitest task metadata is strict and not independently versioned.
 
 ## Minimal Workflow
 

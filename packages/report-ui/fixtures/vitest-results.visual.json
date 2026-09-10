@@ -48,7 +48,22 @@
                   "score": 0.2,
                   "metadata": {
                     "rationale": "status mismatch; expected denied, got manual_review"
-                  }
+                  },
+                  "judgeRuns": [
+                    {
+                      "output": {
+                        "choice": "C"
+                      },
+                      "usage": {
+                        "totalTokens": 96,
+                        "costUsd": 0.012
+                      },
+                      "session": {
+                        "events": []
+                      },
+                      "errors": []
+                    }
+                  ]
                 },
                 {
                   "name": "ToolCallJudge",
@@ -72,6 +87,7 @@
                   "inputTokens": 980,
                   "outputTokens": 240,
                   "totalTokens": 1220,
+                  "costUsd": 0.084,
                   "toolCalls": 3,
                   "metadata": {
                     "cacheReadTokens": 320
@@ -81,55 +97,81 @@
                   "totalMs": 4100
                 },
                 "session": {
-                  "messages": [
+                  "events": [
                     {
+                      "type": "message",
                       "role": "system",
                       "content": "You are a refund policy agent. Follow fraud controls exactly."
                     },
                     {
+                      "type": "message",
                       "role": "user",
                       "content": "Refund invoice inv_404 for account acct_suspicious"
                     },
                     {
+                      "type": "message",
                       "role": "assistant",
-                      "content": "I need to inspect the invoice and account risk profile.",
-                      "toolCalls": [
-                        {
-                          "name": "lookupInvoice",
-                          "arguments": {
-                            "invoiceId": "inv_404"
-                          },
-                          "result": {
-                            "refundable": true,
-                            "amount": 19900,
-                            "currency": "usd"
-                          },
-                          "durationMs": 6
-                        },
-                        {
-                          "name": "inspectAccountRisk",
-                          "arguments": {
-                            "accountId": "acct_suspicious"
-                          },
-                          "result": {
-                            "risk": "high",
-                            "signals": ["velocity", "chargeback"]
-                          },
-                          "durationMs": 18
-                        },
-                        {
-                          "name": "createRefund",
-                          "arguments": {
-                            "invoiceId": "inv_404"
-                          },
-                          "error": {
-                            "message": "blocked by fraud policy"
-                          },
-                          "durationMs": 11
-                        }
-                      ]
+                      "content": "I need to inspect the invoice and account risk profile."
                     },
                     {
+                      "type": "tool_call",
+                      "id": "visual-call-1",
+                      "name": "lookupInvoice",
+                      "arguments": {
+                        "invoiceId": "inv_404"
+                      },
+                      "durationMs": 6
+                    },
+                    {
+                      "type": "tool_result",
+                      "toolCallId": "visual-call-1",
+                      "name": "lookupInvoice",
+                      "durationMs": 6,
+                      "content": {
+                        "refundable": true,
+                        "amount": 19900,
+                        "currency": "usd"
+                      }
+                    },
+                    {
+                      "type": "tool_call",
+                      "id": "visual-call-2",
+                      "name": "inspectAccountRisk",
+                      "arguments": {
+                        "accountId": "acct_suspicious"
+                      },
+                      "durationMs": 18
+                    },
+                    {
+                      "type": "tool_result",
+                      "toolCallId": "visual-call-2",
+                      "name": "inspectAccountRisk",
+                      "durationMs": 18,
+                      "content": {
+                        "risk": "high",
+                        "signals": ["velocity", "chargeback"]
+                      }
+                    },
+                    {
+                      "type": "tool_call",
+                      "id": "visual-call-3",
+                      "name": "createRefund",
+                      "arguments": {
+                        "invoiceId": "inv_404"
+                      },
+                      "durationMs": 11
+                    },
+                    {
+                      "type": "tool_result",
+                      "toolCallId": "visual-call-3",
+                      "name": "createRefund",
+                      "durationMs": 11,
+                      "error": {
+                        "message": "blocked by fraud policy"
+                      }
+                    },
+                    {
+                      "type": "message",
                       "role": "assistant",
                       "content": "This should be sent to manual review because the account risk is high."
                     }
@@ -320,24 +362,28 @@
                   "totalMs": 2100
                 },
                 "session": {
-                  "messages": [
+                  "events": [
                     {
+                      "type": "message",
                       "role": "user",
                       "content": "Refund invoice inv_123"
                     },
                     {
+                      "type": "message",
                       "role": "assistant",
-                      "content": "The invoice is refundable and the refund has been created.",
-                      "toolCalls": [
-                        {
-                          "name": "lookupInvoice",
-                          "durationMs": 4
-                        },
-                        {
-                          "name": "createRefund",
-                          "durationMs": 21
-                        }
-                      ]
+                      "content": "The invoice is refundable and the refund has been created."
+                    },
+                    {
+                      "type": "tool_call",
+                      "id": "visual-call-1",
+                      "name": "lookupInvoice",
+                      "durationMs": 4
+                    },
+                    {
+                      "type": "tool_call",
+                      "id": "visual-call-2",
+                      "name": "createRefund",
+                      "durationMs": 21
                     }
                   ]
                 },
@@ -475,26 +521,34 @@
                   "totalMs": 1800
                 },
                 "session": {
-                  "messages": [
+                  "events": [
                     {
+                      "type": "message",
                       "role": "user",
                       "content": "how long do i have to get money back???"
                     },
                     {
+                      "type": "message",
                       "role": "assistant",
-                      "content": "The refund window is 30 days for standard purchases.",
-                      "toolCalls": [
-                        {
-                          "name": "searchKnowledgeBase",
-                          "arguments": {
-                            "query": "standard purchase refund window"
-                          },
-                          "result": {
-                            "documents": 3
-                          },
-                          "durationMs": 33
-                        }
-                      ]
+                      "content": "The refund window is 30 days for standard purchases."
+                    },
+                    {
+                      "type": "tool_call",
+                      "id": "visual-call-1",
+                      "name": "searchKnowledgeBase",
+                      "arguments": {
+                        "query": "standard purchase refund window"
+                      },
+                      "durationMs": 33
+                    },
+                    {
+                      "type": "tool_result",
+                      "toolCallId": "visual-call-1",
+                      "name": "searchKnowledgeBase",
+                      "durationMs": 33,
+                      "content": {
+                        "documents": 3
+                      }
                     }
                   ]
                 },

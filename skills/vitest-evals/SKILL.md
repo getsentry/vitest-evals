@@ -35,9 +35,10 @@ Use the harness-backed API as the only authoring model.
 - Use `toolCalls(result)` and message helpers for normalized session assertions.
 - Use `spans(result)`, `spansByKind(result, kind)`, and `failedSpans(result)` for span assertions.
 - Keep `HarnessRun`, `NormalizedSession`, usage, artifacts, and tool records JSON-serializable.
-- Keep judge model calls on judges. Use `createJudge("Name", assess)` for
-  custom judges; use the provider-helper overload only when multiple judges
-  reuse setup and need curried run options.
+- Report known tokens and USD cost in `run.usage`. Omit `costUsd` when unknown;
+  use `0` only when the run is known to be free.
+- Keep rubric text and parsing in the judge. Put provider calls in a
+  `judgeHarness`, then call them through `ctx.runJudge(...)` so usage is recorded.
 - Put scenario-owned criteria on the input value. Put direct-check expected
   values in Vitest case rows. Pass per-case judge criteria through explicit
   matcher options, and suite-wide criteria through judge config.

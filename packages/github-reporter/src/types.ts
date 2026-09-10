@@ -67,7 +67,10 @@ export type EvalReport = {
     average: number;
     minimum?: number;
   };
-  usage: Required<UsageSummary>;
+  /** Application and other upstream usage. */
+  usage: AggregatedUsageSummary;
+  /** Judge-model usage. */
+  judgeUsage: AggregatedUsageSummary;
   cases: EvalCase[];
   failures: EvalCase[];
 };
@@ -78,8 +81,13 @@ export type UsageSummary = {
   outputTokens?: number;
   reasoningTokens?: number;
   totalTokens?: number;
+  costUsd?: number;
   toolCalls?: number;
 };
+
+/** Aggregated usage; cost stays absent when no run reported one. */
+export type AggregatedUsageSummary = Required<Omit<UsageSummary, "costUsd">> &
+  Pick<UsageSummary, "costUsd">;
 
 /** Tool-call summary shown in reporter output. */
 export type ToolCallSummary = {

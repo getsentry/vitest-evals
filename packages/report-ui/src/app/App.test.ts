@@ -97,7 +97,7 @@ describe("visible summary", () => {
     expect(
       summarizeVisibleWorkspace(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           runs,
           cases: [
             cases[0]!,
@@ -163,7 +163,7 @@ describe("visible summary", () => {
     expect(
       summarizeVisibleWorkspace(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           runs: [
             {
               id: "run-1",
@@ -201,6 +201,8 @@ describe("visible summary", () => {
         passed: 1,
         runCount: 1,
         skipped: 1,
+        appTokens: 0,
+        judgeTokens: 0,
         totalTokens: 0,
         toolCallCount: 0,
       }),
@@ -215,6 +217,8 @@ describe("visible summary", () => {
         passed: 0,
         runCount: 1,
         skipped: 1,
+        appTokens: 0,
+        judgeTokens: 0,
         totalTokens: 0,
         toolCallCount: 0,
       }),

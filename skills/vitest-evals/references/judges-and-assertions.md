@@ -13,33 +13,37 @@ Every judge receives:
 | `toolCalls` | Flattened calls from the run. |
 | `run` | Full normalized `HarnessRun`. |
 | `session` | Normalized session from the run. |
-| `harness` | Suite harness for intentional second runs. |
+| `harness` | App harness for intentional second runs. |
+| `runJudge` | Runs the configured judge harness and records its usage. |
 
 ## Custom Judge Pattern
 
 ```ts
-import {
-  createJudge,
-} from "vitest-evals";
+import { aiSdkJudgeHarness } from "@vitest-evals/harness-ai-sdk";
+import { createJudge } from "vitest-evals";
 
-const RefundRubricJudge = createJudge<
-  string,
-  RefundOutput,
-  { expectedStatus: string }
->(
-  "RefundRubricJudge",
-  async (ctx) => {
-    const verdict = await callJudgeModel({
+const judgeHarness = aiSdkJudgeHarness({ model: rubricModel });
+
+const RefundRubricJudge = createJudge({
+  name: "RefundRubricJudge",
+  judgeHarness,
+  async assess(ctx) {
+    if (!ctx.runJudge) {
+      throw new Error("RefundRubricJudge requires a judge harness.");
+    }
+
+    const verdict = await ctx.runJudge({
       prompt: formatRubric({
         input: ctx.input,
         output: ctx.output,
         expectedStatus: ctx.expectedStatus,
       }),
+      responseFormat: { type: "json" },
     });
 
     return parseVerdict(verdict);
   },
-);
+});
 ```
 
 ## Automatic Vs Explicit
@@ -52,7 +56,7 @@ const RefundRubricJudge = createJudge<
 | Only one assertion needs the judge | `await expect(result).toSatisfyJudge(Judge)` |
 | Judge needs structured app output | Type `JudgeContext<..., TOutput>` and read `ctx.output` |
 | Judge needs text | Use a text `TOutput` or explicitly project structured output to text |
-| Judge needs shared model setup | Keep a local helper in the judge module, or use the provider-helper overload of `createJudge(...)` when curried run options are needed |
+| Judge needs a model call | Configure a `judgeHarness`, then call `ctx.runJudge(...)` |
 
 ## Built-In Judges
 
@@ -71,10 +75,23 @@ const RefundRubricJudge = createJudge<
 - Normalized sessions infer output from the latest assistant message content.
 - Calling `ctx.harness.run(...)` inside a judge executes the app again; only do this when the judge intentionally needs a second run.
 
+## Judge Usage
+
+- A judge harness is separate from the app harness. Return a full `HarnessRun`
+  when the provider exposes usage.
+- `ctx.runJudge(...)` returns the judge output, while vitest-evals records the
+  complete normalized run under the score's `judgeRuns` field.
+- Multiple `runJudge(...)` calls from one judge are retained separately.
+- Stable token fields and `costUsd` contribute to separate application, judge,
+  and combined report totals. Provider-specific pricing details stay under
+  `usage.metadata`.
+
 ## Review Checklist
 
 - Custom judges should usually use `createJudge("Name", assess)`.
 - Scores are numbers or `null`; failure behavior is controlled by thresholds.
 - Rationale or parsed judge output is placed under `metadata`.
-- LLM-backed judges provide the judge prompt/rubric text. Shared provider setup
-  belongs in a judge-side helper, not on the app harness.
+- Model-backed judges own the prompt, rubric, and parser. Provider setup belongs
+  in a `judgeHarness`, not the app harness.
+- Model-backed judge harnesses retain normalized usage instead of returning only
+  provider text when usage is available.

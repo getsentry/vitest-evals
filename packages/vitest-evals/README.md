@@ -133,7 +133,8 @@ describeEval("refund agent", { harness }, (it) => {
 ## Terminal Reporting
 
 The terminal reporter has two eval report levels. Normal mode prints compact
-test, score, usage, and tool-count summaries. Info mode adds per-tool summaries,
+test and score summaries, with application and judge tokens and cost shown
+separately. Info mode adds per-tool summaries,
 arguments, timing/size metadata, replay status, and final output summaries.
 Set `VITEST_EVALS_REPORT_LEVEL=info`, or pass `--info` through the workspace
 eval scripts, to enable it. `--verbose` and `-v` remain aliases for
@@ -145,7 +146,7 @@ Full transcripts and spans are preserved in the Vitest JSON report metadata.
 
 The local report UI reads the same Vitest JSON artifacts and serves a React SPA
 for drilling into runs, eval cases, harness output, sessions, tool calls,
-scores, and trace spans.
+scores, trace spans, and separate application, judge, and total usage.
 
 ```sh
 pnpm exec vitest-evals serve vitest-results.json
@@ -368,9 +369,11 @@ projections through helpers such as `toolCalls(result)`, `userMessages(result)`,
 of manually walking provider payloads. Return a full `HarnessRun` only when you
 need exact canonical `session.events`, trace, or usage control.
 
-Provider setup and rubric parsing stay in your judge. The core
-package only requires the judge to return a `JudgeResult` with a score and
-optional metadata.
+Provider setup and rubric parsing stay in your judge. The core package only
+requires the judge to return a `JudgeResult` with a score and optional metadata.
+Each `ctx.runJudge(...)` call also records its complete normalized judge run
+under that score's `judgeRuns` field. Tokens and `costUsd` contribute to
+separate application, judge, and combined report totals.
 
 Automatic suite-level judges are a good fit when every `run(...)` should get
 the same scoring. For cases where only some runs need an LLM judge, keep the
@@ -484,7 +487,9 @@ judges, but automatic judges do not inherit inferred harnesses from sibling
 judges. That inference requires those judges to share the same judge harness
 instance. Leave `judgeHarness` unset for suites that only use deterministic
 judges. Calling `harness.run(...)` from a judge executes the application again,
-so use that only when a second run is intentional.
+so use that only when a second run is intentional. Custom judge harnesses
+should return a full `HarnessRun` when provider usage is available. Multiple
+`runJudge(...)` calls are retained as separate judge runs.
 
 For an `EvalHarnessRun` returned by fixture `run(...)`,
 `toSatisfyJudge(...)` uses the run's typed `output` and reuses the registered

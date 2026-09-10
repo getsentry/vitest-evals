@@ -1,12 +1,16 @@
 import { describe, expect, test } from "vitest";
 import {
+  HarnessRunSchema,
+  TranscriptToolResultEventSchema,
+  UsageSummarySchema,
+  type VitestJsonReport,
   assistantMessages,
   collectReportWorkspace,
   failedSpans,
-  HarnessRunSchema,
   latestAssistantMessageContent,
-  messagesToTranscriptEvents,
   messagesByRole,
+  messagesToTranscriptEvents,
+  parseReportWorkspace,
   parseVitestJsonReport,
   readEvalTaskMeta,
   spans,
@@ -15,10 +19,7 @@ import {
   toolCalls,
   toolMessages,
   traceSpans,
-  TranscriptToolResultEventSchema,
-  UsageSummarySchema,
   userMessages,
-  type VitestJsonReport,
 } from "./index";
 
 const sampleJson: VitestJsonReport = {
@@ -884,22 +885,24 @@ describe("messagesToTranscriptEvents", () => {
 });
 
 describe("UsageSummarySchema", () => {
-  test("keeps provider-specific usage data under metadata", () => {
+  test("accepts standardized USD cost and keeps provider details in metadata", () => {
+    expect(
+      UsageSummarySchema.safeParse({
+        totalTokens: 120,
+        costUsd: 0.02,
+        metadata: { providerRequestId: "req_123" },
+      }).success,
+    ).toBe(true);
+
     expect(
       UsageSummarySchema.safeParse({
         totalTokens: 120,
         estimatedCostUsd: 0.02,
       }).success,
     ).toBe(false);
-
-    expect(
-      UsageSummarySchema.safeParse({
-        totalTokens: 120,
-        metadata: {
-          estimatedCostUsd: 0.02,
-        },
-      }).success,
-    ).toBe(true);
+    expect(UsageSummarySchema.safeParse({ costUsd: -0.01 }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -933,7 +936,7 @@ describe("collectReportWorkspace", () => {
         },
       },
     ]);
-    expect(workspace.schemaVersion).toBe(1);
+    expect(workspace.schemaVersion).toBe(2);
     expect(workspace.cases).toHaveLength(1);
     expect(workspace.cases[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",
@@ -963,6 +966,17 @@ describe("collectReportWorkspace", () => {
         },
       },
     });
+  });
+
+  test("migrates schema version 1 workspaces in memory", () => {
+    const workspace = collectReportWorkspace(sampleJson);
+
+    expect(
+      parseReportWorkspace({
+        ...workspace,
+        schemaVersion: 1,
+      }),
+    ).toEqual(workspace);
   });
 
   test("defaults harness-only case scores from Vitest status", () => {

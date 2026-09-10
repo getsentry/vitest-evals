@@ -361,22 +361,21 @@ jobs:
           grep -F "Judge       Score" "$GITHUB_STEP_SUMMARY"
           grep -F "SmokeJudge  0.10" "$GITHUB_STEP_SUMMARY"
           grep -F "AmountJudge     0.35" "$GITHUB_STEP_SUMMARY"
-          grep -F "Harness Errors" "$GITHUB_STEP_SUMMARY"
+          grep -F "App errors" "$GITHUB_STEP_SUMMARY"
           grep -F "refund ledger rejected amount" "$GITHUB_STEP_SUMMARY"
-          grep -F "Final Output" "$GITHUB_STEP_SUMMARY"
+          grep -F "Output" "$GITHUB_STEP_SUMMARY"
           grep -F "Tool           Status" "$GITHUB_STEP_SUMMARY"
           grep -F "lookupInvoice  ok" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Status | failed |" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Status | Failed |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Eval cases | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Score | average 0.59, lowest 0.10 |" "$GITHUB_STEP_SUMMARY"
           if grep -F "| Tests |" "$GITHUB_STEP_SUMMARY"; then
             echo "test totals row should not be shown"
             exit 1
           fi
-          if grep -F "| Usage |" "$GITHUB_STEP_SUMMARY"; then
-            echo "top-level usage row should not be shown"
-            exit 1
-          fi
+          grep -F "| App usage | 1,302 tokens, cost unavailable, 9 tool calls |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Judge usage | none |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Total usage | 1,302 tokens, cost unavailable, 9 tool calls |" "$GITHUB_STEP_SUMMARY"
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=28,col=5,title=vitest-evals::refund eval > returns wrong refund amount - score 0.35 - AmountJudge - expected amount=5000, got amount=499" tmp/github-reporter-smoke/stdout.txt
           grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt
@@ -443,7 +442,7 @@ jobs:
           test "$ACTION_GATE_STATUS" = "passed"
           test "$ACTION_PASS_RATE" = "0.80"
           test "$ACTION_EVALS_FAILED" = "2"
-          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — floor 70.0%"
+          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — minimum 70.0%"
 
       - name: Run gated reporter action below floor
         id: reporter_action_gated_fail

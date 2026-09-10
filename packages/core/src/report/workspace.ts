@@ -1,20 +1,20 @@
 import { z } from "zod";
+import { FiniteNumberSchema, isRecord, parseWithSchema } from "../schema-utils";
 import {
   EvalMetaSchema,
   HarnessMetaSchema,
   readEvalTaskMeta,
 } from "./metadata";
-import { FiniteNumberSchema, parseWithSchema, isRecord } from "../schema-utils";
 import {
-  parseVitestJsonReport,
-  VitestJsonLocationSchema,
   type VitestJsonAssertion,
+  VitestJsonLocationSchema,
   type VitestJsonReport,
+  parseVitestJsonReport,
 } from "./vitest-json";
 import { VitestJsonStatusSchema } from "./vitest-json";
 
 /** Current schema version for collected report workspaces. */
-export const REPORT_WORKSPACE_SCHEMA_VERSION = 1;
+export const REPORT_WORKSPACE_SCHEMA_VERSION = 2;
 
 /** One collected Vitest JSON report source in a multi-run workspace. */
 export const ReportRunSchema = z
@@ -64,12 +64,23 @@ export const ReportCaseSchema = z
 /** One eval or harness-backed test case collected from Vitest JSON. */
 export type ReportCase = z.infer<typeof ReportCaseSchema>;
 
+const reportWorkspaceShape = {
+  runs: z.array(ReportRunSchema),
+  cases: z.array(ReportCaseSchema),
+};
+
+const LegacyReportWorkspaceSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    ...reportWorkspaceShape,
+  })
+  .strict();
+
 /** Full multi-run report workspace consumed by rich report UIs. */
 export const ReportWorkspaceSchema = z
   .object({
     schemaVersion: z.literal(REPORT_WORKSPACE_SCHEMA_VERSION),
-    runs: z.array(ReportRunSchema),
-    cases: z.array(ReportCaseSchema),
+    ...reportWorkspaceShape,
   })
   .strict();
 
@@ -92,6 +103,18 @@ export type CollectReportWorkspaceOptions = {
 
 /** Parses and validates an unknown value as a collected report workspace. */
 export function parseReportWorkspace(input: unknown): ReportWorkspace {
+  if (isRecord(input) && input.schemaVersion === 1) {
+    const legacy = parseWithSchema(
+      LegacyReportWorkspaceSchema,
+      input,
+      "report workspace",
+    );
+    return {
+      ...legacy,
+      schemaVersion: REPORT_WORKSPACE_SCHEMA_VERSION,
+    };
+  }
+
   return parseWithSchema(ReportWorkspaceSchema, input, "report workspace");
 }
 
