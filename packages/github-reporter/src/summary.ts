@@ -46,7 +46,7 @@ export function renderJobSummary(
   const lines: string[] = [
     "# vitest-evals",
     "",
-    ...renderSummaryTable(report, nonEvalFailures, options.gate),
+    ...renderOverview(report, nonEvalFailures, options.gate),
     "",
     ...renderScoreDistribution(report),
     "## Results",
@@ -84,75 +84,70 @@ function formatCountLine(passed: number, failed: number, total: number) {
   return `${formatNumber(passed)} passed, ${formatNumber(failed)} failed, ${formatNumber(total)} total`;
 }
 
-function renderSummaryTable(
+function renderOverview(
   report: EvalReport,
   nonEvalFailures: number,
   gate?: EvalGateResult,
 ) {
-  const rows: Array<[string, string]> = [
-    ["Status", gate?.status ?? report.status],
-    [
-      "Evals",
-      formatCountLine(
-        report.totals.evalPassed,
-        report.totals.evalFailed,
-        report.totals.evalTotal,
-      ),
-    ],
+  const status = gate?.status ?? report.status;
+  const statusLabel = `${formatStatus(status)}${gate?.enforced ? " gate" : ""}`;
+  const passRate =
+    gate?.passRate ??
+    (report.totals.evalTotal > 0
+      ? report.totals.evalPassed / report.totals.evalTotal
+      : undefined);
+  const result = [
+    "## Summary",
+    "",
+    `**${statusLabel}** — ${formatCountLine(
+      report.totals.evalPassed,
+      report.totals.evalFailed,
+      report.totals.evalTotal,
+    )}${passRate === undefined ? "." : ` (${formatPercent(passRate)} pass rate).`}`,
   ];
 
-  if (gate?.passRate !== undefined && gate.passRate !== null) {
-    rows.push(["Pass Rate", formatPercent(gate.passRate)]);
-  } else if (report.totals.evalTotal > 0) {
-    rows.push([
-      "Pass Rate",
-      formatPercent(report.totals.evalPassed / report.totals.evalTotal),
-    ]);
-  }
-
   if (report.score) {
-    rows.push(["Score", formatScoreSummary(report.score)]);
+    result.push(`- **Score:** ${formatScoreSummary(report.score)}`);
   }
-
   if (gate?.enforced) {
-    rows.push(["Gate", gate.message]);
+    result.push(`- **Gate:** ${gate.message}`);
   }
-
   if (nonEvalFailures > 0) {
-    rows.push([
-      "Other Failures",
-      `${formatNumber(nonEvalFailures)} non-eval test failure${
+    result.push(
+      `- **Other failures:** ${formatNumber(nonEvalFailures)} non-eval test failure${
         nonEvalFailures === 1 ? "" : "s"
       }`,
-    ]);
+    );
   }
 
-  rows.push(["Duration", formatDuration(report.durationMs)]);
-
+  const usage = [["Duration", formatDuration(report.durationMs)]];
   if (report.usage.totalTokens > 0) {
-    rows.push(["Tokens", formatTokenUsage(report.usage)]);
+    usage.push(["Tokens", formatTokenUsage(report.usage)]);
   }
   if (report.usage.costUsd !== undefined) {
-    rows.push(["Cost", formatUsd(report.usage.costUsd)]);
+    usage.push(["Cost", formatUsd(report.usage.costUsd)]);
   }
   if (report.usage.toolCalls > 0) {
-    rows.push(["Tool Calls", formatNumber(report.usage.toolCalls)]);
+    usage.push(["Tool calls", formatNumber(report.usage.toolCalls)]);
   }
   if (report.usage.retries > 0) {
-    rows.push(["Retries", formatNumber(report.usage.retries)]);
+    usage.push(["Retries", formatNumber(report.usage.retries)]);
   }
   if (report.usage.models.length > 0) {
-    rows.push(["Models", report.usage.models.join(", ")]);
+    usage.push(["Models", escapeHtml(report.usage.models.join(", "))]);
   }
 
   return [
-    "| Metric | Value |",
-    "| --- | --- |",
-    ...rows.map(
-      ([metric, value]) =>
-        `| ${escapeTableCell(metric)} | ${escapeTableCell(value)} |`,
-    ),
+    ...result,
+    "",
+    "## Usage",
+    "",
+    ...usage.map(([label, value]) => `- **${label}:** ${value}`),
   ];
+}
+
+function formatStatus(status: EvalReport["status"] | EvalGateResult["status"]) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function formatTokenUsage(usage: EvalReport["usage"]) {
@@ -184,13 +179,6 @@ function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {
   return `avg ${formatScore(score.average)}${
     score.minimum === undefined ? "" : `, min ${formatScore(score.minimum)}`
   }`;
-}
-
-function escapeTableCell(value: string) {
-  return value
-    .replace(/\r?\n/g, " ")
-    .replace(/\\/g, "\\\\")
-    .replace(/\|/g, "\\|");
 }
 
 function renderScoreDistribution(report: EvalReport) {

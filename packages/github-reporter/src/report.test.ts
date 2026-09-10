@@ -243,11 +243,13 @@ describe("collectEvalReport", () => {
       costUsd: 0.05,
       models: ["openai/gpt-5-mini", "openai/gpt-5.4"],
     });
-    expect(summary).toContain("| Tokens | 1,230 total (10 input) |");
-    expect(summary).toContain("| Cost | $0.05 |");
-    expect(summary).toContain("| Tool Calls | 2 |");
-    expect(summary).toContain("| Retries | 3 |");
-    expect(summary).toContain("| Models | openai/gpt-5-mini, openai/gpt-5.4 |");
+    expect(summary).toContain("- **Tokens:** 1,230 total (10 input)");
+    expect(summary).toContain("- **Cost:** $0.05");
+    expect(summary).toContain("- **Tool calls:** 2");
+    expect(summary).toContain("- **Retries:** 3");
+    expect(summary).toContain(
+      "- **Models:** openai/gpt-5-mini, openai/gpt-5.4",
+    );
   });
 
   test("ignores non-finite eval scores", () => {
@@ -908,7 +910,7 @@ describe("formatDuration", () => {
 });
 
 describe("renderJobSummary", () => {
-  test("renders the summary table before result details", () => {
+  test("renders a scan-first overview before result details", () => {
     const report = collectEvalReport(sampleJson, {
       workspace: "/repo",
     });
@@ -916,7 +918,7 @@ describe("renderJobSummary", () => {
 
     expect(summary).toContain("# vitest-evals");
     expect(summary).toContain("## Results");
-    expect(summary.indexOf("| Metric | Value |")).toBeLessThan(
+    expect(summary.indexOf("## Summary")).toBeLessThan(
       summary.indexOf("## Results"),
     );
     expect(summary).toContain("### Failures");
@@ -924,13 +926,11 @@ describe("renderJobSummary", () => {
     expect(summary).toContain(
       "<summary>1. refund agent &gt; rejects fraud - StructuredOutputJudge - 0.20</summary>",
     );
-    expect(summary).toContain("| Metric | Value |");
-    expect(summary).toContain("| Status | failed |");
-    expect(summary).toContain("| Evals | 0 passed, 1 failed, 1 total |");
-    expect(summary).toContain("| Pass Rate | 0.0% |");
-    expect(summary).not.toContain("| Tests |");
-    expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
-    expect(summary).not.toContain("| Usage |");
+    expect(summary).toContain(
+      "**Failed** — 0 passed, 1 failed, 1 total (0.0% pass rate).",
+    );
+    expect(summary).toContain("- **Score:** avg 0.20, min 0.20");
+    expect(summary).toContain("## Usage");
     expect(summary).toContain("## Scores");
     expect(summary.indexOf("## Scores")).toBeLessThan(
       summary.indexOf("## Results"),
@@ -1001,23 +1001,10 @@ describe("renderJobSummary", () => {
       }),
     );
 
-    expect(summary).toContain("| Status | failed |");
-    expect(summary).toContain("| Evals | 0 passed, 0 failed, 0 total |");
-    expect(summary).not.toContain("| Tests |");
-    expect(summary).toContain("| Other Failures | 1 non-eval test failure |");
+    expect(summary).toContain("**Failed** — 0 passed, 0 failed, 0 total.");
+    expect(summary).toContain("- **Other failures:** 1 non-eval test failure");
     expect(summary).toContain("## Results");
     expect(summary).toContain("No eval metadata was found");
-  });
-
-  test("escapes table cell control characters", () => {
-    const report = collectEvalReport(sampleJson, {
-      workspace: "/repo",
-    });
-    report.status = "failed \\ | escaped" as typeof report.status;
-
-    expect(renderJobSummary(report)).toContain(
-      String.raw`| Status | failed \\ \| escaped |`,
-    );
   });
 });
 
@@ -1321,9 +1308,10 @@ describe("publishCheckRun", () => {
     const body = JSON.parse(request.body);
     expect(body.conclusion).toBe("success");
     expect(body.output.title).toContain("90.0%");
-    expect(body.output.summary).toContain("| Status | passed |");
-    expect(body.output.summary).toContain("| Pass Rate | 90.0% |");
-    expect(body.output.summary).toContain("| Gate |");
+    expect(body.output.summary).toContain(
+      "**Passed gate** — 9 passed, 1 failed, 10 total (90.0% pass rate).",
+    );
+    expect(body.output.summary).toContain("- **Gate:**");
     expect(body.output.summary).toContain("### Quality Misses");
     expect(body.output.annotations[0]?.annotation_level).toBe("warning");
   });
