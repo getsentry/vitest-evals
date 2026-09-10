@@ -63,7 +63,6 @@ function mergeUsage(usages: UsageSummary[]) {
     ...(costs.length > 0
       ? { costUsd: costs.reduce((total, cost) => total + cost, 0) }
       : {}),
-    providers: [...new Set(usages.flatMap((usage) => usage.providers))].sort(),
     models: [...new Set(usages.flatMap((usage) => usage.models))].sort(),
   };
 }

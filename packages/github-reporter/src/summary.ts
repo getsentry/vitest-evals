@@ -143,8 +143,6 @@ function renderSummaryTable(
   }
   if (report.usage.models.length > 0) {
     rows.push(["Models", report.usage.models.join(", ")]);
-  } else if (report.usage.providers.length > 0) {
-    rows.push(["Providers", report.usage.providers.join(", ")]);
   }
 
   return [

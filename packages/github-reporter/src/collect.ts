@@ -240,10 +240,8 @@ function sumUsage(cases: EvalCase[]) {
     totalTokens: 0,
     toolCalls: 0,
     retries: 0,
-    providers: [],
     models: [],
   };
-  const providers = new Set<string>();
   const models = new Set<string>();
   let costUsd: number | undefined;
 
@@ -265,23 +263,15 @@ function sumUsage(cases: EvalCase[]) {
           (entry.outputTokens ?? 0) +
           (entry.reasoningTokens ?? 0);
       usage.retries += entry.retries ?? 0;
-      if (entry.provider) providers.add(entry.provider);
       if (entry.model) models.add(entry.model);
 
       const entryCost = costFromMetadata(entry.metadata);
       if (entryCost !== undefined) costUsd = (costUsd ?? 0) + entryCost;
     }
 
-    for (const score of testCase.eval?.scores ?? []) {
-      if (usageFromMetadata(score.metadata)) continue;
-      const scoreCost = costFromMetadata(score.metadata);
-      if (scoreCost !== undefined) costUsd = (costUsd ?? 0) + scoreCost;
-    }
-
     usage.toolCalls += toolCallCount(testCase);
   }
 
-  usage.providers = [...providers].sort();
   usage.models = [...models].sort();
   if (costUsd !== undefined) usage.costUsd = costUsd;
   return usage;
@@ -297,8 +287,7 @@ function costFromMetadata(metadata: unknown) {
     return undefined;
   }
 
-  const record = metadata as Record<string, unknown>;
-  const value = record.costUsd ?? record.costUSD;
+  const value = (metadata as Record<string, unknown>).costUsd;
   return isFiniteNumber(value) && value >= 0 ? value : undefined;
 }
 

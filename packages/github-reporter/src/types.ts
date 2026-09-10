@@ -72,7 +72,7 @@ export type EvalReport = {
   failures: EvalCase[];
 };
 
-/** Aggregated usage and cost values collected from eval metadata. */
+/** Aggregated usage values collected from eval metadata. */
 export type UsageSummary = {
   inputTokens: number;
   outputTokens: number;
@@ -81,7 +81,6 @@ export type UsageSummary = {
   toolCalls: number;
   retries: number;
   costUsd?: number;
-  providers: string[];
   models: string[];
 };
 

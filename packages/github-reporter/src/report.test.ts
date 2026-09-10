@@ -241,7 +241,6 @@ describe("collectEvalReport", () => {
       totalTokens: 1230,
       retries: 3,
       costUsd: 0.05,
-      providers: ["vercel-ai-gateway"],
       models: ["openai/gpt-5-mini", "openai/gpt-5.4"],
     });
     expect(summary).toContain("| Tokens | 1,230 total (10 input) |");
@@ -420,7 +419,6 @@ describe("mergeEvalReports", () => {
       toolCalls: 3,
       retries: 2,
       costUsd: 0.03,
-      providers: ["vercel-ai-gateway"],
       models: ["openai/gpt-5-mini"],
     });
     expect(report.cases).toHaveLength(2);
