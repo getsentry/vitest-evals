@@ -1,6 +1,11 @@
 import type { EvalGateResult } from "./gate";
 import { formatPercent } from "./gate";
-import type { EvalCase, EvalReport, ToolCallSummary } from "./types";
+import type {
+  EvalCase,
+  EvalReport,
+  ToolCallSummary,
+  UsageSummary,
+} from "./types";
 import {
   compactLine,
   escapeFence,
@@ -114,6 +119,12 @@ function renderSummaryTable(
     rows.push(["Score", formatScoreSummary(report.score)]);
   }
 
+  if (hasUsage(report.usage)) {
+    rows.push(["App Usage", formatUsage(report.appUsage)]);
+    rows.push(["Judge Usage", formatUsage(report.judgeUsage)]);
+    rows.push(["Total Usage", formatUsage(report.usage)]);
+  }
+
   if (gate?.enforced) {
     rows.push(["Gate", gate.message]);
   }
@@ -143,6 +154,33 @@ function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {
   return `avg ${formatScore(score.average)}${
     score.minimum === undefined ? "" : `, min ${formatScore(score.minimum)}`
   }`;
+}
+
+function hasUsage(usage: Required<UsageSummary>) {
+  return usage.totalTokens > 0 || usage.costUsd > 0 || usage.toolCalls > 0;
+}
+
+function formatUsage(usage: Required<UsageSummary>) {
+  const parts: string[] = [];
+  if (usage.totalTokens > 0) {
+    parts.push(`${formatNumber(usage.totalTokens)} tokens`);
+  }
+  if (usage.costUsd > 0) {
+    parts.push(
+      usage.costUsd.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      }),
+    );
+  }
+  if (usage.toolCalls > 0) {
+    parts.push(
+      `${formatNumber(usage.toolCalls)} tool${usage.toolCalls === 1 ? "" : "s"}`,
+    );
+  }
+  return parts.join(", ") || "none";
 }
 
 function escapeTableCell(value: string) {

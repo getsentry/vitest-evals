@@ -34,7 +34,7 @@ Out of scope:
 - Required outputs: implementation or review guidance that uses the harness-backed API only, plus targeted verification.
 - Non-negotiable constraints: normalized run data remains JSON-serializable,
   suite tests call `run(...)` explicitly, judge model calls stay on judges or
-  judge-side helpers, and model-backed judge harnesses return normalized usage.
+  judge-side helpers, and model-backed harnesses normalize tokens and `costUsd`.
 - Expected bundled files loaded at runtime: `SKILL.md` first, then one or more focused files under `references/`.
 
 ## Source And Evidence Model

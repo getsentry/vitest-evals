@@ -232,8 +232,8 @@ Harness-backed suites stay close to plain Vitest:
   `ctx.runJudge(...)` from a configured `judgeHarness`
 - pass scenario-specific judge criteria explicitly to matcher options, or bind
   suite-wide criteria on the judge instance
-- reporter output, replay, usage, tool calls, and spans come from normalized
-  runs, including model-backed judge runs. First-party harnesses attach native
+- reporter output separates application, judge, and combined token and
+  `costUsd` usage from normalized runs. First-party harnesses attach native
   spans when provider/runtime data is available; `createHarness(...)` attaches a fallback
   run span when a custom harness does not return traces itself. Span attributes
   include typed OpenTelemetry GenAI semantic keys while keeping

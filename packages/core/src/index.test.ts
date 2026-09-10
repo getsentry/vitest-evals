@@ -884,22 +884,21 @@ describe("messagesToTranscriptEvents", () => {
 });
 
 describe("UsageSummarySchema", () => {
-  test("keeps provider-specific usage data under metadata", () => {
+  test("accepts standardized USD cost and keeps provider details in metadata", () => {
+    expect(
+      UsageSummarySchema.safeParse({
+        totalTokens: 120,
+        costUsd: 0.02,
+        metadata: { providerRequestId: "req_123" },
+      }).success,
+    ).toBe(true);
+
     expect(
       UsageSummarySchema.safeParse({
         totalTokens: 120,
         estimatedCostUsd: 0.02,
       }).success,
     ).toBe(false);
-
-    expect(
-      UsageSummarySchema.safeParse({
-        totalTokens: 120,
-        metadata: {
-          estimatedCostUsd: 0.02,
-        },
-      }).success,
-    ).toBe(true);
   });
 });
 

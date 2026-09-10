@@ -110,8 +110,8 @@ Harness adapters should:
   transcript events remain unambiguous
 - preserve the application-facing result separately in `run.output`
 - attach provider/model and stable usage data when available
-- keep provider-specific cost estimates in `usage.metadata`, not as normalized
-  usage fields
+- map provider-reported or suite-estimated USD cost to `usage.costUsd`; keep
+  provider-specific pricing details in `usage.metadata`
 - attach replay/cache metadata in the tool record metadata rather than in
   provider-specific side channels
 - expose common assertion data through helpers such as `toolCalls(result)`,

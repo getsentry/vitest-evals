@@ -373,10 +373,9 @@ jobs:
             echo "test totals row should not be shown"
             exit 1
           fi
-          if grep -F "| Usage |" "$GITHUB_STEP_SUMMARY"; then
-            echo "top-level usage row should not be shown"
-            exit 1
-          fi
+          grep -F "| App Usage | 1,302 tokens, 9 tools |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Judge Usage | none |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Total Usage | 1,302 tokens, 9 tools |" "$GITHUB_STEP_SUMMARY"
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=28,col=5,title=vitest-evals::refund eval > returns wrong refund amount - score 0.35 - AmountJudge - expected amount=5000, got amount=499" tmp/github-reporter-smoke/stdout.txt
           grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt

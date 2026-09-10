@@ -73,6 +73,7 @@ test("piAiJudgeHarness runs judge prompts through Pi AI", async () => {
   expect(result.output).toBe('{"choice":"C","rationale":"Matches."}');
   expect(result.usage).toMatchObject({
     totalTokens: 2,
+    costUsd: 0,
     metadata: { input: 1, output: 1 },
   });
   expect(completeSimpleMock).toHaveBeenCalledWith(

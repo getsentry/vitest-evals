@@ -71,7 +71,7 @@ const sampleJson: VitestJsonReport = {
                         inputTokens: 80,
                         outputTokens: 20,
                         totalTokens: 100,
-                        metadata: { costUsd: 0.02 },
+                        costUsd: 0.02,
                       },
                       errors: [],
                     },
@@ -95,6 +95,7 @@ const sampleJson: VitestJsonReport = {
                 },
                 usage: {
                   totalTokens: 1220,
+                  costUsd: 0.08,
                   toolCalls: 2,
                 },
                 timings: {
@@ -175,11 +176,19 @@ describe("collectEvalReport", () => {
       average: 0.2,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1320);
-    expect(
-      report.cases[0]?.eval?.scores[0]?.judgeRuns?.[0]?.usage.metadata,
-    ).toEqual({ costUsd: 0.02 });
-    expect(report.usage.toolCalls).toBe(2);
+    expect(report.appUsage).toMatchObject({
+      totalTokens: 1220,
+      costUsd: 0.08,
+    });
+    expect(report.judgeUsage).toMatchObject({
+      totalTokens: 100,
+      costUsd: 0.02,
+    });
+    expect(report.usage).toMatchObject({
+      totalTokens: 1320,
+      costUsd: 0.1,
+      toolCalls: 2,
+    });
     expect(report.failures[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",
       displayName: "refund agent > rejects fraud",
@@ -918,7 +927,9 @@ describe("renderJobSummary", () => {
     expect(summary).toContain("| Pass Rate | 0.0% |");
     expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
-    expect(summary).not.toContain("| Usage |");
+    expect(summary).toContain("| App Usage | 1,220 tokens, $0.08, 2 tools |");
+    expect(summary).toContain("| Judge Usage | 100 tokens, $0.02 |");
+    expect(summary).toContain("| Total Usage | 1,320 tokens, $0.10, 2 tools |");
     expect(summary).toContain("## Scores");
     expect(summary.indexOf("## Scores")).toBeLessThan(
       summary.indexOf("## Results"),

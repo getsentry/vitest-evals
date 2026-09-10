@@ -37,7 +37,9 @@ export function collectEvalReport(
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
-  const usage = sumUsage(cases);
+  const appUsage = sumAppUsage(cases);
+  const judgeUsage = sumJudgeUsage(cases);
+  const usage = addUsage(appUsage, judgeUsage);
   const durationMs = workspace.runs[0]?.durationMs;
 
   return {
@@ -64,6 +66,8 @@ export function collectEvalReport(
           }
         : undefined,
     usage,
+    appUsage,
+    judgeUsage,
     cases,
     failures,
   };
@@ -238,6 +242,7 @@ function emptyUsage(): Required<UsageSummary> {
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
+    costUsd: 0,
     toolCalls: 0,
   };
 }
@@ -254,15 +259,37 @@ function addRunUsage(
     (usage?.inputTokens ?? 0) +
       (usage?.outputTokens ?? 0) +
       (usage?.reasoningTokens ?? 0);
+  total.costUsd += usage?.costUsd ?? 0;
   total.toolCalls += usage?.toolCalls ?? 0;
 }
 
-function sumUsage(cases: EvalCase[]) {
+function addUsage(
+  left: Required<UsageSummary>,
+  right: Required<UsageSummary>,
+): Required<UsageSummary> {
+  return {
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    reasoningTokens: left.reasoningTokens + right.reasoningTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+    costUsd: left.costUsd + right.costUsd,
+    toolCalls: left.toolCalls + right.toolCalls,
+  };
+}
+
+function sumAppUsage(cases: EvalCase[]) {
   const usage = emptyUsage();
   for (const testCase of cases) {
     addRunUsage(usage, testCase.harness?.usage);
     usage.toolCalls +=
       toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
+  }
+  return usage;
+}
+
+function sumJudgeUsage(cases: EvalCase[]) {
+  const usage = emptyUsage();
+  for (const testCase of cases) {
     for (const score of testCase.eval?.scores ?? []) {
       for (const run of score.judgeRuns ?? []) {
         addRunUsage(usage, run.usage);

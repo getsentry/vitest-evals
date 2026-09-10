@@ -371,8 +371,8 @@ need exact canonical `session.events`, trace, or usage control.
 Provider setup and rubric parsing stay in your judge. The core package only
 requires the judge to return a `JudgeResult` with a score and optional metadata.
 Each `ctx.runJudge(...)` call also records its complete normalized judge run
-under that score's `judgeRuns` field. Stable judge usage contributes to report
-totals; provider-specific cost estimates remain under `usage.metadata`.
+under that score's `judgeRuns` field. Tokens and `costUsd` contribute to
+separate application, judge, and combined report totals.
 
 Automatic suite-level judges are a good fit when every `run(...)` should get
 the same scoring. For cases where only some runs need an LLM judge, keep the

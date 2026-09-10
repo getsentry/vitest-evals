@@ -1060,7 +1060,7 @@ test("applies output selectors to HarnessRun-shaped results", async () => {
   expect(result.usage.totalTokens).toBe(7);
 });
 
-test("moves provider-specific usage fields into metadata", async () => {
+test("normalizes USD cost and moves other provider usage fields into metadata", async () => {
   const normalizedHarness = piAiHarness({
     agent: () => ({ id: "refund-agent" }),
     run: async () => ({
@@ -1073,7 +1073,8 @@ test("moves provider-specific usage fields into metadata", async () => {
         totalTokens: 7,
         toolCalls: 0,
         retries: 1,
-        costUSD: 20,
+        costUsd: 20,
+        costUSD: 21,
         estimatedCost: 20,
         metadata: {
           cacheReadTokens: 3,
@@ -1093,9 +1094,10 @@ test("moves provider-specific usage fields into metadata", async () => {
     totalTokens: 7,
     toolCalls: 0,
     retries: 1,
+    costUsd: 20,
     metadata: {
       cacheReadTokens: 3,
-      costUSD: 20,
+      costUSD: 21,
       estimatedCost: 20,
     },
   });

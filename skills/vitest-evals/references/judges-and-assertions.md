@@ -78,9 +78,9 @@ const RefundRubricJudge = createJudge<
 - `ctx.runJudge(...)` returns the judge output, while vitest-evals records the
   complete normalized run under the score's `judgeRuns` field.
 - Multiple `runJudge(...)` calls from one judge are retained separately.
-- Stable token fields contribute to report totals. Provider-specific cost
-  estimates stay under `usage.metadata` and are preserved without being
-  normalized.
+- Stable token fields and `costUsd` contribute to separate application, judge,
+  and combined report totals. Provider-specific pricing details stay under
+  `usage.metadata`.
 
 ## Review Checklist
 

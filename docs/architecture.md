@@ -94,10 +94,9 @@ not return traces themselves. Span attributes include typed OpenTelemetry GenAI
 semantic keys for common model, agent, tool, and token fields while still
 allowing provider-specific attributes.
 
-`UsageSummary` is intentionally limited to stable usage units such as tokens,
-tool counts, retries, provider, and model. Provider-specific cost estimates are
-not normalized because pricing semantics vary by runtime and can be stale; if a
-harness needs to retain them, store them under `usage.metadata`.
+`UsageSummary` standardizes tokens, USD cost, tool counts, retries, provider,
+and model. Harnesses report provider-supplied or suite-estimated cost through
+`costUsd`; provider-specific pricing details remain under `usage.metadata`.
 
 ### `packages/vitest-evals/src/index.ts`
 
@@ -143,9 +142,8 @@ judge should carry a reusable judge-side harness default.
 `createJudgeHarness(...)` is the shared abstraction for judge-side provider
 shims. Each `ctx.runJudge(...)` call returns the normalized judge output while
 core records the complete judge harness run on the resulting score. Multiple
-calls from one judge remain separate runs. Reporters aggregate their stable
-usage fields alongside application usage while preserving provider-specific
-cost estimates under each run's `usage.metadata`.
+calls from one judge remain separate runs. Reporters aggregate tokens and
+`costUsd` separately for application and judge usage, plus a combined total.
 
 ### `packages/vitest-evals/src/legacy/*`
 

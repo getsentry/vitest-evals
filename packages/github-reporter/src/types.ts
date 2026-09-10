@@ -67,7 +67,12 @@ export type EvalReport = {
     average: number;
     minimum?: number;
   };
+  /** Combined application and judge usage. */
   usage: Required<UsageSummary>;
+  /** Application and other upstream usage. */
+  appUsage: Required<UsageSummary>;
+  /** Judge-model usage. */
+  judgeUsage: Required<UsageSummary>;
   cases: EvalCase[];
   failures: EvalCase[];
 };
@@ -78,6 +83,7 @@ export type UsageSummary = {
   outputTokens?: number;
   reasoningTokens?: number;
   totalTokens?: number;
+  costUsd?: number;
   toolCalls?: number;
 };
 

@@ -44,6 +44,8 @@ export function mergeEvalReports(reports: EvalReport[]): EvalReport {
           }
         : undefined,
     usage: mergeUsage(reports.map((report) => report.usage)),
+    appUsage: mergeUsage(reports.map((report) => report.appUsage)),
+    judgeUsage: mergeUsage(reports.map((report) => report.judgeUsage)),
     cases,
     failures,
   };
@@ -55,6 +57,7 @@ function mergeUsage(usages: Array<Required<UsageSummary>>) {
     outputTokens: sum(usages, (usage) => usage.outputTokens),
     reasoningTokens: sum(usages, (usage) => usage.reasoningTokens),
     totalTokens: sum(usages, (usage) => usage.totalTokens),
+    costUsd: sum(usages, (usage) => usage.costUsd),
     toolCalls: sum(usages, (usage) => usage.toolCalls),
   };
 }

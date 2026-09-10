@@ -97,9 +97,9 @@ export const RubricJudge = createJudge({
 ```
 
 Return a full `HarnessRun` from a custom judge harness when the provider exposes
-usage. Stable token fields are included in GitHub report totals. Keep
-provider-specific cost estimates under `usage.metadata`; reports preserve
-that metadata but do not treat it as a normalized cost field.
+usage. Set `usage.costUsd` from provider-reported cost or a suite estimate.
+GitHub reports show application, judge, and combined token and cost totals;
+provider-specific pricing details can remain under `usage.metadata`.
 
 ```ts title="evals/judges/judgeHarness.ts"
 const judgeHarness = createJudgeHarness({
@@ -112,7 +112,7 @@ const judgeHarness = createJudgeHarness({
       usage: {
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
-        metadata: { costUsd: response.costUsd },
+        costUsd: response.costUsd,
       },
       errors: [],
     };
