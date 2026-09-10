@@ -87,10 +87,10 @@ export function evaluateEvalGate(
       status: "failed",
       enforced: true,
       passRate,
-      title: "Eval report hard failure",
-      message: `${formatNumber(nonEvalFailures)} non-eval test failure${
+      title: "Eval run failed",
+      message: `${formatNumber(nonEvalFailures)} test failure${
         nonEvalFailures === 1 ? "" : "s"
-      }; ${counts}`,
+      } outside eval cases; ${counts}`,
     };
   }
 
@@ -100,7 +100,7 @@ export function evaluateEvalGate(
       status: "failed",
       enforced: true,
       passRate: null,
-      title: "Eval report hard failure",
+      title: "Eval run failed",
       message: "no eval cases were reported",
     };
   }
@@ -117,8 +117,8 @@ export function evaluateEvalGate(
       status: "failed",
       enforced: true,
       passRate,
-      title: "Eval report hard failure",
-      message: `vitest run failed without counted test failures; ${counts}`,
+      title: "Eval run failed",
+      message: `Vitest failed without reporting a failed test; ${counts}`,
     };
   }
 
@@ -132,7 +132,7 @@ export function evaluateEvalGate(
       enforced: true,
       passRate,
       title: `Eval pass rate ${formatPercent(passRate)} — required ${formatPercent(minPassRate)}`,
-      message: `eval pass rate below floor: ${counts}; required >= ${formatPercent(minPassRate)}`,
+      message: `pass rate is below the minimum: ${counts}; minimum ${formatPercent(minPassRate)}`,
     };
   }
 
@@ -144,8 +144,8 @@ export function evaluateEvalGate(
         status: "failed",
         enforced: true,
         passRate,
-        title: "Eval score gate failed",
-        message: `no score average available; required avg score >= ${formatScore(minScoreAverage)}`,
+        title: "Average score unavailable",
+        message: `no average score was reported; minimum ${formatScore(minScoreAverage)}`,
       };
     }
     if (average + Number.EPSILON < minScoreAverage) {
@@ -154,8 +154,8 @@ export function evaluateEvalGate(
         status: "failed",
         enforced: true,
         passRate,
-        title: `Avg score ${formatScore(average)} — required ${formatScore(minScoreAverage)}`,
-        message: `avg score below floor: ${counts}; required avg score >= ${formatScore(minScoreAverage)}`,
+        title: `Average score ${formatScore(average)} — required ${formatScore(minScoreAverage)}`,
+        message: `average score is below the minimum: ${counts}; minimum ${formatScore(minScoreAverage)}`,
       };
     }
   }
@@ -166,7 +166,7 @@ export function evaluateEvalGate(
     enforced: true,
     passRate,
     title: enforcedPassTitle(report, passRate, minPassRate, minScoreAverage),
-    message: `eval gate passed: ${counts}${formatFloorSuffix(minPassRate, minScoreAverage)}`,
+    message: `requirements met: ${counts}${formatMinimumSuffix(minPassRate, minScoreAverage)}`,
   };
 }
 
@@ -207,7 +207,7 @@ function resolveMinPassRate(policy: EvalGatePolicy) {
 
 function defaultCheckTitle(report: EvalReport) {
   if (report.failures.length === 0 && report.status === "passed") {
-    return "No eval failures";
+    return "No eval cases failed";
   }
   if (report.failures.length === 0) {
     return "Vitest run failed";
@@ -224,10 +224,10 @@ function enforcedPassTitle(
   minScoreAverage: number | undefined,
 ) {
   if (minPassRate !== undefined) {
-    return `Eval pass rate ${formatPercent(passRate)} — floor ${formatPercent(minPassRate)}`;
+    return `Eval pass rate ${formatPercent(passRate)} — minimum ${formatPercent(minPassRate)}`;
   }
   if (minScoreAverage !== undefined) {
-    return `Avg score ${formatScore(report.score?.average)} — floor ${formatScore(minScoreAverage)}`;
+    return `Average score ${formatScore(report.score?.average)} — minimum ${formatScore(minScoreAverage)}`;
   }
   return defaultCheckTitle(report);
 }
@@ -240,19 +240,19 @@ function formatEvalCounts(report: EvalReport, passRate: number | null) {
   const passRateText = passRate === null ? "n/a" : formatPercent(passRate);
   return `${formatNumber(report.totals.evalPassed)}/${formatNumber(
     report.totals.evalTotal,
-  )} passed (${passRateText}), avg score ${scoreText}`;
+  )} passed (${passRateText}), average score ${scoreText}`;
 }
 
-function formatFloorSuffix(
+function formatMinimumSuffix(
   minPassRate: number | undefined,
   minScoreAverage: number | undefined,
 ) {
   const parts: string[] = [];
   if (minPassRate !== undefined) {
-    parts.push(`pass rate floor ${formatPercent(minPassRate)}`);
+    parts.push(`minimum pass rate ${formatPercent(minPassRate)}`);
   }
   if (minScoreAverage !== undefined) {
-    parts.push(`avg score floor ${formatScore(minScoreAverage)}`);
+    parts.push(`minimum average score ${formatScore(minScoreAverage)}`);
   }
   return parts.length === 0 ? "" : `; ${parts.join(", ")}`;
 }

@@ -60,7 +60,7 @@ export function renderJobSummary(
 
   if (report.failures.length > 0) {
     const failureHeading =
-      options.gate?.ok === true ? "### Quality Misses" : "### Failures";
+      options.gate?.ok === true ? "### Cases Below Target" : "### Failures";
     lines.push(failureHeading, "");
     failures.forEach((testCase, index) => {
       lines.push(...renderFailureDetails(testCase, index + 1, options), "");
@@ -68,18 +68,18 @@ export function renderJobSummary(
 
     if (report.failures.length > failures.length) {
       const omittedLabel =
-        options.gate?.ok === true ? "quality misses" : "failures";
+        options.gate?.ok === true ? "cases below target" : "failures";
       lines.push(
         `${report.failures.length - failures.length} more ${omittedLabel} omitted from this summary.`,
         "",
       );
     }
   } else if (report.totals.evalTotal > 0) {
-    lines.push("### Failures", "", "No eval failures.", "");
+    lines.push("### Failures", "", "No eval cases failed.", "");
   }
 
   if (report.totals.evalTotal === 0) {
-    lines.push("No eval metadata was found in the Vitest JSON report.", "");
+    lines.push("No eval results were found in the Vitest JSON report.", "");
   }
 
   return `${lines.join("\n")}\n`;
@@ -95,9 +95,9 @@ function renderSummaryTable(
   gate?: EvalGateResult,
 ) {
   const rows: Array<[string, string]> = [
-    ["Status", gate?.status ?? report.status],
+    ["Status", capitalize(gate?.status ?? report.status)],
     [
-      "Evals",
+      "Eval cases",
       formatCountLine(
         report.totals.evalPassed,
         report.totals.evalFailed,
@@ -107,10 +107,10 @@ function renderSummaryTable(
   ];
 
   if (gate?.passRate !== undefined && gate.passRate !== null) {
-    rows.push(["Pass Rate", formatPercent(gate.passRate)]);
+    rows.push(["Pass rate", formatPercent(gate.passRate)]);
   } else if (report.totals.evalTotal > 0) {
     rows.push([
-      "Pass Rate",
+      "Pass rate",
       formatPercent(report.totals.evalPassed / report.totals.evalTotal),
     ]);
   }
@@ -120,24 +120,24 @@ function renderSummaryTable(
   }
 
   if (hasUsage(report.usage) || hasUsage(report.judgeUsage)) {
-    rows.push(["Application Usage", formatUsage(report.usage)]);
-    rows.push(["Judge Usage", formatUsage(report.judgeUsage)]);
+    rows.push(["App usage", formatUsage(report.usage)]);
+    rows.push(["Judge usage", formatUsage(report.judgeUsage)]);
     rows.push([
-      "Total Usage",
+      "Total usage",
       formatUsage(sumUsage(report.usage, report.judgeUsage)),
     ]);
   }
 
   if (gate?.enforced) {
-    rows.push(["Gate", gate.message]);
+    rows.push(["Requirements", gate.message]);
   }
 
   if (nonEvalFailures > 0) {
     rows.push([
-      "Other Failures",
-      `${formatNumber(nonEvalFailures)} non-eval test failure${
+      "Other test failures",
+      `${formatNumber(nonEvalFailures)} test failure${
         nonEvalFailures === 1 ? "" : "s"
-      }`,
+      } outside eval cases`,
     ]);
   }
 
@@ -154,9 +154,13 @@ function renderSummaryTable(
 }
 
 function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {
-  return `avg ${formatScore(score.average)}${
-    score.minimum === undefined ? "" : `, min ${formatScore(score.minimum)}`
+  return `average ${formatScore(score.average)}${
+    score.minimum === undefined ? "" : `, lowest ${formatScore(score.minimum)}`
   }`;
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function hasUsage(usage: AggregatedUsageSummary) {
@@ -205,9 +209,12 @@ function formatUsage(usage: AggregatedUsageSummary) {
       }),
     );
   }
+  if (hasUsageWithoutCost(usage)) {
+    parts.push("cost unavailable");
+  }
   if (usage.toolCalls > 0) {
     parts.push(
-      `${formatNumber(usage.toolCalls)} tool${usage.toolCalls === 1 ? "" : "s"}`,
+      `${formatNumber(usage.toolCalls)} tool call${usage.toolCalls === 1 ? "" : "s"}`,
     );
   }
   return parts.join(", ") || "none";
@@ -326,7 +333,7 @@ function renderFailureBlock(
     ["Case", `${number}. ${testCase.displayName}`],
     ["Status", testCase.status],
     ["Location", formatLocation(testCase.displayFile, testCase.location)],
-    ["Harness", testCase.harness?.name ?? "n/a"],
+    ["App runner", testCase.harness?.name ?? "n/a"],
     ["Score", formatScore(failure?.score ?? testCase.eval?.avgScore)],
     ["Judge", failure?.judgeName ?? "n/a"],
   ];
@@ -368,7 +375,7 @@ function renderFailureBlock(
   if (finalOutput !== undefined) {
     lines.push(
       ...renderAsciiSection(
-        "Final Output",
+        "Output",
         stringifyValue(finalOutput, maxOutputChars).split(/\r?\n/),
       ),
       "",
@@ -400,7 +407,7 @@ function renderFailureBlock(
   if (testCase.harness?.errors.length) {
     lines.push(
       ...renderAsciiSection(
-        "Harness Errors",
+        "App errors",
         stringifyValue(testCase.harness.errors, maxReasonChars).split(/\r?\n/),
       ),
       "",
@@ -471,7 +478,9 @@ function formatCaseUsage(testCase: EvalCase) {
     parts.push(`${formatNumber(totalTokens)} tokens`);
   }
   if (toolCalls > 0) {
-    parts.push(`${formatNumber(toolCalls)} tool${toolCalls === 1 ? "" : "s"}`);
+    parts.push(
+      `${formatNumber(toolCalls)} tool call${toolCalls === 1 ? "" : "s"}`,
+    );
   }
   if (testCase.harness?.timingMs !== undefined) {
     parts.push(formatDuration(testCase.harness.timingMs));
