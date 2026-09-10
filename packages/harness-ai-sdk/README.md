@@ -87,8 +87,7 @@ const harness = aiSdkHarness({
 
 `run` executes the system under test. Judges are created separately; keep judge
 prompts and model calls on a judge harness instead of putting them on the app
-harness. `aiSdkJudgeHarness()` returns a normalized judge run, including AI SDK
-usage, so reports account for judge tokens separately from app tokens.
+harness.
 
 ```ts
 import { openai } from "@ai-sdk/openai";

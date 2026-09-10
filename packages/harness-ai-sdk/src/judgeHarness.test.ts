@@ -82,6 +82,7 @@ test("aiSdkJudgeHarness uses generateText without a JSON schema", async () => {
   });
   generateTextMock.mockResolvedValueOnce({
     text: "plain verdict",
+    usage: { inputTokens: 12, outputTokens: 3, totalTokens: 15 },
   } as any);
 
   const result = await judgeHarness.run(
@@ -99,6 +100,11 @@ test("aiSdkJudgeHarness uses generateText without a JSON schema", async () => {
 
   expect(judgeHarness.name).toBe("test-judge");
   expect(result.output).toBe("plain verdict");
+  expect(result.usage).toMatchObject({
+    inputTokens: 12,
+    outputTokens: 3,
+    totalTokens: 15,
+  });
   expect(generateTextMock).toHaveBeenCalledWith(
     expect.objectContaining({
       model: mockModel,

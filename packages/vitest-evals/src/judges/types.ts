@@ -1,5 +1,5 @@
 import type { Harness, HarnessRun, JsonValue, ToolCall } from "../harness";
-import type { JudgeHarness, JudgeHarnessRun, RunJudge } from "./judgeHarness";
+import type { JudgeHarness, RunJudge } from "./judgeHarness";
 
 /**
  * Score payload returned by a judge.
@@ -17,8 +17,6 @@ import type { JudgeHarness, JudgeHarnessRun, RunJudge } from "./judgeHarness";
 export type JudgeResult = {
   /** Numeric score. `null` records an intentionally unscored result. */
   score: number | null;
-  /** Normalized judge-model runs recorded while producing this score. */
-  judgeRuns?: JudgeHarnessRun[];
   /** JSON-like judge metadata shown by assertions and reporters. */
   metadata?: {
     /** Human-readable explanation for the score. */

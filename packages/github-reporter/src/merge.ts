@@ -44,21 +44,8 @@ export function mergeEvalReports(reports: EvalReport[]): EvalReport {
           }
         : undefined,
     usage: mergeUsage(reports.map((report) => report.usage)),
-    judgeUsage: mergeUsage(
-      reports.map((report) => report.judgeUsage ?? emptyUsage()),
-    ),
     cases,
     failures,
-  };
-}
-
-function emptyUsage(): Required<UsageSummary> {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    reasoningTokens: 0,
-    totalTokens: 0,
-    toolCalls: 0,
   };
 }
 

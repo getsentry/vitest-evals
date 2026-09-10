@@ -30,7 +30,6 @@ export type EvalCase = {
     thresholdFailed?: boolean;
     output?: unknown;
     scores: EvalScore[];
-    judgeUsage?: Required<UsageSummary>;
   };
   harness?: {
     name?: string;
@@ -68,10 +67,7 @@ export type EvalReport = {
     average: number;
     minimum?: number;
   };
-  /** Combined application and judge usage. */
   usage: Required<UsageSummary>;
-  /** Usage from judge harness runs only. */
-  judgeUsage?: Required<UsageSummary>;
   cases: EvalCase[];
   failures: EvalCase[];
 };

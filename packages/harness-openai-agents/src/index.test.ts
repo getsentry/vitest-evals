@@ -6,7 +6,6 @@ import {
   describeEval,
   getHarnessRunFromError,
   messagesToTranscriptEvents,
-  runJudgeHarnessRun,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
@@ -52,9 +51,10 @@ test("openai judge harness preserves usage", async () => {
     } as unknown as Runner,
   });
 
-  const run = await runJudgeHarnessRun(judgeHarness, {
-    prompt: "Grade this answer.",
-  });
+  const run = await judgeHarness.run(
+    { prompt: "Grade this answer." },
+    { artifacts: {}, setArtifact: vi.fn() },
+  );
 
   expect(run.output).toBe("approved");
   expect(run.usage).toMatchObject({

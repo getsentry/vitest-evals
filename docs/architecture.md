@@ -243,10 +243,9 @@ For each eval test in a harness-backed suite:
 6. Core stores that run on `task.meta.harness` for the reporter.
 7. Automatic suite-level judges run against the normalized run/session pair.
 8. Each judge-harness invocation is stored under its judge score as `judgeRuns`.
-9. Reporters include stable judge usage in totals while keeping it distinguishable
-   from application usage.
-10. The eval test asserts on the same returned result and session.
-11. The reporter renders the recorded metadata without re-executing the harness.
+9. The eval test asserts on the same returned result and session.
+10. The reporter renders the recorded metadata and includes judge usage in totals
+   without re-executing either harness.
 
 Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
 and reuse registered input, metadata, and harness context

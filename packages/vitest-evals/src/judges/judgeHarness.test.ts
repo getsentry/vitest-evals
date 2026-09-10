@@ -1,11 +1,7 @@
 import { expect, test } from "vitest";
 import { createHarness } from "../harness";
 import { createJudge, describeEval } from "../index";
-import {
-  createJudgeHarness,
-  runJudgeHarness,
-  runJudgeHarnessRun,
-} from "./judgeHarness";
+import { createJudgeHarness, runJudgeHarness } from "./judgeHarness";
 
 test("runJudgeHarness preserves null output values", async () => {
   const judgeHarness = createJudgeHarness({
@@ -43,33 +39,6 @@ test("runJudgeHarness falls back to assistant content when output is missing", a
   });
 
   expect(result).toBe('{"choice":"C"}');
-});
-
-test("runJudgeHarnessRun preserves normalized usage", async () => {
-  const judgeHarness = createJudgeHarness({
-    run: async () => ({
-      output: "approved",
-      session: { events: [] },
-      usage: {
-        inputTokens: 12,
-        outputTokens: 3,
-        totalTokens: 15,
-        metadata: { costUsd: 0.02 },
-      },
-      errors: [],
-    }),
-  });
-
-  const run = await runJudgeHarnessRun(judgeHarness, {
-    prompt: "Return JSON.",
-  });
-
-  expect(run.usage).toEqual({
-    inputTokens: 12,
-    outputTokens: 3,
-    totalTokens: 15,
-    metadata: { costUsd: 0.02 },
-  });
 });
 
 const appHarness = createHarness({

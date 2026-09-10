@@ -37,8 +37,7 @@ export function collectEvalReport(
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
-  const judgeUsage = sumJudgeUsage(cases);
-  const usage = addUsage(sumHarnessUsage(cases), judgeUsage);
+  const usage = sumUsage(cases);
   const durationMs = workspace.runs[0]?.durationMs;
 
   return {
@@ -65,7 +64,6 @@ export function collectEvalReport(
           }
         : undefined,
     usage,
-    judgeUsage,
     cases,
     failures,
   };
@@ -92,7 +90,6 @@ function collectEvalCase(reportCase: ReportCase): EvalCase {
           thresholdFailed: reportCase.eval.thresholdFailed,
           output: reportCase.eval.output,
           scores,
-          ...(hasJudgeRuns(scores) ? { judgeUsage: sumJudgeRuns(scores) } : {}),
         }
       : undefined,
     harness: reportCase.harness
@@ -245,19 +242,6 @@ function emptyUsage(): Required<UsageSummary> {
   };
 }
 
-function addUsage(
-  left: Required<UsageSummary>,
-  right: Required<UsageSummary>,
-): Required<UsageSummary> {
-  return {
-    inputTokens: left.inputTokens + right.inputTokens,
-    outputTokens: left.outputTokens + right.outputTokens,
-    reasoningTokens: left.reasoningTokens + right.reasoningTokens,
-    totalTokens: left.totalTokens + right.totalTokens,
-    toolCalls: left.toolCalls + right.toolCalls,
-  };
-}
-
 function addRunUsage(
   total: Required<UsageSummary>,
   usage: HarnessUsageSummary | undefined,
@@ -273,36 +257,19 @@ function addRunUsage(
   total.toolCalls += usage?.toolCalls ?? 0;
 }
 
-function sumHarnessUsage(cases: EvalCase[]) {
+function sumUsage(cases: EvalCase[]) {
   const usage = emptyUsage();
   for (const testCase of cases) {
     addRunUsage(usage, testCase.harness?.usage);
     usage.toolCalls +=
       toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
-  }
-  return usage;
-}
-
-function hasJudgeRuns(scores: EvalScore[]) {
-  return scores.some((score) => (score.judgeRuns?.length ?? 0) > 0);
-}
-
-function sumJudgeRuns(scores: EvalScore[]) {
-  const usage = emptyUsage();
-  for (const score of scores) {
-    for (const run of score.judgeRuns ?? []) {
-      addRunUsage(usage, run.usage);
+    for (const score of testCase.eval?.scores ?? []) {
+      for (const run of score.judgeRuns ?? []) {
+        addRunUsage(usage, run.usage);
+      }
     }
   }
   return usage;
-}
-
-function sumJudgeUsage(cases: EvalCase[]) {
-  return cases.reduce(
-    (usage, testCase) =>
-      addUsage(usage, testCase.eval?.judgeUsage ?? emptyUsage()),
-    emptyUsage(),
-  );
 }
 
 function toolCallCount(testCase: EvalCase) {

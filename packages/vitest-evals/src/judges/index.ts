@@ -11,13 +11,11 @@ export {
 export {
   createJudgeHarness,
   runJudgeHarness,
-  runJudgeHarnessRun,
   type CreateJudgeHarnessOptions,
   type CreateJudgeHarnessRunOptions,
   type JudgeHarness,
   type JudgeHarnessInput,
   type JudgeHarnessOutput,
-  type JudgeHarnessRun,
   type RunJudge,
   type RunJudgeOptions,
 } from "./judgeHarness";

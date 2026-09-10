@@ -9,9 +9,8 @@ Public docs mirror this guide at
 
 Use JSON as the eval artifact because it preserves `task.meta.eval` and
 `task.meta.harness`; JUnit XML does not carry the full eval metadata. Usage
-totals include normalized application and judge token usage. Judge usage stays
-separate in the collected report, and provider-specific costs remain preserved
-under each run's `usage.metadata`.
+totals include normalized application and judge token usage. Judge runs remain
+attached to their scores, including provider-specific `usage.metadata`.
 
 ## Minimal Workflow
 

@@ -88,9 +88,7 @@ const harness = openaiAgentsHarness({
 
 `run` executes the OpenAI agent under test. Judges are created separately; keep
 judge prompts on the judge and model calls on a judge harness instead of
-putting a judge model call on the app harness. `openaiAgentsJudgeHarness()`
-returns a normalized judge run, including SDK usage, so reports account for
-judge tokens separately from app tokens.
+putting a judge model call on the app harness.
 
 ```ts
 import { openaiAgentsJudgeHarness } from "@vitest-evals/harness-openai-agents";

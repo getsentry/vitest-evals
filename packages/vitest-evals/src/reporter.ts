@@ -300,53 +300,16 @@ export default class DefaultEvalReporter extends VerboseReporter {
     scores: Array<{
       name?: string;
       score?: number | null;
-      judgeRuns?: Array<{
-        usage?: {
-          inputTokens?: number;
-          outputTokens?: number;
-          reasoningTokens?: number;
-          totalTokens?: number;
-        };
-      }>;
     }>,
   ) {
     for (const score of scores) {
       this.log(
         this.formatDetailLine(
           "score",
-          [
-            `${score.name || "Unknown"} ${this.formatScore(score.score ?? 0)}`,
-            this.formatJudgeUsage(score.judgeRuns),
-          ]
-            .filter(Boolean)
-            .join(" · "),
+          `${score.name || "Unknown"} ${this.formatScore(score.score ?? 0)}`,
         ),
       );
     }
-  }
-
-  private formatJudgeUsage(
-    runs:
-      | Array<{
-          usage?: {
-            inputTokens?: number;
-            outputTokens?: number;
-            reasoningTokens?: number;
-            totalTokens?: number;
-          };
-        }>
-      | undefined,
-  ) {
-    const totalTokens = (runs ?? []).reduce(
-      (total, run) =>
-        total +
-        (run.usage?.totalTokens ??
-          (run.usage?.inputTokens ?? 0) +
-            (run.usage?.outputTokens ?? 0) +
-            (run.usage?.reasoningTokens ?? 0)),
-      0,
-    );
-    return totalTokens > 0 ? `${totalTokens} judge tok` : undefined;
   }
 
   private formatFieldLabel(

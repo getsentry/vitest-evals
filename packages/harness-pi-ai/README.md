@@ -43,9 +43,7 @@ describeEval("refund agent", { harness }, (it) => {
 
 `run` executes the Pi agent under test. Judges are created separately; keep
 judge prompts on the judge and model calls on a judge harness instead of
-putting a judge model call on the app harness. `piAiJudgeHarness()` returns a
-normalized judge run, including Pi usage, so reports account for judge tokens
-separately from app tokens.
+putting a judge model call on the app harness.
 
 ```ts
 import { getModel } from "@mariozechner/pi-ai";

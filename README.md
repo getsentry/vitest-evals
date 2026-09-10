@@ -233,9 +233,8 @@ Harness-backed suites stay close to plain Vitest:
 - pass scenario-specific judge criteria explicitly to matcher options, or bind
   suite-wide criteria on the judge instance
 - reporter output, replay, usage, tool calls, and spans come from normalized
-  runs. App usage and judge usage stay distinguishable; stable token usage from
-  both contributes to report totals. First-party harnesses attach native spans when
-  provider/runtime data is available; `createHarness(...)` attaches a fallback
+  runs, including model-backed judge runs. First-party harnesses attach native
+  spans when provider/runtime data is available; `createHarness(...)` attaches a fallback
   run span when a custom harness does not return traces itself. Span attributes
   include typed OpenTelemetry GenAI semantic keys while keeping
   provider-specific keys JSON-safe.
@@ -248,10 +247,7 @@ matcher options only when a judge calls `ctx.runJudge(...)`. A `judgeHarness` is
 a dedicated judge-model adapter, so the same factuality judge can be reused
 across AI SDK, Pi, OpenAI Agents, or custom app harnesses. Automatic inference
 for explicit matcher calls only applies when suite judges share the same judge
-harness instance. Each `ctx.runJudge(...)` call returns judge output and records
-the complete normalized judge run under the score's `judgeRuns` field. Custom
-judge harnesses should return full runs when usage is available; keep
-provider-specific cost estimates under `usage.metadata`.
+harness instance.
 
 Tool replay is available for opt-in tools in the first-party harnesses.
 Configure the replay mode and directory globally in Vitest, then opt individual

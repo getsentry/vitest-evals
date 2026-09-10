@@ -29,13 +29,17 @@ import type {
   JudgeOptions,
   JudgeResult,
 } from "./judges/types";
-import type { JudgeHarness, JudgeHarnessRun } from "./judges/judgeHarness";
+import type { JudgeHarness } from "./judges/judgeHarness";
 import { createRunJudge } from "./judges/judgeHarness";
 import { wrapText } from "./wrapText";
 
+type RecordedJudgeResult = JudgeResult & {
+  judgeRuns?: HarnessRun[];
+};
+
 type EvalTaskMeta = {
   eval?: {
-    scores: (JudgeResult & { name: string })[];
+    scores: (RecordedJudgeResult & { name: string })[];
     avgScore: number;
     output?: unknown;
     toolCalls?: ToolCall[];
@@ -449,7 +453,7 @@ expect.extend({
   ) {
     const { threshold = 1.0, ...context } = (options ??
       {}) as JudgeAssertionOptions<TJudgeOptions>;
-    const judgeRuns: JudgeHarnessRun[] = [];
+    const judgeRuns: HarnessRun[] = [];
     const judgeOptions = buildJudgeAssertionOptions(
       received,
       judge,
@@ -601,7 +605,7 @@ async function applyAutomaticJudges<
   const runToolCalls = toolCalls(run.session);
   const scores = await Promise.all(
     judges.map(async (judge) => {
-      const judgeRuns: JudgeHarnessRun[] = [];
+      const judgeRuns: HarnessRun[] = [];
       const runJudge = createRunJudge(
         resolveJudgeHarnessForJudge(judge, judgeHarness),
         signal,
@@ -701,7 +705,7 @@ function appendJudgeScore(
     thresholdFailed,
     toolCalls: judgeToolCalls,
   }: {
-    score: JudgeResult & { name: string };
+    score: RecordedJudgeResult & { name: string };
     output?: unknown;
     thresholdFailed: boolean;
     toolCalls?: ToolCall[];
@@ -770,8 +774,8 @@ function formatJudgeTextOutput(run: HarnessRun) {
 
 function attachJudgeRuns(
   result: JudgeResult,
-  judgeRuns: JudgeHarnessRun[],
-): JudgeResult {
+  judgeRuns: HarnessRun[],
+): RecordedJudgeResult {
   return judgeRuns.length > 0 ? { ...result, judgeRuns } : result;
 }
 
@@ -782,7 +786,7 @@ function buildJudgeAssertionOptions<
   judge: Judge<TJudgeOptions>,
   options: Omit<JudgeAssertionOptions<TJudgeOptions>, "threshold">,
   task?: EvalTaskLike,
-  judgeRuns: JudgeHarnessRun[] = [],
+  judgeRuns: HarnessRun[] = [],
 ): TJudgeOptions {
   const registeredContext = resolveRegisteredJudgeRunContext(
     received,
@@ -1283,13 +1287,11 @@ export {
   type FactualityJudgeVerdict,
   createJudgeHarness,
   runJudgeHarness,
-  runJudgeHarnessRun,
   type CreateJudgeHarnessOptions,
   type CreateJudgeHarnessRunOptions,
   type JudgeHarness,
   type JudgeHarnessInput,
   type JudgeHarnessOutput,
-  type JudgeHarnessRun,
   type RunJudge,
   type RunJudgeOptions,
   StructuredOutputJudge,
