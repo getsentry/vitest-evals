@@ -176,8 +176,9 @@ integration, GitHub reporter, and report UI. Its main entry stays browser-safe,
 while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
 report consumers. The collected workspace is versioned. Judge runs and standardized cost change
 its persisted shape in schema version 2; readers reject unsupported versions
-instead of silently misreading them. It exports schemas, TypeScript types, and
-helpers for:
+instead of silently misreading them. Raw Vitest `task.meta` is strict but not
+independently versioned, so producers and artifact readers must use compatible
+package releases. Core exports schemas, TypeScript types, and helpers for:
 
 - JSON-safe values
 - normalized harness runs, sessions, transcript-derived tool calls, usage,
