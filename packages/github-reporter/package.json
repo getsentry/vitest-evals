@@ -1,6 +1,6 @@
 {
   "name": "@vitest-evals/github-reporter",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "description": "GitHub Actions reporting internals for vitest-evals runs.",
   "repository": {
     "type": "git",
