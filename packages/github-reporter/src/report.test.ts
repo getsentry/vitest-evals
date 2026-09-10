@@ -214,21 +214,41 @@ describe("collectEvalReport", () => {
     });
   });
 
-  test("does not normalize provider-specific cost as usage", () => {
+  test("summarizes harness and judge usage when metadata is available", () => {
     const json = structuredClone(sampleJson);
-    const usage = (json.testResults[0]?.assertionResults[0]?.meta as any)
-      .harness.run.usage;
-    usage.estimatedCost = 20;
-    usage.metadata = {
-      costUSD: 20,
+    const assertion = json.testResults[0]?.assertionResults[0];
+    const usage = (assertion?.meta as any).harness.run.usage;
+    usage.provider = "vercel-ai-gateway";
+    usage.model = "openai/gpt-5.4";
+    usage.retries = 2;
+    usage.metadata = { costUsd: 0.04 };
+    (assertion?.meta as any).eval.scores[0].metadata.usage = {
+      provider: "vercel-ai-gateway",
+      model: "openai/gpt-5-mini",
+      inputTokens: 10,
+      totalTokens: 10,
+      retries: 1,
+      metadata: { costUsd: 0.01 },
     };
 
     const report = collectEvalReport(json, {
       workspace: "/repo",
     });
+    const summary = renderJobSummary(report);
 
-    expect("estimatedCost" in report.usage).toBe(false);
-    expect(renderJobSummary(report)).not.toContain("$20");
+    expect(report.usage).toMatchObject({
+      inputTokens: 10,
+      totalTokens: 1230,
+      retries: 3,
+      costUsd: 0.05,
+      providers: ["vercel-ai-gateway"],
+      models: ["openai/gpt-5-mini", "openai/gpt-5.4"],
+    });
+    expect(summary).toContain("| Tokens | 1,230 total (10 input) |");
+    expect(summary).toContain("| Cost | $0.05 |");
+    expect(summary).toContain("| Tool Calls | 2 |");
+    expect(summary).toContain("| Retries | 3 |");
+    expect(summary).toContain("| Models | openai/gpt-5-mini, openai/gpt-5.4 |");
   });
 
   test("ignores non-finite eval scores", () => {
@@ -357,8 +377,12 @@ describe("mergeEvalReports", () => {
             run: {
               output: { status: "approved" },
               usage: {
+                provider: "vercel-ai-gateway",
+                model: "openai/gpt-5-mini",
                 totalTokens: 300,
                 toolCalls: 1,
+                retries: 2,
+                metadata: { costUsd: 0.03 },
               },
               timings: {
                 totalMs: 2000,
@@ -391,8 +415,14 @@ describe("mergeEvalReports", () => {
       average: 0.5,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1520);
-    expect(report.usage.toolCalls).toBe(3);
+    expect(report.usage).toMatchObject({
+      totalTokens: 1520,
+      toolCalls: 3,
+      retries: 2,
+      costUsd: 0.03,
+      providers: ["vercel-ai-gateway"],
+      models: ["openai/gpt-5-mini"],
+    });
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
     expect(report.durationMs).toBe(7000);

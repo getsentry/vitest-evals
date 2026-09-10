@@ -49,13 +49,22 @@ export function mergeEvalReports(reports: EvalReport[]): EvalReport {
   };
 }
 
-function mergeUsage(usages: Array<Required<UsageSummary>>) {
+function mergeUsage(usages: UsageSummary[]) {
+  const costs = usages
+    .map((usage) => usage.costUsd)
+    .filter((cost): cost is number => cost !== undefined);
   return {
     inputTokens: sum(usages, (usage) => usage.inputTokens),
     outputTokens: sum(usages, (usage) => usage.outputTokens),
     reasoningTokens: sum(usages, (usage) => usage.reasoningTokens),
     totalTokens: sum(usages, (usage) => usage.totalTokens),
     toolCalls: sum(usages, (usage) => usage.toolCalls),
+    retries: sum(usages, (usage) => usage.retries),
+    ...(costs.length > 0
+      ? { costUsd: costs.reduce((total, cost) => total + cost, 0) }
+      : {}),
+    providers: [...new Set(usages.flatMap((usage) => usage.providers))].sort(),
+    models: [...new Set(usages.flatMap((usage) => usage.models))].sort(),
   };
 }
 

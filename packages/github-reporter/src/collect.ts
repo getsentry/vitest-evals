@@ -4,6 +4,7 @@ import {
   type ToolCall,
   type TranscriptToolCallEvent,
   type TranscriptToolResultEvent,
+  UsageSummarySchema as HarnessUsageSummarySchema,
   collectReportWorkspace,
 } from "@vitest-evals/core";
 import type {
@@ -232,28 +233,73 @@ function stringifyReason(value: unknown) {
 }
 
 function sumUsage(cases: EvalCase[]) {
-  const usage: Required<UsageSummary> = {
+  const usage: UsageSummary = {
     inputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
     toolCalls: 0,
+    retries: 0,
+    providers: [],
+    models: [],
   };
+  const providers = new Set<string>();
+  const models = new Set<string>();
+  let costUsd: number | undefined;
 
   for (const testCase of cases) {
-    const caseUsage = testCase.harness?.usage;
-    usage.inputTokens += caseUsage?.inputTokens ?? 0;
-    usage.outputTokens += caseUsage?.outputTokens ?? 0;
-    usage.reasoningTokens += caseUsage?.reasoningTokens ?? 0;
-    usage.totalTokens +=
-      caseUsage?.totalTokens ??
-      (caseUsage?.inputTokens ?? 0) +
-        (caseUsage?.outputTokens ?? 0) +
-        (caseUsage?.reasoningTokens ?? 0);
+    const usageEntries = [
+      testCase.harness?.usage,
+      ...(testCase.eval?.scores ?? []).map((score) =>
+        usageFromMetadata(score.metadata),
+      ),
+    ].filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+    for (const entry of usageEntries) {
+      usage.inputTokens += entry.inputTokens ?? 0;
+      usage.outputTokens += entry.outputTokens ?? 0;
+      usage.reasoningTokens += entry.reasoningTokens ?? 0;
+      usage.totalTokens +=
+        entry.totalTokens ??
+        (entry.inputTokens ?? 0) +
+          (entry.outputTokens ?? 0) +
+          (entry.reasoningTokens ?? 0);
+      usage.retries += entry.retries ?? 0;
+      if (entry.provider) providers.add(entry.provider);
+      if (entry.model) models.add(entry.model);
+
+      const entryCost = costFromMetadata(entry.metadata);
+      if (entryCost !== undefined) costUsd = (costUsd ?? 0) + entryCost;
+    }
+
+    for (const score of testCase.eval?.scores ?? []) {
+      if (usageFromMetadata(score.metadata)) continue;
+      const scoreCost = costFromMetadata(score.metadata);
+      if (scoreCost !== undefined) costUsd = (costUsd ?? 0) + scoreCost;
+    }
+
     usage.toolCalls += toolCallCount(testCase);
   }
 
+  usage.providers = [...providers].sort();
+  usage.models = [...models].sort();
+  if (costUsd !== undefined) usage.costUsd = costUsd;
   return usage;
+}
+
+function usageFromMetadata(metadata: EvalScore["metadata"]) {
+  const result = HarnessUsageSummarySchema.safeParse(metadata?.usage);
+  return result.success ? result.data : undefined;
+}
+
+function costFromMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return undefined;
+  }
+
+  const record = metadata as Record<string, unknown>;
+  const value = record.costUsd ?? record.costUSD;
+  return isFiniteNumber(value) && value >= 0 ? value : undefined;
 }
 
 function toolCallCount(testCase: EvalCase) {

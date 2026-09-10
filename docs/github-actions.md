@@ -41,6 +41,12 @@ jobs:
 The report step still runs after failed evals because of `if: always()`. The
 job remains failed when the eval step fails.
 
+The summary includes the eval count, pass rate, scores, and wall-clock duration.
+It also includes token totals, estimated USD cost, tool calls, retries, and
+models when harness or judge metadata provides them. Cost remains
+provider-specific metadata. The reporter only sums finite `costUsd` or `costUSD`
+values under `usage.metadata` or score metadata.
+
 ## Check Run
 
 Add `checks: write` and enable `publish-check` when you want a dedicated PR

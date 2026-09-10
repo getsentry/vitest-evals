@@ -129,6 +129,24 @@ function renderSummaryTable(
 
   rows.push(["Duration", formatDuration(report.durationMs)]);
 
+  if (report.usage.totalTokens > 0) {
+    rows.push(["Tokens", formatTokenUsage(report.usage)]);
+  }
+  if (report.usage.costUsd !== undefined) {
+    rows.push(["Cost", formatUsd(report.usage.costUsd)]);
+  }
+  if (report.usage.toolCalls > 0) {
+    rows.push(["Tool Calls", formatNumber(report.usage.toolCalls)]);
+  }
+  if (report.usage.retries > 0) {
+    rows.push(["Retries", formatNumber(report.usage.retries)]);
+  }
+  if (report.usage.models.length > 0) {
+    rows.push(["Models", report.usage.models.join(", ")]);
+  } else if (report.usage.providers.length > 0) {
+    rows.push(["Providers", report.usage.providers.join(", ")]);
+  }
+
   return [
     "| Metric | Value |",
     "| --- | --- |",
@@ -137,6 +155,31 @@ function renderSummaryTable(
         `| ${escapeTableCell(metric)} | ${escapeTableCell(value)} |`,
     ),
   ];
+}
+
+function formatTokenUsage(usage: EvalReport["usage"]) {
+  const parts = [
+    usage.inputTokens > 0
+      ? `${formatNumber(usage.inputTokens)} input`
+      : undefined,
+    usage.outputTokens > 0
+      ? `${formatNumber(usage.outputTokens)} output`
+      : undefined,
+    usage.reasoningTokens > 0
+      ? `${formatNumber(usage.reasoningTokens)} reasoning`
+      : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return `${formatNumber(usage.totalTokens)} total${
+    parts.length > 0 ? ` (${parts.join(", ")})` : ""
+  }`;
+}
+
+function formatUsd(value: number) {
+  const maximumFractionDigits = value >= 1 ? 2 : 4;
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits,
+  })}`;
 }
 
 function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {

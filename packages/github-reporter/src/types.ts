@@ -67,18 +67,22 @@ export type EvalReport = {
     average: number;
     minimum?: number;
   };
-  usage: Required<UsageSummary>;
+  usage: UsageSummary;
   cases: EvalCase[];
   failures: EvalCase[];
 };
 
-/** Aggregated stable usage values collected from eval metadata. */
+/** Aggregated usage and cost values collected from eval metadata. */
 export type UsageSummary = {
-  inputTokens?: number;
-  outputTokens?: number;
-  reasoningTokens?: number;
-  totalTokens?: number;
-  toolCalls?: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  toolCalls: number;
+  retries: number;
+  costUsd?: number;
+  providers: string[];
+  models: string[];
 };
 
 /** Tool-call summary shown in reporter output. */
