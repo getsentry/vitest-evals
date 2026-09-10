@@ -277,6 +277,7 @@ function hasUsage(run: HarnessRun) {
   return (
     totalTokensFor(run) > 0 ||
     (run.usage.toolCalls ?? 0) > 0 ||
+    toolCalls(run.session).length > 0 ||
     run.usage.costUsd !== undefined
   );
 }

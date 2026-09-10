@@ -169,6 +169,7 @@ describe("summarizeWorkspace", () => {
     const emptyUsageCase = structuredClone(workspace.cases[0]!);
     emptyUsageCase.id = "case-empty-usage";
     emptyUsageCase.harness!.run!.usage = {};
+    emptyUsageCase.harness!.run!.session.events = [];
     emptyUsageCase.eval = undefined;
 
     expect(
@@ -180,6 +181,25 @@ describe("summarizeWorkspace", () => {
       appTokens: 1220,
       appCostUsd: 0.08,
       totalCostUsd: 0.1,
+    });
+  });
+
+  test("treats session-only tool calls as usage with unknown cost", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const sessionOnlyCase = structuredClone(workspace.cases[0]!);
+    sessionOnlyCase.id = "case-session-only";
+    sessionOnlyCase.harness!.run!.usage = {};
+    sessionOnlyCase.eval = undefined;
+
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        cases: [testCase, sessionOnlyCase],
+      }),
+    ).toMatchObject({
+      appTokens: 1220,
+      appCostUsd: undefined,
+      totalCostUsd: undefined,
     });
   });
 
