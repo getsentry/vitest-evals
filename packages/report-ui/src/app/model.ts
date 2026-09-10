@@ -1,5 +1,4 @@
 import {
-  toolCalls,
   type HarnessRun,
   type JsonValue,
   type NormalizedError,
@@ -9,6 +8,7 @@ import {
   type TranscriptMessageEvent,
   type TranscriptToolCallEvent,
   type TranscriptToolResultEvent,
+  toolCalls,
 } from "@vitest-evals/core";
 
 export type CaseStatusFilter = "all" | ReportCase["status"];
@@ -261,14 +261,24 @@ function totalTokensFor(run: HarnessRun | undefined) {
 
 /** Sums tokens and complete USD cost across normalized harness runs. */
 export function summarizeRuns(runs: HarnessRun[]) {
+  const usageRuns = runs.filter(hasUsage);
   return {
-    tokens: runs.reduce((total, run) => total + totalTokensFor(run), 0),
+    tokens: usageRuns.reduce((total, run) => total + totalTokensFor(run), 0),
     costUsd:
-      runs.length > 0 && runs.every((run) => run.usage.costUsd !== undefined)
-        ? runs.reduce((total, run) => total + (run.usage.costUsd ?? 0), 0)
+      usageRuns.length > 0 &&
+      usageRuns.every((run) => run.usage.costUsd !== undefined)
+        ? usageRuns.reduce((total, run) => total + (run.usage.costUsd ?? 0), 0)
         : undefined,
-    runCount: runs.length,
+    runCount: usageRuns.length,
   };
+}
+
+function hasUsage(run: HarnessRun) {
+  return (
+    totalTokensFor(run) > 0 ||
+    (run.usage.toolCalls ?? 0) > 0 ||
+    run.usage.costUsd !== undefined
+  );
 }
 
 function combinedCost(

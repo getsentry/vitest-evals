@@ -994,6 +994,23 @@ describe("renderJobSummary", () => {
     expect(report.usage.costUsd).toBeUndefined();
   });
 
+  test("does not let empty usage hide a known sibling cost", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "deterministic case";
+    secondAssertion.fullName = "refund agent deterministic case";
+    (secondAssertion.meta as any).harness.run.usage = {};
+    (secondAssertion.meta as any).harness.run.session.events = [];
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1220);
+    expect(report.usage.costUsd).toBe(0.08);
+  });
+
   test("treats eval-only tool calls as application usage with unknown cost", () => {
     const json = structuredClone(sampleJson);
     const secondAssertion = structuredClone(

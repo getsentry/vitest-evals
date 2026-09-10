@@ -264,21 +264,26 @@ function addRunUsage(
 
 function sumAppUsage(cases: EvalCase[]) {
   const usage = emptyUsage();
-  const runUsages = cases.flatMap((testCase) =>
-    testCase.harness ? [testCase.harness.usage] : [],
-  );
-  for (const testCase of cases) {
-    addRunUsage(usage, testCase.harness?.usage);
-    usage.toolCalls +=
-      toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
+  const runUsages = cases
+    .map(appUsageForCase)
+    .filter((item): item is HarnessUsageSummary => item !== undefined);
+  for (const runUsage of runUsages) {
+    addRunUsage(usage, runUsage);
   }
   omitPartialCost(usage, runUsages);
-  if (
-    cases.some((testCase) => !testCase.harness && toolCallCount(testCase) > 0)
-  ) {
-    usage.costUsd = undefined;
-  }
   return usage;
+}
+
+function appUsageForCase(testCase: EvalCase): HarnessUsageSummary | undefined {
+  const usage = testCase.harness?.usage;
+  const effectiveToolCalls = toolCallCount(testCase);
+  if (!usage && effectiveToolCalls === 0) {
+    return undefined;
+  }
+  return {
+    ...usage,
+    ...(effectiveToolCalls > 0 ? { toolCalls: effectiveToolCalls } : {}),
+  };
 }
 
 function sumJudgeUsage(cases: EvalCase[]) {
@@ -300,9 +305,20 @@ function omitPartialCost(
   total: AggregatedUsageSummary,
   usages: Array<HarnessUsageSummary | undefined>,
 ) {
-  if (usages.some((usage) => usage?.costUsd === undefined)) {
+  if (usages.some(hasUsageWithoutCost)) {
     total.costUsd = undefined;
   }
+}
+
+function hasUsageWithoutCost(usage: HarnessUsageSummary | undefined) {
+  return (
+    usage?.costUsd === undefined &&
+    ((usage?.totalTokens ??
+      (usage?.inputTokens ?? 0) +
+        (usage?.outputTokens ?? 0) +
+        (usage?.reasoningTokens ?? 0)) > 0 ||
+      (usage?.toolCalls ?? 0) > 0)
+  );
 }
 
 function toolCallCount(testCase: EvalCase) {

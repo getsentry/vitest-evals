@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { messagesToTranscriptEvents } from "@vitest-evals/core";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { describe, expect, test } from "vitest";
 import {
   buildSpanTree,
   buildTranscript,
@@ -161,6 +161,25 @@ describe("summarizeWorkspace", () => {
       totalCostUsd: 0.1,
       toolCallCount: 2,
       durationMs: 4500,
+    });
+  });
+
+  test("does not let an empty usage run hide a known sibling cost", () => {
+    const testCase = structuredClone(workspace.cases[0]!);
+    const emptyUsageCase = structuredClone(workspace.cases[0]!);
+    emptyUsageCase.id = "case-empty-usage";
+    emptyUsageCase.harness!.run!.usage = {};
+    emptyUsageCase.eval = undefined;
+
+    expect(
+      summarizeWorkspace({
+        ...workspace,
+        cases: [testCase, emptyUsageCase],
+      }),
+    ).toMatchObject({
+      appTokens: 1220,
+      appCostUsd: 0.08,
+      totalCostUsd: 0.1,
     });
   });
 
