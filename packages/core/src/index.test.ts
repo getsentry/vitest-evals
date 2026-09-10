@@ -1,12 +1,16 @@
 import { describe, expect, test } from "vitest";
 import {
+  HarnessRunSchema,
+  TranscriptToolResultEventSchema,
+  UsageSummarySchema,
+  type VitestJsonReport,
   assistantMessages,
   collectReportWorkspace,
   failedSpans,
-  HarnessRunSchema,
   latestAssistantMessageContent,
-  messagesToTranscriptEvents,
   messagesByRole,
+  messagesToTranscriptEvents,
+  parseReportWorkspace,
   parseVitestJsonReport,
   readEvalTaskMeta,
   spans,
@@ -15,10 +19,7 @@ import {
   toolCalls,
   toolMessages,
   traceSpans,
-  TranscriptToolResultEventSchema,
-  UsageSummarySchema,
   userMessages,
-  type VitestJsonReport,
 } from "./index";
 
 const sampleJson: VitestJsonReport = {
@@ -965,6 +966,17 @@ describe("collectReportWorkspace", () => {
         },
       },
     });
+  });
+
+  test("migrates schema version 1 workspaces in memory", () => {
+    const workspace = collectReportWorkspace(sampleJson);
+
+    expect(
+      parseReportWorkspace({
+        ...workspace,
+        schemaVersion: 1,
+      }),
+    ).toEqual(workspace);
   });
 
   test("defaults harness-only case scores from Vitest status", () => {
