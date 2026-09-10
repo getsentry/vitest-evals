@@ -343,7 +343,11 @@ jobs:
             2> tmp/github-reporter-smoke/stderr.txt
 
           grep -F "# vitest-evals" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Metric | Value |" "$GITHUB_STEP_SUMMARY"
+          grep -F "## Summary" "$GITHUB_STEP_SUMMARY"
+          grep -F "**Failed** — 8 passed, 2 failed, 10 total (80.0% pass rate)." "$GITHUB_STEP_SUMMARY"
+          grep -F -- "- **Score:** avg 0.59, min 0.10" "$GITHUB_STEP_SUMMARY"
+          grep -F "## Usage" "$GITHUB_STEP_SUMMARY"
+          grep -F -- "- **Duration:**" "$GITHUB_STEP_SUMMARY"
           grep -F "## Scores" "$GITHUB_STEP_SUMMARY"
           grep -F "0-19%   | #######              1" "$GITHUB_STEP_SUMMARY"
           grep -F "20-39%  | #############        2" "$GITHUB_STEP_SUMMARY"
@@ -366,17 +370,6 @@ jobs:
           grep -F "Final Output" "$GITHUB_STEP_SUMMARY"
           grep -F "Tool           Status" "$GITHUB_STEP_SUMMARY"
           grep -F "lookupInvoice  ok" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Status | failed |" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Evals | 8 passed, 2 failed, 10 total |" "$GITHUB_STEP_SUMMARY"
-          grep -F "| Score | avg 0.59, min 0.10 |" "$GITHUB_STEP_SUMMARY"
-          if grep -F "| Tests |" "$GITHUB_STEP_SUMMARY"; then
-            echo "test totals row should not be shown"
-            exit 1
-          fi
-          if grep -F "| Usage |" "$GITHUB_STEP_SUMMARY"; then
-            echo "top-level usage row should not be shown"
-            exit 1
-          fi
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=28,col=5,title=vitest-evals::refund eval > returns wrong refund amount - score 0.35 - AmountJudge - expected amount=5000, got amount=499" tmp/github-reporter-smoke/stdout.txt
           grep -F "::warning::GitHub Check Run skipped: missing GITHUB_TOKEN" tmp/github-reporter-smoke/stdout.txt
