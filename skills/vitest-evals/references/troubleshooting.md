@@ -8,7 +8,8 @@ Open this for failing evals, missing reporter data, or uncertain verification.
 |---------|--------------|-----|
 | Test has no `run` fixture | Suite is not inside `describeEval(...)`. | Wrap the suite with `describeEval(name, { harness }, (it) => { ... })`. |
 | App executes more than once per test | Judge or assertion calls the app directly. | Use the returned `result`; reserve `harness.run(...)` inside a judge for intentional second runs. |
-| Reporter shows little harness detail | `HarnessRun.session`, `usage`, or `errors` is sparse. | Return a richer normalized run with assistant messages. |
+| Reporter shows little harness detail | `HarnessRun.session`, `usage`, or `errors` is sparse. | Return a richer run with ordered session events and usage. |
+| Usage cost is missing | The harness did not provide `usage.costUsd`. | Map provider cost or a suite estimate to `costUsd`; omit it when unknown. |
 | Tool calls are missing | Tools were not passed through the harness runtime or native tool inference missed them. | Use wrapped `runtime.tools`, explicit `tools`, or emit events from the app seam. |
 | Tool arguments/results disappear | Values are not JSON-serializable or normalize to `undefined`. | Convert to records, arrays, strings, numbers, booleans, or `null`. |
 | Judge receives blank text | The judge expects text but the run output or assistant content is not text. | Use a text `run.output` or project structured output to text inside the judge. |

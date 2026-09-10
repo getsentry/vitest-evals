@@ -25,9 +25,10 @@ const appHarness: Harness<AppInput, AppOutput> = {
     return {
       output,
       session: {
-        messages: [
-          { role: "user", content: normalizeContent(input) },
+        events: [
+          { type: "message", role: "user", content: normalizeContent(input) },
           {
+            type: "message",
             role: "assistant",
             content: normalizeContent(appResult.reply),
             metadata: normalizeMetadata({ channel: appResult.channel }),
@@ -35,7 +36,10 @@ const appHarness: Harness<AppInput, AppOutput> = {
         ],
         metadata: normalizeMetadata({ caseId: appResult.caseId }),
       },
-      usage: appResult.usage ?? {},
+      usage: {
+        ...appResult.usage,
+        costUsd: appResult.costUsd,
+      },
       errors: [],
     };
   },
@@ -48,8 +52,8 @@ const appHarness: Harness<AppInput, AppOutput> = {
 |-------|-------------|
 | `name` | Stable short label shown in reporter output. |
 | `run` | Executes the application once and returns a normalized `HarnessRun`. |
-| `session.messages` | JSON-safe user, assistant, and tool trace. |
-| `usage` | Empty object when unknown; include provider/model/tokens when available. |
+| `session.events` | Ordered, JSON-safe messages and tool activity. |
+| `usage` | Include provider, model, tokens, tools, and `costUsd` when known. Omit unknown fields. |
 | `errors` | Empty array on success; serialized error records on partial results. |
 
 ## Implementation Rules

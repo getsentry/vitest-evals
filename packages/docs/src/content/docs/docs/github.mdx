@@ -71,6 +71,23 @@ the gate decision (for example `Eval pass rate 63.7% — required 80.0%`) instea
 of failing on any single case. Quality misses stay visible as warnings when the
 suite is still above the floor.
 
+## Usage And Cost
+
+The job summary and Check Run show three rows:
+
+- **Application Usage**: the app under test, including upstream model calls
+  collected by its harness
+- **Judge Usage**: model calls made through `ctx.runJudge(...)`
+- **Total Usage**: application and judge usage combined
+
+Each row can include tokens, USD cost, and tool calls. Harnesses should set
+`usage.costUsd` to the provider-reported cost or the suite's estimate. Omit it
+when cost is unknown; use `0` only for a run known to be free.
+
+If either application or judge usage has no cost, the combined cost is omitted
+instead of showing a partial total. Sharded reports sum each usage group across
+all result files before calculating the combined row.
+
 ## Check Run Ownership
 
 A Check Run is a **separate** GitHub check from the workflow job row. Use it

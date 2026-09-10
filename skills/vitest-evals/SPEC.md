@@ -33,8 +33,9 @@ Out of scope:
 - Required first actions: inspect the touched code, choose the runtime target, open the matching reference.
 - Required outputs: implementation or review guidance that uses the harness-backed API only, plus targeted verification.
 - Non-negotiable constraints: normalized run data remains JSON-serializable,
-  suite tests call `run(...)` explicitly, judge model calls stay on judges or
-  judge-side helpers, and model-backed harnesses normalize tokens and `costUsd`.
+  suite tests call `run(...)` explicitly, judges call models through a
+  `judgeHarness` and `ctx.runJudge(...)`, and harnesses normalize tokens and
+  `costUsd`.
 - Expected bundled files loaded at runtime: `SKILL.md` first, then one or more focused files under `references/`.
 
 ## Source And Evidence Model

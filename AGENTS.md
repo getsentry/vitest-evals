@@ -29,7 +29,7 @@ apps/                     # demo-ai-sdk, demo-openai-agents, demo-pi (realistic 
 - Root API work is harness-first and judge-first.
 - Legacy scorer-first changes stay under `packages/vitest-evals/src/legacy/...`.
 - Keep normalized session and run data JSON-serializable.
-- Keep `UsageSummary` to stable usage units such as tokens, tools, retries, provider, and model. Do not add first-class cost fields; provider-specific cost estimates belong in `usage.metadata`.
+- Keep `UsageSummary` to stable usage units such as tokens, USD cost, tools, retries, provider, and model. Set `costUsd` only when cost is known; provider-specific pricing details belong in `usage.metadata`.
 - GitHub reporting is action-first: document workflows with `uses: getsentry/vitest-evals@v0`, not CLI commands.
 - Sharded eval reporting uses distinct JSON artifacts per matrix job and one reducer job that publishes the combined action report.
 - Root GitHub Action releases keep source and bundled tags separate: Craft publishes the source release, `vX.Y.Z-src` preserves the source baseline, and `vX`/`vX.Y.Z` point at the bundled action commit. Keep the Craft `github` target filtered away from package artifacts.

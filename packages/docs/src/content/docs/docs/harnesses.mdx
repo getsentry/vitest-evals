@@ -46,7 +46,10 @@ same shape regardless of runtime:
 | `session.events` | Ordered transcript events, including messages, tool-call requests, and tool results. |
 | `toolCalls(result)` | Deterministic tool-call projection for tool judges and replay checks. |
 | `traces` | Operation spans for runs, model calls, tools, guardrails, handoffs, or custom work. |
-| `usage` | Stable usage units such as provider, model, tokens, tools, and retries. |
+| `usage` | Provider, model, tokens, USD cost, tools, and retries. Omit unknown values. |
+
+Set `usage.costUsd` to the provider-reported cost or the suite's estimate. Omit
+it when cost is unknown; use `0` only when the run is known to be free.
 
 First-party harnesses attach trace spans automatically from native runtime data
 they observe. `createHarness()` attaches a fallback run span when a custom
