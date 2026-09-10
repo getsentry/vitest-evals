@@ -141,7 +141,11 @@ adapters. Custom judges should use `createJudge("Name", assess)` for stable
 reporter labels, or `createJudge({ name, judgeHarness, assess })` when the
 judge should carry a reusable judge-side harness default.
 `createJudgeHarness(...)` is the shared abstraction for judge-side provider
-shims.
+shims. Each `ctx.runJudge(...)` call returns the normalized judge output while
+core records the complete judge harness run on the resulting score. Multiple
+calls from one judge remain separate runs. Reporters aggregate their stable
+usage fields alongside application usage while preserving provider-specific
+cost estimates under each run's `usage.metadata`.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -238,8 +242,11 @@ For each eval test in a harness-backed suite:
    `usage`, `timings`, `artifacts`, and `errors`.
 6. Core stores that run on `task.meta.harness` for the reporter.
 7. Automatic suite-level judges run against the normalized run/session pair.
-8. The eval test asserts on the same returned result and session.
-9. The reporter renders the recorded metadata without re-executing the harness.
+8. Each judge-harness invocation is stored under its judge score as `judgeRuns`.
+9. Reporters include stable judge usage in totals while keeping it distinguishable
+   from application usage.
+10. The eval test asserts on the same returned result and session.
+11. The reporter renders the recorded metadata without re-executing the harness.
 
 Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
 and reuse registered input, metadata, and harness context

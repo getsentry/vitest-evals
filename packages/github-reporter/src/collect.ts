@@ -1,5 +1,6 @@
 import {
   type HarnessRun,
+  type UsageSummary as HarnessUsageSummary,
   type ReportCase,
   type ToolCall,
   type TranscriptToolCallEvent,
@@ -36,7 +37,8 @@ export function collectEvalReport(
   const evalScores = cases
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => isFiniteNumber(score));
-  const usage = sumUsage(cases);
+  const judgeUsage = sumJudgeUsage(cases);
+  const usage = addUsage(sumHarnessUsage(cases), judgeUsage);
   const durationMs = workspace.runs[0]?.durationMs;
 
   return {
@@ -63,6 +65,7 @@ export function collectEvalReport(
           }
         : undefined,
     usage,
+    judgeUsage,
     cases,
     failures,
   };
@@ -89,6 +92,7 @@ function collectEvalCase(reportCase: ReportCase): EvalCase {
           thresholdFailed: reportCase.eval.thresholdFailed,
           output: reportCase.eval.output,
           scores,
+          ...(hasJudgeRuns(scores) ? { judgeUsage: sumJudgeRuns(scores) } : {}),
         }
       : undefined,
     harness: reportCase.harness
@@ -231,29 +235,74 @@ function stringifyReason(value: unknown) {
   return typeof value === "string" ? value : stringifyValue(value, 4000);
 }
 
-function sumUsage(cases: EvalCase[]) {
-  const usage: Required<UsageSummary> = {
+function emptyUsage(): Required<UsageSummary> {
+  return {
     inputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,
     toolCalls: 0,
   };
+}
 
+function addUsage(
+  left: Required<UsageSummary>,
+  right: Required<UsageSummary>,
+): Required<UsageSummary> {
+  return {
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    reasoningTokens: left.reasoningTokens + right.reasoningTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+    toolCalls: left.toolCalls + right.toolCalls,
+  };
+}
+
+function addRunUsage(
+  total: Required<UsageSummary>,
+  usage: HarnessUsageSummary | undefined,
+) {
+  total.inputTokens += usage?.inputTokens ?? 0;
+  total.outputTokens += usage?.outputTokens ?? 0;
+  total.reasoningTokens += usage?.reasoningTokens ?? 0;
+  total.totalTokens +=
+    usage?.totalTokens ??
+    (usage?.inputTokens ?? 0) +
+      (usage?.outputTokens ?? 0) +
+      (usage?.reasoningTokens ?? 0);
+  total.toolCalls += usage?.toolCalls ?? 0;
+}
+
+function sumHarnessUsage(cases: EvalCase[]) {
+  const usage = emptyUsage();
   for (const testCase of cases) {
-    const caseUsage = testCase.harness?.usage;
-    usage.inputTokens += caseUsage?.inputTokens ?? 0;
-    usage.outputTokens += caseUsage?.outputTokens ?? 0;
-    usage.reasoningTokens += caseUsage?.reasoningTokens ?? 0;
-    usage.totalTokens +=
-      caseUsage?.totalTokens ??
-      (caseUsage?.inputTokens ?? 0) +
-        (caseUsage?.outputTokens ?? 0) +
-        (caseUsage?.reasoningTokens ?? 0);
-    usage.toolCalls += toolCallCount(testCase);
+    addRunUsage(usage, testCase.harness?.usage);
+    usage.toolCalls +=
+      toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
   }
-
   return usage;
+}
+
+function hasJudgeRuns(scores: EvalScore[]) {
+  return scores.some((score) => (score.judgeRuns?.length ?? 0) > 0);
+}
+
+function sumJudgeRuns(scores: EvalScore[]) {
+  const usage = emptyUsage();
+  for (const score of scores) {
+    for (const run of score.judgeRuns ?? []) {
+      addRunUsage(usage, run.usage);
+    }
+  }
+  return usage;
+}
+
+function sumJudgeUsage(cases: EvalCase[]) {
+  return cases.reduce(
+    (usage, testCase) =>
+      addUsage(usage, testCase.eval?.judgeUsage ?? emptyUsage()),
+    emptyUsage(),
+  );
 }
 
 function toolCallCount(testCase: EvalCase) {

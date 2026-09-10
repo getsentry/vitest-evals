@@ -19,6 +19,7 @@ export const EvalScoreSchema = z
   .object({
     name: z.string().optional(),
     score: NullableFiniteNumberSchema,
+    judgeRuns: z.array(HarnessRunSchema).optional(),
     metadata: JsonObjectSchema.optional(),
   })
   .strict();

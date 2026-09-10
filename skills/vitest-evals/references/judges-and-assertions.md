@@ -71,6 +71,17 @@ const RefundRubricJudge = createJudge<
 - Normalized sessions infer output from the latest assistant message content.
 - Calling `ctx.harness.run(...)` inside a judge executes the app again; only do this when the judge intentionally needs a second run.
 
+## Judge Usage
+
+- A judge harness is separate from the app harness. Return a full `HarnessRun`
+  when the provider exposes usage.
+- `ctx.runJudge(...)` returns the judge output, while vitest-evals records the
+  complete normalized run under the score's `judgeRuns` field.
+- Multiple `runJudge(...)` calls from one judge are retained separately.
+- Stable token fields contribute to report totals. Provider-specific cost
+  estimates stay under `usage.metadata` and are preserved without being
+  normalized.
+
 ## Review Checklist
 
 - Custom judges should usually use `createJudge("Name", assess)`.
@@ -78,3 +89,5 @@ const RefundRubricJudge = createJudge<
 - Rationale or parsed judge output is placed under `metadata`.
 - LLM-backed judges provide the judge prompt/rubric text. Shared provider setup
   belongs in a judge-side helper, not on the app harness.
+- Model-backed judge harnesses retain normalized usage instead of returning only
+  provider text when usage is available.

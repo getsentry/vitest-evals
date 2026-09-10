@@ -151,7 +151,22 @@ export function piAiJudgeHarness<TApi extends Api>(
         },
       );
 
-      return resolvePiAiJudgeText(message);
+      const output = resolvePiAiJudgeText(message);
+      const usage = resolveUsage(message, 0);
+      return {
+        output,
+        session: resolveSession(
+          message,
+          [
+            { type: "message", role: "user", content: prompt },
+            { type: "message", role: "assistant", content: output },
+          ],
+          output,
+          usage,
+        ),
+        usage,
+        errors: [],
+      };
     },
   });
 }

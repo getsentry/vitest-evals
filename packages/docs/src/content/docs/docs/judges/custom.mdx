@@ -68,12 +68,14 @@ await expect(result).toSatisfyJudge(CapitalJudge, {
 
 If a custom judge needs an LLM call, configure a `judgeHarness` on the matcher,
 the judge object, or the suite, then call `ctx.runJudge(...)` from the judge.
-Core curries the current abort signal into that function. Matcher options win
-over a judge default, and a judge default wins over the suite default. Explicit
-matcher calls can also reuse a single unambiguous judge-level harness from the
-suite's automatic judges, but automatic judges do not inherit inferred
-harnesses from sibling judges. Leave `judgeHarness` unset for suites that only
-use deterministic judges.
+Core curries the current abort signal into that function. Each call returns the
+judge output to your scoring code and records the underlying normalized judge
+run on the score as `judgeRuns`. If one judge calls `runJudge()` more than once,
+every run is retained. Matcher options win over a judge default, and a judge
+default wins over the suite default. Explicit matcher calls can also reuse a
+single unambiguous judge-level harness from the suite's automatic judges, but
+automatic judges do not inherit inferred harnesses from sibling judges. Leave
+`judgeHarness` unset for suites that only use deterministic judges.
 
 ```ts title="evals/judges/rubricJudge.ts"
 import { createJudge } from "vitest-evals";
@@ -91,6 +93,30 @@ export const RubricJudge = createJudge({
     });
 
     return parseRubricVerdict(verdict);
+  },
+});
+```
+
+Return a full `HarnessRun` from a custom judge harness when the provider exposes
+usage. Stable token fields are included in terminal and GitHub report totals.
+Keep provider-specific cost estimates under `usage.metadata`; reports preserve
+that metadata but do not treat it as a normalized cost field.
+
+```ts title="evals/judges/judgeHarness.ts"
+const judgeHarness = createJudgeHarness({
+  name: "rubric-model",
+  async run(input) {
+    const response = await callJudgeModel(input);
+    return {
+      output: response.text,
+      session: response.session,
+      usage: {
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        metadata: { costUsd: response.costUsd },
+      },
+      errors: [],
+    };
   },
 });
 ```

@@ -33,8 +33,9 @@ Out of scope:
 - Required first actions: inspect the touched code, choose the runtime target, open the matching reference.
 - Required outputs: implementation or review guidance that uses the harness-backed API only, plus targeted verification.
 - Non-negotiable constraints: normalized run data remains JSON-serializable,
-  suite tests call `run(...)` explicitly, and judge model calls stay on judges
-  or judge-side helpers rather than the app harness.
+  suite tests call `run(...)` explicitly, judge model calls stay on judges or
+  judge-side helpers rather than the app harness, and model-backed judge runs
+  retain normalized usage for reports.
 - Expected bundled files loaded at runtime: `SKILL.md` first, then one or more focused files under `references/`.
 
 ## Source And Evidence Model
@@ -78,6 +79,8 @@ Data that must not be stored:
 - The skill does not automate installation; it is installable as a self-contained directory.
 - Provider-specific model credentials and environment setup remain application concerns.
 - API details must be refreshed when package options, peer ranges, or reporter behavior change.
+- Provider-specific cost remains metadata; the skill does not define a stable
+  cost field or pricing model.
 
 ## Maintenance Notes
 

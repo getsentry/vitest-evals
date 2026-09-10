@@ -114,6 +114,11 @@ function renderSummaryTable(
     rows.push(["Score", formatScoreSummary(report.score)]);
   }
 
+  const usage = formatReportUsage(report);
+  if (usage) {
+    rows.push(["Usage", usage]);
+  }
+
   if (gate?.enforced) {
     rows.push(["Gate", gate.message]);
   }
@@ -143,6 +148,24 @@ function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {
   return `avg ${formatScore(score.average)}${
     score.minimum === undefined ? "" : `, min ${formatScore(score.minimum)}`
   }`;
+}
+
+function formatReportUsage(report: EvalReport) {
+  const parts: string[] = [];
+  if (report.usage.totalTokens > 0) {
+    const judgeTokens = report.judgeUsage?.totalTokens ?? 0;
+    parts.push(
+      judgeTokens > 0
+        ? `${formatNumber(report.usage.totalTokens)} tokens (${formatNumber(judgeTokens)} judge)`
+        : `${formatNumber(report.usage.totalTokens)} tokens`,
+    );
+  }
+  if (report.usage.toolCalls > 0) {
+    parts.push(
+      `${formatNumber(report.usage.toolCalls)} tool${report.usage.toolCalls === 1 ? "" : "s"}`,
+    );
+  }
+  return parts.join(", ");
 }
 
 function escapeTableCell(value: string) {
@@ -388,19 +411,26 @@ function renderAsciiTable(headers: string[], rows: string[][]) {
 
 function formatCaseUsage(testCase: EvalCase) {
   const usage = testCase.harness?.usage;
+  const judgeUsage = testCase.eval?.judgeUsage;
   const parts: string[] = [];
-  const totalTokens =
+  const appTokens =
     usage?.totalTokens ??
     (usage?.inputTokens ?? 0) +
       (usage?.outputTokens ?? 0) +
       (usage?.reasoningTokens ?? 0);
+  const judgeTokens = judgeUsage?.totalTokens ?? 0;
+  const totalTokens = appTokens + judgeTokens;
   const toolCalls =
     usage?.toolCalls !== undefined
       ? Math.max(usage.toolCalls, testCase.toolCalls.length)
       : testCase.toolCalls.length;
 
   if (totalTokens > 0) {
-    parts.push(`${formatNumber(totalTokens)} tokens`);
+    parts.push(
+      judgeTokens > 0
+        ? `${formatNumber(totalTokens)} tokens (${formatNumber(judgeTokens)} judge)`
+        : `${formatNumber(totalTokens)} tokens`,
+    );
   }
   if (toolCalls > 0) {
     parts.push(`${formatNumber(toolCalls)} tool${toolCalls === 1 ? "" : "s"}`);

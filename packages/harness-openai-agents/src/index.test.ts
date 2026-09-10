@@ -1,11 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { Agent, tool } from "@openai/agents";
+import { Agent, type Runner, tool } from "@openai/agents";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   describeEval,
   getHarnessRunFromError,
   messagesToTranscriptEvents,
+  runJudgeHarnessRun,
   spansByKind,
   toolCalls,
 } from "vitest-evals";
@@ -15,7 +16,11 @@ import type {
   JsonValue,
   NormalizedSession,
 } from "vitest-evals/harness";
-import { openaiAgentsHarness, type OpenAiAgentsTool } from "./index";
+import {
+  openaiAgentsHarness,
+  openaiAgentsJudgeHarness,
+  type OpenAiAgentsTool,
+} from "./index";
 
 type Classification = {
   label: "bourbon" | "scotch";
@@ -33,6 +38,31 @@ type HarnessOutput<THarness> = THarness extends Harness<any, infer TOutput>
 function firstAssistantToolCall(session: NormalizedSession) {
   return session.events.find((event) => event.type === "tool_call");
 }
+
+test("openai judge harness preserves usage", async () => {
+  const judgeHarness = openaiAgentsJudgeHarness({
+    model: "gpt-4.1-mini",
+    runner: {
+      run: vi.fn(async () => ({
+        finalOutput: "approved",
+        state: {
+          usage: { inputTokens: 12, outputTokens: 3, totalTokens: 15 },
+        },
+      })),
+    } as unknown as Runner,
+  });
+
+  const run = await runJudgeHarnessRun(judgeHarness, {
+    prompt: "Grade this answer.",
+  });
+
+  expect(run.output).toBe("approved");
+  expect(run.usage).toMatchObject({
+    inputTokens: 12,
+    outputTokens: 3,
+    totalTokens: 15,
+  });
+});
 
 function createOpenAiToolCallDetails(callId: string, name = "lookupBottle") {
   return {

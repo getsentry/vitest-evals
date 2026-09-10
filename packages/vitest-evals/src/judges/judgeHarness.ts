@@ -65,6 +65,9 @@ export type RunJudgeOptions = {
   signal?: AbortSignal;
 };
 
+/** Full normalized run produced by one judge-model invocation. */
+export type JudgeHarnessRun = HarnessRun<JudgeHarnessOutput>;
+
 /**
  * Curried judge-harness runner available inside `JudgeContext`.
  *
@@ -153,33 +156,43 @@ export async function runJudgeHarness(
   input: JudgeHarnessInput,
   options: RunJudgeOptions = {},
 ): Promise<JudgeHarnessOutput> {
+  const run = await runJudgeHarnessRun(judgeHarness, input, options);
+  return resolveJudgeHarnessOutput(run);
+}
+
+/** Runs a judge harness and returns its complete normalized run. */
+export async function runJudgeHarnessRun(
+  judgeHarness: JudgeHarness,
+  input: JudgeHarnessInput,
+  options: RunJudgeOptions = {},
+): Promise<JudgeHarnessRun> {
   const artifacts: HarnessContext["artifacts"] = {};
-  const run = await judgeHarness.run(input, {
+  return judgeHarness.run(input, {
     signal: options.signal,
     artifacts,
     setArtifact: (name, value) => {
       artifacts[name] = value;
     },
   });
-
-  return run.output !== undefined
-    ? run.output
-    : resolveJudgeHarnessAssistantOutput(run);
 }
 
 /** Binds a judge harness to the current eval run context. */
 export function createRunJudge(
   judgeHarness: JudgeHarness | undefined,
   signal?: AbortSignal,
+  onRun?: (run: JudgeHarnessRun) => void,
 ): RunJudge | undefined {
   if (!judgeHarness) {
     return undefined;
   }
 
-  return (input, options) =>
-    runJudgeHarness(judgeHarness, input, {
+  return async (input, options) => {
+    const run = await runJudgeHarnessRun(judgeHarness, input, {
       signal: options?.signal ?? signal,
     });
+    onRun?.(run);
+    return resolveJudgeHarnessOutput(run);
+  };
 }
 
 function normalizeJudgeHarnessResult(
@@ -233,8 +246,8 @@ function createJudgeHarnessMessages(
   ];
 }
 
-function resolveJudgeHarnessAssistantOutput(
-  run: HarnessRun<JudgeHarnessOutput>,
-): JudgeHarnessOutput {
-  return latestAssistantMessageContent(run.session) ?? "";
+function resolveJudgeHarnessOutput(run: JudgeHarnessRun): JudgeHarnessOutput {
+  return run.output !== undefined
+    ? run.output
+    : (latestAssistantMessageContent(run.session) ?? "");
 }

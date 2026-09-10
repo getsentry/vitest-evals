@@ -63,6 +63,19 @@ const sampleJson: VitestJsonReport = {
                 {
                   name: "StructuredOutputJudge",
                   score: 0.2,
+                  judgeRuns: [
+                    {
+                      output: "denied",
+                      session: { events: [] },
+                      usage: {
+                        inputTokens: 80,
+                        outputTokens: 20,
+                        totalTokens: 100,
+                        metadata: { costUsd: 0.02 },
+                      },
+                      errors: [],
+                    },
+                  ],
                   metadata: {
                     rationale:
                       "status mismatch\nExpected status=approved, got status=denied",
@@ -162,7 +175,17 @@ describe("collectEvalReport", () => {
       average: 0.2,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1220);
+    expect(report.usage.totalTokens).toBe(1320);
+    expect(report.judgeUsage).toEqual({
+      inputTokens: 80,
+      outputTokens: 20,
+      reasoningTokens: 0,
+      totalTokens: 100,
+      toolCalls: 0,
+    });
+    expect(
+      report.cases[0]?.eval?.scores[0]?.judgeRuns?.[0]?.usage.metadata,
+    ).toEqual({ costUsd: 0.02 });
     expect(report.usage.toolCalls).toBe(2);
     expect(report.failures[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",
@@ -391,7 +414,8 @@ describe("mergeEvalReports", () => {
       average: 0.5,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1520);
+    expect(report.usage.totalTokens).toBe(1620);
+    expect(report.judgeUsage?.totalTokens).toBe(100);
     expect(report.usage.toolCalls).toBe(3);
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
@@ -902,7 +926,7 @@ describe("renderJobSummary", () => {
     expect(summary).toContain("| Pass Rate | 0.0% |");
     expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
-    expect(summary).not.toContain("| Usage |");
+    expect(summary).toContain("| Usage | 1,320 tokens (100 judge), 2 tools |");
     expect(summary).toContain("## Scores");
     expect(summary.indexOf("## Scores")).toBeLessThan(
       summary.indexOf("## Results"),
@@ -916,7 +940,9 @@ describe("renderJobSummary", () => {
     expect(details).toContain("```text\nResult\n------");
     expect(details).toContain("Case      1. refund agent > rejects fraud");
     expect(details).toContain("Location  apps/demo/evals/refund.eval.ts:42");
-    expect(details).toContain("Usage     1,220 tokens, 2 tools, 4.1s");
+    expect(details).toContain(
+      "Usage     1,320 tokens (100 judge), 2 tools, 4.1s",
+    );
     expect(details).toContain("Reason\n------");
     expect(details).toContain("Expected status=approved, got status=denied");
     expect(details).toContain("Judge                  Score");

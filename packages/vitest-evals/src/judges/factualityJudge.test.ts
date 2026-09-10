@@ -115,15 +115,16 @@ describeEval(
         }),
       );
       expect(task.meta.eval?.scores).toEqual([
-        {
+        expect.objectContaining({
           name: "FactualityJudge",
           score: 1,
           metadata: {
             rationale: "The submitted answer matches the expert answer.",
             choice: "C",
           },
-        },
+        }),
       ]);
+      expect(task.meta.eval?.scores[0]?.judgeRuns).toHaveLength(1);
     });
   },
 );
