@@ -273,6 +273,11 @@ function sumAppUsage(cases: EvalCase[]) {
       toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
   }
   omitPartialCost(usage, runUsages);
+  if (
+    cases.some((testCase) => !testCase.harness && toolCallCount(testCase) > 0)
+  ) {
+    usage.costUsd = undefined;
+  }
   return usage;
 }
 

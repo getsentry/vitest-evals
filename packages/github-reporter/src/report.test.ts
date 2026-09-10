@@ -994,6 +994,32 @@ describe("renderJobSummary", () => {
     expect(report.usage.costUsd).toBeUndefined();
   });
 
+  test("treats eval-only tool calls as application usage with unknown cost", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "eval-only tools";
+    secondAssertion.fullName = "refund agent eval-only tools";
+    secondAssertion.meta = {
+      eval: {
+        avgScore: 1,
+        scores: [],
+        toolCalls: [
+          { name: "lookupInvoice", status: "ok" },
+          { name: "notifyCustomer", status: "ok" },
+        ],
+      },
+    };
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1220);
+    expect(report.usage.toolCalls).toBe(4);
+    expect(report.usage.costUsd).toBeUndefined();
+  });
+
   test("surfaces non-eval failures without pretending the run passed", () => {
     const json: VitestJsonReport = {
       ...sampleJson,
