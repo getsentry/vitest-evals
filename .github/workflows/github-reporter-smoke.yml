@@ -442,7 +442,7 @@ jobs:
           test "$ACTION_GATE_STATUS" = "passed"
           test "$ACTION_PASS_RATE" = "0.80"
           test "$ACTION_EVALS_FAILED" = "2"
-          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — floor 70.0%"
+          test "$ACTION_GATE_TITLE" = "Eval pass rate 80.0% — minimum 70.0%"
 
       - name: Run gated reporter action below floor
         id: reporter_action_gated_fail
