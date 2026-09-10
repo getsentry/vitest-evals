@@ -10,7 +10,9 @@ Public docs mirror this guide at
 Use JSON as the eval artifact because it preserves `task.meta.eval` and
 `task.meta.harness`; JUnit XML does not carry the full eval metadata. Usage
 reports show separate application, judge, and combined token and `costUsd`
-totals. Judge runs remain attached to their scores for detailed usage data.
+totals. A combined cost is shown only when every usage category reports cost;
+omitted cost means unknown, while zero means known free. Judge runs remain
+attached to their scores for detailed usage data.
 
 ## Minimal Workflow
 

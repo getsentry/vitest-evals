@@ -96,7 +96,8 @@ allowing provider-specific attributes.
 
 `UsageSummary` standardizes tokens, USD cost, tool counts, retries, provider,
 and model. Harnesses report provider-supplied or suite-estimated cost through
-`costUsd`; provider-specific pricing details remain under `usage.metadata`.
+`costUsd`; omit it when cost is unknown, and use zero only for known-free runs.
+Provider-specific pricing details remain under `usage.metadata`.
 
 ### `packages/vitest-evals/src/index.ts`
 
@@ -142,8 +143,8 @@ judge should carry a reusable judge-side harness default.
 `createJudgeHarness(...)` is the shared abstraction for judge-side provider
 shims. Each `ctx.runJudge(...)` call returns the normalized judge output while
 core records the complete judge harness run on the resulting score. Multiple
-calls from one judge remain separate runs. Reporters aggregate tokens and
-`costUsd` separately for application and judge usage, plus a combined total.
+calls from one judge remain separate runs. The GitHub reporter aggregates tokens
+and `costUsd` separately for application and judge usage, plus a derived total.
 
 ### `packages/vitest-evals/src/legacy/*`
 
@@ -173,7 +174,10 @@ Provides the custom Vitest reporter that reads normalized run metadata from
 `packages/core` owns dependency-light primitives shared by the Vitest
 integration, GitHub reporter, and report UI. Its main entry stays browser-safe,
 while `@vitest-evals/core/node` exposes filesystem helpers for local and CI
-report consumers. It exports stable schemas, TypeScript types, and helpers for:
+report consumers. The collected workspace is versioned. Judge runs and standardized cost change
+its persisted shape in schema version 2; readers reject unsupported versions
+instead of silently misreading them. It exports schemas, TypeScript types, and
+helpers for:
 
 - JSON-safe values
 - normalized harness runs, sessions, transcript-derived tool calls, usage,

@@ -14,7 +14,7 @@ import {
 } from "./model";
 
 const workspace: ReportWorkspace = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   runs: [
     {
       id: "shard-a.json",

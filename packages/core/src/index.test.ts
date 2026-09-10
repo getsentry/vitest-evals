@@ -899,6 +899,9 @@ describe("UsageSummarySchema", () => {
         estimatedCostUsd: 0.02,
       }).success,
     ).toBe(false);
+    expect(UsageSummarySchema.safeParse({ costUsd: -0.01 }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -932,7 +935,7 @@ describe("collectReportWorkspace", () => {
         },
       },
     ]);
-    expect(workspace.schemaVersion).toBe(1);
+    expect(workspace.schemaVersion).toBe(2);
     expect(workspace.cases).toHaveLength(1);
     expect(workspace.cases[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",

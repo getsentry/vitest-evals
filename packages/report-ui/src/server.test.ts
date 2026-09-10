@@ -7,7 +7,7 @@ import { parseCliArgs } from "./cli-options";
 import { serveReportWorkspace } from "./server";
 
 const workspace: ReportWorkspace = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   runs: [
     {
       id: "vitest-results.json",
@@ -93,7 +93,7 @@ describe("serveReportWorkspace", () => {
     try {
       const dataResponse = await fetch(`${server.url}/data/workspace.json`);
       await expect(dataResponse.json()).resolves.toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: 2,
         cases: [{ id: "case-1" }],
       });
 

@@ -97,7 +97,7 @@ describe("visible summary", () => {
     expect(
       summarizeVisibleWorkspace(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           runs,
           cases: [
             cases[0]!,
@@ -163,7 +163,7 @@ describe("visible summary", () => {
     expect(
       summarizeVisibleWorkspace(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           runs: [
             {
               id: "run-1",

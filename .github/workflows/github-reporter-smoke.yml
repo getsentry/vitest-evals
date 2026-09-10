@@ -373,7 +373,7 @@ jobs:
             echo "test totals row should not be shown"
             exit 1
           fi
-          grep -F "| App Usage | 1,302 tokens, 9 tools |" "$GITHUB_STEP_SUMMARY"
+          grep -F "| Application Usage | 1,302 tokens, 9 tools |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Judge Usage | none |" "$GITHUB_STEP_SUMMARY"
           grep -F "| Total Usage | 1,302 tokens, 9 tools |" "$GITHUB_STEP_SUMMARY"
           grep -F "::error file=apps/demo/evals/smoke.eval.ts,line=12,col=5,title=vitest-evals::refund eval > rejects fraud - score 0.10 - SmokeJudge - expected approved but got denied" tmp/github-reporter-smoke/stdout.txt

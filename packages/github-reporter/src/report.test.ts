@@ -176,18 +176,14 @@ describe("collectEvalReport", () => {
       average: 0.2,
       minimum: 0.2,
     });
-    expect(report.appUsage).toMatchObject({
+    expect(report.usage).toMatchObject({
       totalTokens: 1220,
       costUsd: 0.08,
+      toolCalls: 2,
     });
     expect(report.judgeUsage).toMatchObject({
       totalTokens: 100,
       costUsd: 0.02,
-    });
-    expect(report.usage).toMatchObject({
-      totalTokens: 1320,
-      costUsd: 0.1,
-      toolCalls: 2,
     });
     expect(report.failures[0]).toMatchObject({
       displayFile: "apps/demo/evals/refund.eval.ts",
@@ -416,7 +412,8 @@ describe("mergeEvalReports", () => {
       average: 0.5,
       minimum: 0.2,
     });
-    expect(report.usage.totalTokens).toBe(1620);
+    expect(report.usage.totalTokens).toBe(1520);
+    expect(report.judgeUsage.totalTokens).toBe(100);
     expect(report.usage.toolCalls).toBe(3);
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
@@ -927,7 +924,9 @@ describe("renderJobSummary", () => {
     expect(summary).toContain("| Pass Rate | 0.0% |");
     expect(summary).not.toContain("| Tests |");
     expect(summary).toContain("| Score | avg 0.20, min 0.20 |");
-    expect(summary).toContain("| App Usage | 1,220 tokens, $0.08, 2 tools |");
+    expect(summary).toContain(
+      "| Application Usage | 1,220 tokens, $0.08, 2 tools |",
+    );
     expect(summary).toContain("| Judge Usage | 100 tokens, $0.02 |");
     expect(summary).toContain("| Total Usage | 1,320 tokens, $0.10, 2 tools |");
     expect(summary).toContain("## Scores");
@@ -958,6 +957,21 @@ describe("renderJobSummary", () => {
     expect(details).not.toContain("Tool Calls\n----------");
     expect(details).not.toContain("Reason:\n\n```text");
     expect(details).not.toContain("Final:\n\n```text");
+  });
+
+  test("does not present a partial cost as the combined total", () => {
+    const json = structuredClone(sampleJson);
+    const usage = (json.testResults[0]?.assertionResults[0]?.meta as any)
+      .harness.run.usage;
+    usage.costUsd = undefined;
+
+    const summary = renderJobSummary(
+      collectEvalReport(json, { workspace: "/repo" }),
+    );
+
+    expect(summary).toContain("| Application Usage | 1,220 tokens, 2 tools |");
+    expect(summary).toContain("| Judge Usage | 100 tokens, $0.02 |");
+    expect(summary).toContain("| Total Usage | 1,320 tokens, 2 tools |");
   });
 
   test("surfaces non-eval failures without pretending the run passed", () => {

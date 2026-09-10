@@ -1,10 +1,10 @@
 import type { EvalGateResult } from "./gate";
 import { formatPercent } from "./gate";
 import type {
+  AggregatedUsageSummary,
   EvalCase,
   EvalReport,
   ToolCallSummary,
-  UsageSummary,
 } from "./types";
 import {
   compactLine,
@@ -119,10 +119,13 @@ function renderSummaryTable(
     rows.push(["Score", formatScoreSummary(report.score)]);
   }
 
-  if (hasUsage(report.usage)) {
-    rows.push(["App Usage", formatUsage(report.appUsage)]);
+  if (hasUsage(report.usage) || hasUsage(report.judgeUsage)) {
+    rows.push(["Application Usage", formatUsage(report.usage)]);
     rows.push(["Judge Usage", formatUsage(report.judgeUsage)]);
-    rows.push(["Total Usage", formatUsage(report.usage)]);
+    rows.push([
+      "Total Usage",
+      formatUsage(sumUsage(report.usage, report.judgeUsage)),
+    ]);
   }
 
   if (gate?.enforced) {
@@ -156,16 +159,43 @@ function formatScoreSummary(score: NonNullable<EvalReport["score"]>) {
   }`;
 }
 
-function hasUsage(usage: Required<UsageSummary>) {
-  return usage.totalTokens > 0 || usage.costUsd > 0 || usage.toolCalls > 0;
+function hasUsage(usage: AggregatedUsageSummary) {
+  return (
+    usage.totalTokens > 0 || usage.costUsd !== undefined || usage.toolCalls > 0
+  );
 }
 
-function formatUsage(usage: Required<UsageSummary>) {
+function sumUsage(
+  app: AggregatedUsageSummary,
+  judge: AggregatedUsageSummary,
+): AggregatedUsageSummary {
+  const appCostKnown = !hasUsageWithoutCost(app);
+  const judgeCostKnown = !hasUsageWithoutCost(judge);
+  return {
+    inputTokens: app.inputTokens + judge.inputTokens,
+    outputTokens: app.outputTokens + judge.outputTokens,
+    reasoningTokens: app.reasoningTokens + judge.reasoningTokens,
+    totalTokens: app.totalTokens + judge.totalTokens,
+    ...(appCostKnown && judgeCostKnown
+      ? { costUsd: (app.costUsd ?? 0) + (judge.costUsd ?? 0) }
+      : {}),
+    toolCalls: app.toolCalls + judge.toolCalls,
+  };
+}
+
+function hasUsageWithoutCost(usage: AggregatedUsageSummary) {
+  return (
+    usage.costUsd === undefined &&
+    (usage.totalTokens > 0 || usage.toolCalls > 0)
+  );
+}
+
+function formatUsage(usage: AggregatedUsageSummary) {
   const parts: string[] = [];
   if (usage.totalTokens > 0) {
     parts.push(`${formatNumber(usage.totalTokens)} tokens`);
   }
-  if (usage.costUsd > 0) {
+  if (usage.costUsd !== undefined) {
     parts.push(
       usage.costUsd.toLocaleString("en-US", {
         style: "currency",

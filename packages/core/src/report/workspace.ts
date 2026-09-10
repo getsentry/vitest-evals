@@ -14,7 +14,7 @@ import {
 import { VitestJsonStatusSchema } from "./vitest-json";
 
 /** Current schema version for collected report workspaces. */
-export const REPORT_WORKSPACE_SCHEMA_VERSION = 1;
+export const REPORT_WORKSPACE_SCHEMA_VERSION = 2;
 
 /** One collected Vitest JSON report source in a multi-run workspace. */
 export const ReportRunSchema = z
