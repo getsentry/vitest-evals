@@ -1,5 +1,10 @@
 import type { HarnessRun, ReportCase } from "@vitest-evals/core";
-import { formatDuration, formatNumber } from "../model";
+import {
+  formatDuration,
+  formatNumber,
+  formatUsd,
+  summarizeRuns,
+} from "../model";
 import { EmptyState } from "../ui";
 import { DetailContent, DetailSection } from "./DetailLayout";
 import { Fact, FactsGrid, JsonBlock, ScoreValue } from "./ReportPrimitives";
@@ -20,7 +25,7 @@ export function OverviewTab({
         <ScoreTable testCase={testCase} />
       </DetailSection>
       <DetailSection title="Usage">
-        <UsageGrid run={run} />
+        <UsageGrid testCase={testCase} run={run} />
       </DetailSection>
       <DetailSection title="Failures">
         {testCase.failureMessages.length > 0 ? (
@@ -139,16 +144,38 @@ function EvidenceLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function UsageGrid({ run }: { run: HarnessRun | undefined }) {
+function UsageGrid({
+  testCase,
+  run,
+}: {
+  testCase: ReportCase;
+  run: HarnessRun | undefined;
+}) {
   const usage = run?.usage;
+  const app = summarizeRuns(run ? [run] : []);
+  const judge = summarizeRuns(
+    (testCase.eval?.scores ?? []).flatMap((score) => score.judgeRuns ?? []),
+  );
+  const totalCost =
+    (app.runCount === 0 || app.costUsd !== undefined) &&
+    (judge.runCount === 0 || judge.costUsd !== undefined) &&
+    app.runCount + judge.runCount > 0
+      ? (app.costUsd ?? 0) + (judge.costUsd ?? 0)
+      : undefined;
+
   return (
     <FactsGrid compact>
-      <Fact label="Provider" value={usage?.provider ?? "n/a"} />
-      <Fact label="Model" value={usage?.model ?? "n/a"} />
-      <Fact label="Input" value={formatNumber(usage?.inputTokens)} />
-      <Fact label="Output" value={formatNumber(usage?.outputTokens)} />
-      <Fact label="Reasoning" value={formatNumber(usage?.reasoningTokens)} />
-      <Fact label="Total" value={formatNumber(usage?.totalTokens)} />
+      <Fact label="App tokens" value={formatNumber(app.tokens)} />
+      <Fact label="Judge tokens" value={formatNumber(judge.tokens)} />
+      <Fact
+        label="Total tokens"
+        value={formatNumber(app.tokens + judge.tokens)}
+      />
+      <Fact label="App cost" value={formatUsd(app.costUsd)} />
+      <Fact label="Judge cost" value={formatUsd(judge.costUsd)} />
+      <Fact label="Total cost" value={formatUsd(totalCost)} />
+      <Fact label="App provider" value={usage?.provider ?? "n/a"} />
+      <Fact label="App model" value={usage?.model ?? "n/a"} />
       <Fact label="Retries" value={formatNumber(usage?.retries)} />
       <Fact label="Run time" value={formatDuration(run?.timings?.totalMs)} />
     </FactsGrid>

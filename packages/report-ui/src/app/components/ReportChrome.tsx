@@ -3,6 +3,7 @@ import {
   formatDuration,
   formatNumber,
   formatScore,
+  formatUsd,
   type summarizeWorkspace,
 } from "../model";
 import { cx, toneTextClass, type Tone } from "../ui";
@@ -126,14 +127,16 @@ export function SummaryBar({
           <SummaryCounter
             label="Tokens"
             value={formatNumber(summary.totalTokens)}
+            detail={`${formatNumber(summary.appTokens)} app + ${formatNumber(summary.judgeTokens)} judge`}
           />
           <SummaryCounter
             label="Tools"
             value={formatNumber(summary.toolCallCount)}
           />
           <SummaryCounter
-            label="Avg score"
-            value={formatScore(summary.averageScore)}
+            label="Cost"
+            value={formatUsd(summary.totalCostUsd)}
+            detail={`${formatUsd(summary.appCostUsd)} app + ${formatUsd(summary.judgeCostUsd)} judge`}
           />
         </dl>
       </div>
@@ -200,7 +203,15 @@ export function RunStrip({
   );
 }
 
-function SummaryCounter({ label, value }: { label: string; value: string }) {
+function SummaryCounter({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+}) {
   return (
     <div className="min-w-0">
       <dt className="text-[0.68rem] font-semibold uppercase text-muted">
@@ -209,6 +220,9 @@ function SummaryCounter({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 truncate font-mono text-lg font-semibold tabular-nums text-ink">
         {value}
       </dd>
+      {detail ? (
+        <dd className="truncate text-[0.68rem] text-muted">{detail}</dd>
+      ) : null}
     </div>
   );
 }

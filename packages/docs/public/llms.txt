@@ -602,8 +602,9 @@ pnpm exec vitest-evals serve eval-results/
 ```
 
 The command accepts JSON files, simple globs, and directories. It opens a local
-React report viewer for run summaries, eval cases, scores, harness sessions,
-tool calls, session transcripts, trace span details, and raw case metadata.
+report viewer for run summaries, eval cases, scores, application and judge
+usage, harness sessions, tool calls, transcripts, trace details, and raw case
+metadata. Unknown costs stay `n/a`; partial costs are not shown as totals.
 
 Use the same JSON artifacts for local investigation and GitHub reporting.
 
@@ -771,13 +772,14 @@ transcript events, usage, and partial output when execution fails.
 - Keep expected values in case rows, explicit matcher options, or judge config.
 - Prefer deterministic judges for contracts such as tool calls and structured
   output.
-- Keep model-graded judge prompts and rubrics inside custom judges.
+- Keep model-graded prompts and rubrics in the judge. Run provider calls through
+  `ctx.runJudge(...)` and a separate `judgeHarness`.
 - Run the app once per eval case, then judge the captured result.
 - Publish CI results with `getsentry/vitest-evals@v0`.
 - For sharded CI, emit distinct JSON artifacts per shard and combine them in
   one reducer reporting job.
-- Put provider-specific cost estimates in `usage.metadata`, not as first-class
-  `UsageSummary` fields.
+- Put known USD cost in `usage.costUsd`. Keep provider-specific pricing details
+  in `usage.metadata`.
 
 ## Quick command reference
 

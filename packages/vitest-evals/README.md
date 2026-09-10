@@ -133,7 +133,8 @@ describeEval("refund agent", { harness }, (it) => {
 ## Terminal Reporting
 
 The terminal reporter has two eval report levels. Normal mode prints compact
-test, score, usage, and tool-count summaries. Info mode adds per-tool summaries,
+test and score summaries, with application and judge tokens and cost shown
+separately. Info mode adds per-tool summaries,
 arguments, timing/size metadata, replay status, and final output summaries.
 Set `VITEST_EVALS_REPORT_LEVEL=info`, or pass `--info` through the workspace
 eval scripts, to enable it. `--verbose` and `-v` remain aliases for
@@ -145,7 +146,7 @@ Full transcripts and spans are preserved in the Vitest JSON report metadata.
 
 The local report UI reads the same Vitest JSON artifacts and serves a React SPA
 for drilling into runs, eval cases, harness output, sessions, tool calls,
-scores, and trace spans.
+scores, trace spans, and separate application, judge, and total usage.
 
 ```sh
 pnpm exec vitest-evals serve vitest-results.json

@@ -264,24 +264,40 @@ function addRunUsage(
 
 function sumAppUsage(cases: EvalCase[]) {
   const usage = emptyUsage();
+  const runUsages = cases.flatMap((testCase) =>
+    testCase.harness ? [testCase.harness.usage] : [],
+  );
   for (const testCase of cases) {
     addRunUsage(usage, testCase.harness?.usage);
     usage.toolCalls +=
       toolCallCount(testCase) - (testCase.harness?.usage?.toolCalls ?? 0);
   }
+  omitPartialCost(usage, runUsages);
   return usage;
 }
 
 function sumJudgeUsage(cases: EvalCase[]) {
   const usage = emptyUsage();
+  const runUsages: Array<HarnessUsageSummary | undefined> = [];
   for (const testCase of cases) {
     for (const score of testCase.eval?.scores ?? []) {
       for (const run of score.judgeRuns ?? []) {
+        runUsages.push(run.usage);
         addRunUsage(usage, run.usage);
       }
     }
   }
+  omitPartialCost(usage, runUsages);
   return usage;
+}
+
+function omitPartialCost(
+  total: AggregatedUsageSummary,
+  usages: Array<HarnessUsageSummary | undefined>,
+) {
+  if (usages.some((usage) => usage?.costUsd === undefined)) {
+    total.costUsd = undefined;
+  }
 }
 
 function toolCallCount(testCase: EvalCase) {

@@ -413,7 +413,9 @@ describe("mergeEvalReports", () => {
       minimum: 0.2,
     });
     expect(report.usage.totalTokens).toBe(1520);
+    expect(report.usage.costUsd).toBeUndefined();
     expect(report.judgeUsage.totalTokens).toBe(100);
+    expect(report.judgeUsage.costUsd).toBe(0.02);
     expect(report.usage.toolCalls).toBe(3);
     expect(report.cases).toHaveLength(2);
     expect(report.failures).toHaveLength(1);
@@ -972,6 +974,24 @@ describe("renderJobSummary", () => {
     expect(summary).toContain("| Application Usage | 1,220 tokens, 2 tools |");
     expect(summary).toContain("| Judge Usage | 100 tokens, $0.02 |");
     expect(summary).toContain("| Total Usage | 1,320 tokens, 2 tools |");
+  });
+
+  test("does not present a partial cost within one usage category", () => {
+    const json = structuredClone(sampleJson);
+    const secondAssertion = structuredClone(
+      json.testResults[0]!.assertionResults[0]!,
+    );
+    secondAssertion.title = "second case";
+    secondAssertion.fullName = "refund agent second case";
+    (secondAssertion.meta as any).harness.run.usage = {
+      totalTokens: 50,
+    };
+    json.testResults[0]!.assertionResults.push(secondAssertion);
+
+    const report = collectEvalReport(json, { workspace: "/repo" });
+
+    expect(report.usage.totalTokens).toBe(1270);
+    expect(report.usage.costUsd).toBeUndefined();
   });
 
   test("surfaces non-eval failures without pretending the run passed", () => {

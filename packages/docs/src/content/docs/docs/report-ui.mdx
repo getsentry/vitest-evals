@@ -5,7 +5,8 @@ editUrl: false
 ---
 
 The local report UI reads Vitest JSON artifacts and serves a local viewer for
-drilling into runs, cases, scores, harness sessions, tool calls, and trace spans.
+drilling into runs, cases, scores, application and judge usage, harness
+sessions, tool calls, and trace spans.
 
 ## Emit JSON
 
@@ -36,10 +37,14 @@ environment where the artifacts were produced.
 
 ## What to Inspect
 
-Use the report UI when a summary is not enough. It is built for comparing runs,
-finding failed eval cases, reading judge scores, inspecting harness output, and
-following session transcripts with tool call arguments, results, errors, and
-related trace span details.
+Use the report UI when a summary is not enough. The top summary separates
+application, judge, and total tokens and cost. A case's Usage section shows the
+same breakdown for that case. If any contributing run has unknown cost, its
+combined cost is shown as `n/a` rather than as a partial total.
+
+You can also compare runs, find failed cases, read judge scores, inspect harness
+output, and follow session transcripts with tool arguments, results, errors,
+and related trace details.
 
 The same JSON artifacts can also be uploaded to the GitHub reporter, so local
 investigation and CI reporting stay on one durable report format.

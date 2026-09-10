@@ -59,6 +59,14 @@ function createTestCase({
         rationale?: string;
         output?: unknown;
       };
+      judgeRuns?: Array<{
+        session: { events: TranscriptEvent[] };
+        usage: {
+          totalTokens?: number;
+          costUsd?: number;
+        };
+        errors: unknown[];
+      }>;
     }>;
   };
   harness?: {
@@ -70,6 +78,7 @@ function createTestCase({
       };
       usage?: {
         totalTokens?: number;
+        costUsd?: number;
         toolCalls?: number;
       };
       errors?: unknown[];
@@ -246,7 +255,7 @@ describe("DefaultEvalReporter", () => {
 
     expect(logger.log).toHaveBeenCalledTimes(1);
     expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).toContain(
-      "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [12 tok | 1 tool] 42ms",
+      "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [app 12 tok | 1 tool] 42ms",
     );
   });
 
@@ -759,6 +768,13 @@ describe("DefaultEvalReporter", () => {
             {
               name: "StructuredOutputJudge",
               score: 1,
+              judgeRuns: [
+                {
+                  session: { events: [] },
+                  usage: { totalTokens: 3, costUsd: 0.002 },
+                  errors: [],
+                },
+              ],
             },
             {
               name: "ToolCallJudge",
@@ -771,7 +787,7 @@ describe("DefaultEvalReporter", () => {
 
     expect(logger.log).toHaveBeenCalledTimes(3);
     expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).toContain(
-      "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [12 tok] 42ms",
+      "fixtures/reporter.eval.ts:12:3 > demo pi refund agent > streams eval progress [app 12 tok | judge 3 tok / $0.0020 | total 15 tok] 42ms",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[1][0])).toContain(
       "score   StructuredOutputJudge 1.00",

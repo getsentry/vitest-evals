@@ -54,12 +54,17 @@ function mergeUsage(usages: AggregatedUsageSummary[]): AggregatedUsageSummary {
   const costs = usages
     .map((usage) => usage.costUsd)
     .filter((cost): cost is number => cost !== undefined);
+  const costComplete = !usages.some(
+    (usage) =>
+      usage.costUsd === undefined &&
+      (usage.totalTokens > 0 || usage.toolCalls > 0),
+  );
   return {
     inputTokens: sum(usages, (usage) => usage.inputTokens),
     outputTokens: sum(usages, (usage) => usage.outputTokens),
     reasoningTokens: sum(usages, (usage) => usage.reasoningTokens),
     totalTokens: sum(usages, (usage) => usage.totalTokens),
-    ...(costs.length > 0
+    ...(costComplete && costs.length > 0
       ? { costUsd: costs.reduce((total, cost) => total + cost, 0) }
       : {}),
     toolCalls: sum(usages, (usage) => usage.toolCalls),

@@ -26,7 +26,12 @@ export type WorkspaceSummary = {
   failed: number;
   skipped: number;
   averageScore?: number;
+  appTokens: number;
+  judgeTokens: number;
   totalTokens: number;
+  appCostUsd?: number;
+  judgeCostUsd?: number;
+  totalCostUsd?: number;
   toolCallCount: number;
   durationMs?: number;
 };
@@ -69,6 +74,15 @@ export function summarizeWorkspace(
     .map((testCase) => testCase.eval?.avgScore)
     .filter((score): score is number => typeof score === "number");
 
+  const appRuns = workspace.cases.flatMap((testCase) =>
+    testCase.harness?.run ? [testCase.harness.run] : [],
+  );
+  const judgeRuns = workspace.cases.flatMap((testCase) =>
+    (testCase.eval?.scores ?? []).flatMap((score) => score.judgeRuns ?? []),
+  );
+  const appUsage = summarizeRuns(appRuns);
+  const judgeUsage = summarizeRuns(judgeRuns);
+
   return {
     runCount: workspace.runs.length,
     caseCount: workspace.cases.length,
@@ -83,10 +97,12 @@ export function summarizeWorkspace(
       scores.length > 0
         ? scores.reduce((total, score) => total + score, 0) / scores.length
         : undefined,
-    totalTokens: workspace.cases.reduce(
-      (total, testCase) => total + totalTokensFor(testCase.harness?.run),
-      0,
-    ),
+    appTokens: appUsage.tokens,
+    judgeTokens: judgeUsage.tokens,
+    totalTokens: appUsage.tokens + judgeUsage.tokens,
+    appCostUsd: appUsage.costUsd,
+    judgeCostUsd: judgeUsage.costUsd,
+    totalCostUsd: combinedCost(appUsage, judgeUsage),
     toolCallCount: workspace.cases.reduce(
       (total, testCase) => total + (toolCallCountForCase(testCase) ?? 0),
       0,
@@ -210,6 +226,17 @@ export function formatNumber(value: number | undefined) {
   return value === undefined ? "n/a" : new Intl.NumberFormat().format(value);
 }
 
+export function formatUsd(value: number | undefined) {
+  return value === undefined
+    ? "n/a"
+    : value.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      });
+}
+
 export function formatJson(value: unknown) {
   if (value === undefined) {
     return "";
@@ -230,6 +257,29 @@ function totalTokensFor(run: HarnessRun | undefined) {
       (run.usage.outputTokens ?? 0) +
       (run.usage.reasoningTokens ?? 0)
   );
+}
+
+/** Sums tokens and complete USD cost across normalized harness runs. */
+export function summarizeRuns(runs: HarnessRun[]) {
+  return {
+    tokens: runs.reduce((total, run) => total + totalTokensFor(run), 0),
+    costUsd:
+      runs.length > 0 && runs.every((run) => run.usage.costUsd !== undefined)
+        ? runs.reduce((total, run) => total + (run.usage.costUsd ?? 0), 0)
+        : undefined,
+    runCount: runs.length,
+  };
+}
+
+function combinedCost(
+  app: ReturnType<typeof summarizeRuns>,
+  judge: ReturnType<typeof summarizeRuns>,
+) {
+  const appKnown = app.runCount === 0 || app.costUsd !== undefined;
+  const judgeKnown = judge.runCount === 0 || judge.costUsd !== undefined;
+  return appKnown && judgeKnown && app.runCount + judge.runCount > 0
+    ? (app.costUsd ?? 0) + (judge.costUsd ?? 0)
+    : undefined;
 }
 
 function toolCallsForCase(testCase: ReportCase) {

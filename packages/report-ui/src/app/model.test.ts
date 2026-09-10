@@ -49,7 +49,20 @@ const workspace: ReportWorkspace = {
       failureMessages: ["Score: 0.20 below threshold: 1.00"],
       eval: {
         avgScore: 0.2,
-        scores: [{ name: "StructuredOutputJudge", score: 0.2 }],
+        scores: [
+          {
+            name: "StructuredOutputJudge",
+            score: 0.2,
+            judgeRuns: [
+              {
+                output: { choice: "C" },
+                usage: { totalTokens: 100, costUsd: 0.02 },
+                session: { events: [] },
+                errors: [],
+              },
+            ],
+          },
+        ],
       },
       harness: {
         name: "pi-ai",
@@ -57,6 +70,7 @@ const workspace: ReportWorkspace = {
           output: { status: "denied" },
           usage: {
             totalTokens: 1220,
+            costUsd: 0.08,
             toolCalls: 1,
           },
           session: {
@@ -139,7 +153,12 @@ describe("summarizeWorkspace", () => {
       passed: 1,
       failed: 1,
       averageScore: 0.6,
-      totalTokens: 1220,
+      appTokens: 1220,
+      judgeTokens: 100,
+      totalTokens: 1320,
+      appCostUsd: 0.08,
+      judgeCostUsd: 0.02,
+      totalCostUsd: 0.1,
       toolCallCount: 2,
       durationMs: 4500,
     });

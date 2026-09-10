@@ -128,8 +128,8 @@ soft-fail defaults, and score-gate options.
 
 Use `vitest-evals serve` to inspect one or more JSON reports locally. It
 accepts files, simple globs, and directories of JSON artifacts, then serves a
-React SPA with run summaries, eval cases, harness output, sessions, tools, and
-trace details.
+React SPA with run summaries, eval cases, separate application and judge usage,
+harness output, sessions, tools, and trace details.
 
 ```sh
 pnpm exec vitest-evals serve vitest-results.json
