@@ -1,6 +1,9 @@
-minVersion: 0.23.1
-changelogPolicy: none
+minVersion: 3.9.0
+changelog:
+  policy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
+versioning:
+  policy: manual
 targets:
   - name: npm
     id: "@vitest-evals/core"
