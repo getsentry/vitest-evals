@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatNumber,
   formatScore,
+  judgeRunsForCase,
   summarizeWorkspace,
 } from "./model";
 import { type PricingTable, estimateWorkspaceCost, formatUsd } from "./pricing";
@@ -16,9 +17,13 @@ export function formatJunitXml(workspace: ReportWorkspace): string {
       (testCase) => testCase.runId === run.id,
     );
     const failures = cases.filter((testCase) => testCase.status === "failed");
+    const skipped = cases.filter(
+      (testCase) =>
+        testCase.status !== "failed" && testCase.status !== "passed",
+    );
     const body = cases.map((testCase) => formatJunitCase(testCase)).join("\n");
     return [
-      `  <testsuite name="${escapeXml(run.source ?? run.id)}" tests="${cases.length}" failures="${failures.length}" time="${seconds(run.durationMs)}">`,
+      `  <testsuite name="${escapeXml(run.source ?? run.id)}" tests="${cases.length}" failures="${failures.length}" skipped="${skipped.length}" time="${seconds(run.durationMs)}">`,
       body,
       "  </testsuite>",
     ].join("\n");
@@ -26,7 +31,7 @@ export function formatJunitXml(workspace: ReportWorkspace): string {
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<testsuites name="vitest-evals" tests="${summary.caseCount}" failures="${summary.failed}" time="${seconds(summary.durationMs)}">`,
+    `<testsuites name="vitest-evals" tests="${summary.caseCount}" failures="${summary.failed}" skipped="${summary.skipped}" time="${seconds(summary.durationMs)}">`,
     ...suites,
     "</testsuites>",
     "",
@@ -40,7 +45,10 @@ export function formatPullRequestComment(
 ): string {
   const summary = summarizeWorkspace(workspace);
   const cost = estimateWorkspaceCost(
-    workspace.cases.map((testCase) => testCase.harness?.run?.usage ?? {}),
+    workspace.cases.flatMap((testCase) => [
+      testCase.harness?.run?.usage ?? {},
+      ...judgeRunsForCase(testCase).map((run) => run.usage),
+    ]),
     pricing ?? { source: "none", sources: [], models: [] },
   );
   const delta = workspaceDelta(workspace, pricing);
@@ -91,8 +99,11 @@ export function formatPullRequestComment(
 function formatJunitCase(testCase: ReportCase) {
   const time = seconds(testCase.durationMs);
   const open = `    <testcase classname="${escapeXml(testCase.displayFile)}" name="${escapeXml(testCase.displayName)}" time="${time}"`;
-  if (testCase.status !== "failed") {
+  if (testCase.status === "passed") {
     return `${open} />`;
+  }
+  if (testCase.status !== "failed") {
+    return [`${open}>`, "      <skipped />", "    </testcase>"].join("\n");
   }
   const message = testCase.failureMessages[0] ?? "eval failed";
   return [

@@ -11,7 +11,11 @@ import {
   toolCalls,
   userMessages,
 } from "@vitest-evals/core";
-import { type PricingTable, estimateUsageCost } from "./pricing";
+import {
+  type PricingTable,
+  type UsageCost,
+  estimateWorkspaceUsageCost,
+} from "./pricing";
 
 export type CaseStatusFilter = "all" | ReportCase["status"];
 
@@ -161,72 +165,76 @@ export function sortReportCases(
     });
   }
 
-  const ranked = [...cases].sort((left, right) => {
-    const comparison = compareCaseColumn(
-      left,
-      right,
-      column,
-      pricing,
-      scoreDeltas,
-    );
-    return direction === "desc" ? -comparison : comparison;
-  });
-  return ranked;
+  const sign = direction === "desc" ? -1 : 1;
+  return [...cases].sort((left, right) =>
+    compareCaseColumn(left, right, column, sign, pricing, scoreDeltas),
+  );
 }
 
 function compareCaseColumn(
   left: ReportCase,
   right: ReportCase,
   column: CaseSortColumn,
+  sign: 1 | -1,
   pricing?: PricingTable,
   scoreDeltas?: Map<string, number>,
 ) {
   switch (column) {
     case "status":
-      return STATUS_RANK[left.status] - STATUS_RANK[right.status];
+      return sign * (STATUS_RANK[left.status] - STATUS_RANK[right.status]);
     case "case":
-      return left.displayName.localeCompare(right.displayName);
+      return sign * left.displayName.localeCompare(right.displayName);
     case "model":
-      return (caseModel(left) ?? "").localeCompare(caseModel(right) ?? "");
+      return (
+        sign * (caseModel(left) ?? "").localeCompare(caseModel(right) ?? "")
+      );
     case "score":
-      return compareNullableNumber(left.eval?.avgScore, right.eval?.avgScore);
+      return compareNullableNumber(
+        left.eval?.avgScore,
+        right.eval?.avgScore,
+        sign,
+      );
     case "duration":
-      return compareNullableNumber(left.durationMs, right.durationMs);
+      return compareNullableNumber(left.durationMs, right.durationMs, sign);
     case "tokens":
       return compareNullableNumber(
         caseTotalTokens(left),
         caseTotalTokens(right),
+        sign,
       );
     case "cost":
       return compareNullableNumber(
-        pricing
-          ? estimateUsageCost(left.harness?.run?.usage ?? {}, pricing)?.totalUsd
-          : undefined,
-        pricing
-          ? estimateUsageCost(right.harness?.run?.usage ?? {}, pricing)
-              ?.totalUsd
-          : undefined,
+        pricing ? caseCost(left, pricing)?.totalUsd : undefined,
+        pricing ? caseCost(right, pricing)?.totalUsd : undefined,
+        sign,
       );
     case "delta":
       return compareNullableNumber(
         scoreDeltas?.get(left.id),
         scoreDeltas?.get(right.id),
+        sign,
       );
     case "expected":
-      return compactValue(caseExpected(left)).localeCompare(
-        compactValue(caseExpected(right)),
+      return (
+        sign *
+        compactValue(caseExpected(left)).localeCompare(
+          compactValue(caseExpected(right)),
+        )
       );
     case "tools":
       return compareNullableNumber(
         caseToolCallCount(left),
         caseToolCallCount(right),
+        sign,
       );
   }
 }
 
+/** Orders numbers by `sign` and always keeps missing values last. */
 function compareNullableNumber(
   left: number | null | undefined,
   right: number | null | undefined,
+  sign: 1 | -1,
 ) {
   if (left == null && right == null) {
     return 0;
@@ -237,7 +245,7 @@ function compareNullableNumber(
   if (right == null) {
     return -1;
   }
-  return left - right;
+  return sign * (left - right);
 }
 
 /** Filters cases for the report explorer. */
@@ -446,6 +454,20 @@ function totalTokensFor(run: HarnessRun | undefined) {
 export function judgeRunsForCase(testCase: ReportCase): HarnessRun[] {
   return (testCase.eval?.scores ?? []).flatMap(
     (score) => score.judgeRuns ?? [],
+  );
+}
+
+/** Estimates one case's cost across its app run and judge runs. */
+export function caseCost(
+  testCase: ReportCase,
+  pricing: PricingTable,
+): UsageCost | undefined {
+  return estimateWorkspaceUsageCost(
+    [
+      ...(testCase.harness?.run ? [testCase.harness.run.usage] : []),
+      ...judgeRunsForCase(testCase).map((run) => run.usage),
+    ],
+    pricing,
   );
 }
 

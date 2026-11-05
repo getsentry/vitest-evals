@@ -16,4 +16,10 @@ describe("editorTargets", () => {
       "zed://file/repo/refund.eval.ts:12:4",
     ]);
   });
+
+  test("turns Windows drive paths into editor URL paths", () => {
+    expect(
+      editorTargets({ file: "C:\\repo\\refund.eval.ts", line: 3 })[0]?.href,
+    ).toBe("vscode://file/C:/repo/refund.eval.ts:3");
+  });
 });

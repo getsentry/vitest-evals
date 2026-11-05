@@ -3,8 +3,8 @@ import type {
   ReportRun,
   ReportWorkspace,
 } from "@vitest-evals/core";
-import { caseModel } from "./model";
-import { type PricingTable, estimateUsageCost } from "./pricing";
+import { caseCost, caseModel } from "./model";
+import type { PricingTable } from "./pricing";
 
 /** Stable identity for the same eval assertion across runs. */
 export function caseKey(testCase: ReportCase): string {
@@ -60,14 +60,8 @@ export function caseDelta(
     baseline,
     score: subtractNullable(testCase.eval?.avgScore, baseline.eval?.avgScore),
     costUsd: subtractNullable(
-      pricing
-        ? estimateUsageCost(testCase.harness?.run?.usage ?? {}, pricing)
-            ?.totalUsd
-        : undefined,
-      pricing
-        ? estimateUsageCost(baseline.harness?.run?.usage ?? {}, pricing)
-            ?.totalUsd
-        : undefined,
+      pricing ? caseCost(testCase, pricing)?.totalUsd : undefined,
+      pricing ? caseCost(baseline, pricing)?.totalUsd : undefined,
     ),
     statusChanged: baseline.status !== testCase.status,
   };
@@ -255,7 +249,7 @@ function runCostUsd(cases: ReportCase[], pricing?: PricingTable) {
   let total = 0;
   let matched = false;
   for (const testCase of cases) {
-    const cost = estimateUsageCost(testCase.harness?.run?.usage ?? {}, pricing);
+    const cost = caseCost(testCase, pricing);
     if (!cost) {
       continue;
     }

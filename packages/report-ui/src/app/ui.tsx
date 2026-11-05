@@ -23,28 +23,6 @@ export function toneTextClass(tone: Tone) {
   return toneText[tone];
 }
 
-export function Field({
-  htmlFor,
-  label,
-  children,
-}: {
-  htmlFor: string;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <label
-        className="text-xs font-semibold text-muted-strong"
-        htmlFor={htmlFor}
-      >
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input

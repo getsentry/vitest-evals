@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useReportMeta } from "../report-meta";
 import {
   type HubEvent,
   type RerunJobView,
@@ -20,7 +21,6 @@ import {
   previewRerunCommand,
   trimRerunLog,
 } from "../rerun";
-import { useReportMeta } from "../report-meta";
 import { cx } from "../ui";
 import { formatVitestLog } from "../vitest-log";
 import { CopyButton } from "./CopyButton";

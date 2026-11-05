@@ -4,8 +4,14 @@ import { caseToMarkdown } from "../case-markdown";
 import { caseHasCompare } from "../compare";
 import { relativeDisplayPath } from "../display-path";
 import { judgeTally } from "../judge-score";
-import { caseModel, caseScoreTone, formatDuration, formatJson } from "../model";
-import { estimateUsageCost, formatUsd } from "../pricing";
+import {
+  caseCost,
+  caseModel,
+  caseScoreTone,
+  formatDuration,
+  formatJson,
+} from "../model";
+import { formatUsd } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { suggestBetterModel } from "../suggest-model";
 import type { DetailTab } from "../types";
@@ -106,7 +112,7 @@ export function CaseDrawer({
   const run = runs.find((candidate) => candidate.id === testCase.runId);
   const harnessRun = testCase.harness?.run;
   const model = caseModel(testCase);
-  const usageCost = estimateUsageCost(harnessRun?.usage ?? {}, pricing);
+  const usageCost = caseCost(testCase, pricing);
   const failureText = testCase.failureMessages.join("\n\n");
   const suggestion = suggestBetterModel(model, pricing);
   const canCompare = caseHasCompare(testCase, cases, baselineCases);

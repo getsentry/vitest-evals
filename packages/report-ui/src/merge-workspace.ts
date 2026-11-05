@@ -5,8 +5,9 @@ import type {
 } from "@vitest-evals/core";
 
 /**
- * Overlays incoming rerun cases onto the previous workspace by file + fullName.
- * Replaced cases keep their previous id and runId so URL selection survives.
+ * Overlays incoming rerun cases onto the previous workspace by run + file +
+ * fullName. Replaced cases keep their previous id so URL selection survives
+ * even when the assertion moved lines.
  */
 export function mergeRerunWorkspace(
   previous: ReportWorkspace,
@@ -28,11 +29,7 @@ export function mergeRerunWorkspace(
     const key = caseKey(testCase);
     seen.add(key);
     const replacement = incomingByKey.get(key);
-    cases.push(
-      replacement
-        ? { ...replacement, id: testCase.id, runId: testCase.runId }
-        : testCase,
-    );
+    cases.push(replacement ? { ...replacement, id: testCase.id } : testCase);
   }
   for (const testCase of incoming.cases) {
     const key = caseKey(testCase);
@@ -49,7 +46,7 @@ export function mergeRerunWorkspace(
 }
 
 function caseKey(testCase: ReportCase) {
-  return `${testCase.file}\0${testCase.fullName}`;
+  return `${testCase.runId}\0${testCase.file}\0${testCase.fullName}`;
 }
 
 function mergeRuns(
@@ -58,9 +55,12 @@ function mergeRuns(
   cases: ReportCase[],
 ): ReportRun[] {
   const runs = new Map(previous.map((run) => [run.id, run]));
+  // Keep each known run's original startedAt so a rerun does not reorder
+  // which run counts as the baseline.
   for (const run of incoming) {
-    const current = runs.get(run.id);
-    runs.set(run.id, current ? { ...current, startedAt: run.startedAt } : run);
+    if (!runs.has(run.id)) {
+      runs.set(run.id, run);
+    }
   }
   return [...runs.values()].map((run) => {
     const runCases = cases.filter((testCase) => testCase.runId === run.id);

@@ -47,6 +47,40 @@ describe("mergeRerunWorkspace", () => {
     expect(merged.runs[0]?.status).toBe("passed");
   });
 
+  test("keeps each run's own result when several runs share a case", () => {
+    const previous: ReportWorkspace = {
+      schemaVersion: 2,
+      runs: [runOf("run-1", 1_000), runOf("run-2", 2_000)],
+      cases: [
+        caseOf({ id: "a1", runId: "run-1", fullName: "atlas", title: "A" }),
+        caseOf({ id: "a2", runId: "run-2", fullName: "atlas", title: "A" }),
+      ],
+    };
+    const incoming: ReportWorkspace = {
+      schemaVersion: 2,
+      runs: [runOf("run-1", 1_000), runOf("run-2", 9_000)],
+      cases: [
+        caseOf({ id: "x1", runId: "run-1", fullName: "atlas", title: "A" }),
+        caseOf({
+          id: "x2",
+          runId: "run-2",
+          fullName: "atlas",
+          title: "A",
+          status: "failed",
+        }),
+      ],
+    };
+
+    const merged = mergeRerunWorkspace(previous, incoming);
+    expect(
+      merged.cases.map((testCase) => [testCase.id, testCase.status]),
+    ).toEqual([
+      ["a1", "passed"],
+      ["a2", "failed"],
+    ]);
+    expect(merged.runs.map((run) => run.startedAt)).toEqual([1_000, 2_000]);
+  });
+
   test("keeps the previous workspace when the incoming dump is empty", () => {
     const previous = workspaceWith([
       caseOf({ id: "atlas", fullName: "atlas", title: "Atlas" }),
@@ -56,6 +90,24 @@ describe("mergeRerunWorkspace", () => {
     );
   });
 });
+
+function runOf(id: string, startedAt: number): ReportWorkspace["runs"][number] {
+  return {
+    id,
+    status: "passed",
+    startedAt,
+    durationMs: 0,
+    totals: {
+      total: 1,
+      passed: 1,
+      failed: 0,
+      skipped: 0,
+      evalTotal: 1,
+      evalPassed: 1,
+      evalFailed: 0,
+    },
+  };
+}
 
 function workspaceWith(cases: ReportCase[]): ReportWorkspace {
   return {

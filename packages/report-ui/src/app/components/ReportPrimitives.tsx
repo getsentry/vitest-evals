@@ -1,22 +1,9 @@
 import type { ReportCase } from "@vitest-evals/core";
 import type { ReactNode } from "react";
 import { type JudgeTally, judgeTallyLabel } from "../judge-score";
-import {
-  formatJson,
-  formatScore,
-  scoreTone,
-  type summarizeWorkspace,
-} from "../model";
-import { CodeBlock, EmptyState, type Tone, cx, toneTextClass } from "../ui";
+import { formatScore, scoreTone, type summarizeWorkspace } from "../model";
+import { type Tone, cx, toneTextClass } from "../ui";
 import { InstantTooltip } from "./InstantTooltip";
-
-export function JsonBlock({ value }: { value: unknown }) {
-  if (value === undefined || value === "") {
-    return <EmptyState>n/a</EmptyState>;
-  }
-
-  return <CodeBlock value={formatJson(value)} />;
-}
 
 export function FactsGrid({
   compact,

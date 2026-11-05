@@ -30,11 +30,20 @@ export function editorTargets(target: OpenFileTarget): EditorTarget[] {
 }
 
 function fileLocation(target: OpenFileTarget) {
+  const file = toUrlPath(target.file);
   if (target.line === undefined) {
-    return target.file;
+    return file;
   }
   if (target.column === undefined) {
-    return `${target.file}:${target.line}`;
+    return `${file}:${target.line}`;
   }
-  return `${target.file}:${target.line}:${target.column}`;
+  return `${file}:${target.line}:${target.column}`;
+}
+
+// Editor URL handlers expect `/C:/repo/file.ts` for Windows drive paths.
+function toUrlPath(file: string) {
+  if (/^[A-Za-z]:[\\/]/.test(file)) {
+    return `/${file.replace(/\\/g, "/")}`;
+  }
+  return file;
 }

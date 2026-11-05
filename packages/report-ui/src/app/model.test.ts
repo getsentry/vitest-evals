@@ -323,6 +323,22 @@ describe("sortReportCases", () => {
     ).toEqual([1, 0.2]);
   });
 
+  test("keeps cases without a value last in both directions", () => {
+    const unscored = {
+      ...workspace.cases[0]!,
+      id: "unscored",
+      eval: undefined,
+    };
+    for (const direction of ["asc", "desc"] as const) {
+      const sorted = sortReportCases(
+        [unscored, ...workspace.cases],
+        "score",
+        direction,
+      );
+      expect(sorted[sorted.length - 1]?.id).toBe("unscored");
+    }
+  });
+
   test("orders models alphabetically", () => {
     expect(
       sortReportCases(

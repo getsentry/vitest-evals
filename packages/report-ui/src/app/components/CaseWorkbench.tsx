@@ -14,6 +14,7 @@ import {
   type CaseSortColumn,
   type CaseSortDirection,
   type CaseStatusFilter,
+  caseCost,
   caseExpected,
   caseModel,
   caseScoreTone,
@@ -24,7 +25,7 @@ import {
   formatNumber,
   hasActiveCaseFilters,
 } from "../model";
-import { estimateUsageCost, formatUsd } from "../pricing";
+import { formatUsd } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { formatElapsed, jobElapsedMs, runningJobForCase } from "../rerun";
 import { suggestBetterModel } from "../suggest-model";
@@ -417,10 +418,7 @@ function CaseRow({
   const displayFile =
     relativeDisplayPath(testCase.displayFile, workspaceRoot) ||
     testCase.displayFile;
-  const usageCost = estimateUsageCost(
-    testCase.harness?.run?.usage ?? {},
-    pricing,
-  );
+  const usageCost = caseCost(testCase, pricing);
   const spread = judgeSpread(testCase);
   const trials = trialStats(testCase, allCases);
   const tally = judgeTally(testCase);

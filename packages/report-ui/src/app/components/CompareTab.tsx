@@ -9,12 +9,13 @@ import {
   trialStats,
 } from "../compare";
 import {
+  caseCost,
   caseModel,
   compactValue,
   formatDuration,
   formatNumber,
 } from "../model";
-import { estimateUsageCost, formatUsd } from "../pricing";
+import { formatUsd } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { EmptyState } from "../ui";
 import { DetailContent, DetailSection } from "./DetailLayout";
@@ -97,10 +98,7 @@ export function CompareTab({
               <tbody>
                 {rows.map((row) => {
                   const rowDelta = caseDelta(row, baselineCases, pricing);
-                  const cost = estimateUsageCost(
-                    row.harness?.run?.usage ?? {},
-                    pricing,
-                  );
+                  const cost = caseCost(row, pricing);
                   return (
                     <tr key={row.id}>
                       <td className="border-b border-line-subtle px-2 py-2">

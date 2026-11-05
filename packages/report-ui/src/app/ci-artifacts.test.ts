@@ -63,6 +63,23 @@ describe("formatJunitXml", () => {
     expect(xml).toContain("Score: 0.20 below threshold: 1.00");
     expect(xml).toContain('name="suite &gt; passes"');
   });
+
+  test("marks skipped cases as skipped, not passed", () => {
+    const xml = formatJunitXml({
+      ...workspace,
+      cases: [
+        ...workspace.cases,
+        {
+          ...workspace.cases[0]!,
+          id: "todo",
+          displayName: "suite > todo",
+          status: "skipped",
+        },
+      ],
+    });
+    expect(xml).toMatch(/name="suite &gt; todo"[^>]*>\s*<skipped \/>/);
+    expect(xml).toContain('skipped="1"');
+  });
 });
 
 describe("formatPullRequestComment", () => {
@@ -71,5 +88,43 @@ describe("formatPullRequestComment", () => {
     expect(markdown).toContain("50%");
     expect(markdown).toContain("1 passed, 1 failed");
     expect(markdown).toContain("suite > fails");
+  });
+
+  test("includes recorded judge cost in the total", () => {
+    const [passing, failing] = workspace.cases;
+    const markdown = formatPullRequestComment({
+      ...workspace,
+      cases: [
+        {
+          ...passing!,
+          harness: {
+            name: "app",
+            run: {
+              session: { events: [] },
+              usage: { costUsd: 0.5 },
+              errors: [],
+            },
+          },
+          eval: {
+            avgScore: 1,
+            scores: [
+              {
+                name: "judge",
+                score: 1,
+                judgeRuns: [
+                  {
+                    session: { events: [] },
+                    usage: { costUsd: 0.25 },
+                    errors: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        failing!,
+      ],
+    });
+    expect(markdown).toContain("| Est. cost | $0.75");
   });
 });
