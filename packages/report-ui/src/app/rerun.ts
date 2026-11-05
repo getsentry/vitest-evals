@@ -88,15 +88,34 @@ export function formatRerunCommand(command: RerunCommand): string {
 
 /** The command the report server will run, built from the served meta. */
 export function previewRerunCommand(
-  testCase: { file: string; ancestorTitles: string[]; title: string },
+  testCase: {
+    file: string;
+    displayFile?: string;
+    ancestorTitles: string[];
+    title: string;
+  },
   meta: { workspaceRoot?: string; evalConfig?: string },
 ): string {
-  const file = relativeDisplayPath(testCase.file, meta.workspaceRoot);
+  const file = rerunPreviewFile(testCase, meta.workspaceRoot);
   return formatRerunCommand({
     file,
     testNamePattern: rerunTestNamePattern(testCase),
     config: looksLikeEvalFile(file) ? meta.evalConfig : undefined,
   });
+}
+
+// Mirrors the server's resolveCaseFile: a report from another checkout (CI)
+// has a `file` outside this workspace, so the server runs `displayFile`.
+function rerunPreviewFile(
+  testCase: { file: string; displayFile?: string },
+  workspaceRoot: string | undefined,
+) {
+  const relative = relativeDisplayPath(testCase.file, workspaceRoot);
+  const outsideWorkspace =
+    relative === testCase.file && /^(?:\/|[A-Za-z]:[\\/])/.test(relative);
+  return outsideWorkspace && testCase.displayFile
+    ? testCase.displayFile
+    : relative;
 }
 
 /** Escapes a case title so vitest `-t` matches it literally. */

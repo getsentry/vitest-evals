@@ -60,6 +60,20 @@ describe("formatRerunCommand", () => {
     );
   });
 
+  test("uses displayFile for reports from another checkout", () => {
+    expect(
+      previewRerunCommand(
+        {
+          file: "/home/runner/work/app/app/evals/refund.eval.ts",
+          displayFile: "evals/refund.eval.ts",
+          ancestorTitles: [],
+          title: "approves",
+        },
+        { workspaceRoot: "/repo" },
+      ),
+    ).toBe("vitest run evals/refund.eval.ts --testNamePattern='^approves$'");
+  });
+
   test("keeps unit-test files on the default vitest config", () => {
     expect(
       previewRerunCommand(
