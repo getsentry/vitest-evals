@@ -58,7 +58,10 @@ describe("mergeRerunWorkspace", () => {
     };
     const incoming: ReportWorkspace = {
       schemaVersion: 2,
-      runs: [runOf("run-1", 1_000), runOf("run-2", 9_000)],
+      runs: [
+        runOf("run-1", 1_000),
+        { ...runOf("run-2", 9_000), durationMs: 16 },
+      ],
       cases: [
         caseOf({ id: "x1", runId: "run-1", fullName: "atlas", title: "A" }),
         caseOf({
@@ -79,6 +82,7 @@ describe("mergeRerunWorkspace", () => {
       ["a2", "failed"],
     ]);
     expect(merged.runs.map((run) => run.startedAt)).toEqual([1_000, 2_000]);
+    expect(merged.runs.map((run) => run.durationMs)).toEqual([0, 0]);
   });
 
   test("keeps the previous workspace when the incoming dump is empty", () => {

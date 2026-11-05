@@ -55,8 +55,8 @@ function mergeRuns(
   cases: ReportCase[],
 ): ReportRun[] {
   const runs = new Map(previous.map((run) => [run.id, run]));
-  // Keep each known run's original startedAt so a rerun does not reorder
-  // which run counts as the baseline.
+  // Keep each known run's original startedAt and wall-clock duration. A rerun
+  // dump only covers the rerun case, so its timing is not the run's timing.
   for (const run of incoming) {
     if (!runs.has(run.id)) {
       runs.set(run.id, run);
@@ -73,10 +73,6 @@ function mergeRuns(
     return {
       ...run,
       status: evalFailed > 0 ? "failed" : "passed",
-      durationMs: runCases.reduce(
-        (total, testCase) => total + (testCase.durationMs ?? 0),
-        0,
-      ),
       totals: {
         ...run.totals,
         total: Math.max(run.totals.total, runCases.length),
