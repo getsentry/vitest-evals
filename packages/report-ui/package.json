@@ -32,7 +32,8 @@
   "scripts": {
     "build": "tsup --config ./tsup.config.ts && vite build",
     "typecheck": "tsc --noEmit -p ./tsconfig.json",
-    "visual:fixture": "pnpm run build && node ./dist/cli.js ./fixtures/vitest-results.visual.json --workspace /repo"
+    "test:visual": "pnpm run build && vitest run -c ./vitest.visual.config.ts",
+    "visual:fixture": "pnpm run build && node ./dist/cli.js ./fixtures/vitest-results.visual-baseline.json ./fixtures/vitest-results.visual.json --workspace /repo"
   },
   "dependencies": {
     "@vitest-evals/core": "workspace:*"
@@ -43,6 +44,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "playwright": "^1.64.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react18-json-view": "^0.2.10",
