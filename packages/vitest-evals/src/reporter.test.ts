@@ -22,6 +22,7 @@ function createReporter(options: ReporterOptions = {}) {
   const reporter = new DefaultEvalReporter({ isTTY: false, ...options });
   reporter.onInit({
     logger,
+    state: {},
     config: {
       hideSkippedTests: false,
       slowTestThreshold: 300,
@@ -132,6 +133,7 @@ function createTestCase({
       duration: 42,
     }),
     annotations: () => [],
+    benchmarks: () => [],
     fullName,
   };
 }
@@ -161,8 +163,9 @@ describe("DefaultEvalReporter", () => {
 
     reporter.onTestCaseResult(createTestCase({}) as any);
 
+    // Vitest's own verbose title: Vitest 5 prints the line without the column.
     expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).toContain(
-      "fixtures/reporter.eval.ts:12:3 > streams eval progress 42ms",
+      "fixtures/reporter.eval.ts:12 > streams eval progress 42ms",
     );
     expect(stripVTControlCharacters(logger.log.mock.calls[0][0])).not.toContain(
       "[0.",

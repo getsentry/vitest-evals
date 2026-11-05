@@ -306,7 +306,8 @@ export interface EvalMatchers<R = unknown> {
 }
 
 declare module "vitest" {
-  interface Assertion<T = any> extends EvalMatchers<T> {}
+  interface Assertion<R extends void | Promise<void> = void, T = unknown>
+    extends EvalMatchers<T> {}
   interface AsymmetricMatchersContaining extends EvalMatchers {}
 
   interface TaskMeta extends EvalTaskMeta {}
