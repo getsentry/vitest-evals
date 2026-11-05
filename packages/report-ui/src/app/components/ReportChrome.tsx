@@ -13,7 +13,7 @@ import {
   formatScore,
   type summarizeWorkspace,
 } from "../model";
-import { type UsageCost, formatUsd } from "../pricing";
+import { type UsageCost, formatCostTotal } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { toReportSearch } from "../search";
 import { type Tone, cx, toneTextClass } from "../ui";
@@ -161,14 +161,14 @@ export function SummaryBar({
           <SummaryCounter
             detail={
               judgeCost
-                ? `${formatUsd(appCost?.totalUsd)} app + ${formatUsd(judgeCost.totalUsd)} judge`
+                ? `${formatCostTotal(appCost)} app + ${formatCostTotal(judgeCost)} judge`
                 : undefined
             }
             hint={
               <CostHelp align="right" cost={workspaceCost} pricing={pricing} />
             }
             label="Cost"
-            value={`${formatUsd(workspaceCost?.totalUsd)} · ${formatNumber(summary.totalTokens)}`}
+            value={`${formatCostTotal(workspaceCost)} · ${formatNumber(summary.totalTokens)}`}
           />
           {summary.toolCallCount > 0 ? (
             <SummaryCounter

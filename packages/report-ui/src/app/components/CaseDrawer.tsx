@@ -11,7 +11,7 @@ import {
   formatDuration,
   formatJson,
 } from "../model";
-import { formatUsd } from "../pricing";
+import { formatCostTotal } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { suggestBetterModel } from "../suggest-model";
 import type { DetailTab } from "../types";
@@ -25,6 +25,7 @@ import { PathLabel } from "./PathLabel";
 import { RawTab } from "./RawTab";
 import { ScoreValue, StatusMark } from "./ReportPrimitives";
 import { RerunButton } from "./RerunButton";
+import { useRerunActions } from "./RerunSession";
 import { TranscriptTab } from "./TranscriptTab";
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
@@ -62,6 +63,7 @@ export function CaseDrawer({
   onTabChange: (tab: DetailTab) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const { setTrayHost } = useRerunActions();
 
   useEffect(() => {
     if (!open) {
@@ -82,6 +84,7 @@ export function CaseDrawer({
         dialog.setAttribute("open", "");
       }
     }
+    setTrayHost(dialog);
 
     const focusFrame = window.requestAnimationFrame(() => {
       dialog
@@ -90,6 +93,7 @@ export function CaseDrawer({
     });
 
     return () => {
+      setTrayHost(null);
       window.cancelAnimationFrame(focusFrame);
       if (dialog?.open) {
         if (typeof dialog.close === "function") {
@@ -101,7 +105,7 @@ export function CaseDrawer({
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, setTrayHost]);
 
   const { pricing, workspaceRoot } = useReportMeta();
 
@@ -175,7 +179,7 @@ export function CaseDrawer({
                     Cost
                   </span>
                   <span className="font-mono text-xs font-semibold tabular-nums text-ink">
-                    {formatUsd(usageCost.totalUsd)}
+                    {formatCostTotal(usageCost)}
                   </span>
                   <CostHelp align="right" cost={usageCost} pricing={pricing} />
                 </div>
@@ -240,20 +244,20 @@ export function CaseDrawer({
                   emphasis="primary"
                   label="Markdown"
                   size="compact"
-                  text={caseToMarkdown(testCase, run)}
+                  text={() => caseToMarkdown(testCase, run)}
                 />
               )}
               {failureText ? (
                 <CopyButton
                   label="Markdown"
                   size="compact"
-                  text={caseToMarkdown(testCase, run)}
+                  text={() => caseToMarkdown(testCase, run)}
                 />
               ) : null}
               <CopyButton
                 label="Case JSON"
                 size="compact"
-                text={formatJson(testCase)}
+                text={() => formatJson(testCase)}
               />
               <RerunButton testCase={testCase} />
               {filtersActive ? (

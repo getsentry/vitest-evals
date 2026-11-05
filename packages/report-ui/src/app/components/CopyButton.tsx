@@ -12,7 +12,8 @@ export function CopyButton({
   icon?: boolean;
   label?: string;
   size?: "md" | "compact";
-  text: string;
+  /** Text to copy, or a builder that runs only when the button is clicked. */
+  text: string | (() => string);
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -51,7 +52,9 @@ export function CopyButton({
       aria-label={icon ? (copied ? "Copied" : label) : undefined}
       title={icon ? (copied ? "Copied" : label) : undefined}
       onClick={async () => {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(
+          typeof text === "function" ? text() : text,
+        );
         setCopied(true);
       }}
     >

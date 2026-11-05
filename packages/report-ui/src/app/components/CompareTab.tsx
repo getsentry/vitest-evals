@@ -16,7 +16,7 @@ import {
   formatDuration,
   formatNumber,
 } from "../model";
-import { formatUsd } from "../pricing";
+import { formatCostTotal } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { EmptyState } from "../ui";
 import { DetailContent, DetailSection } from "./DetailLayout";
@@ -129,7 +129,7 @@ export function CompareTab({
                         {formatSignedScore(rowDelta?.score)}
                       </td>
                       <td className="border-b border-line-subtle px-2 py-2 text-right font-mono text-xs tabular-nums">
-                        {cost ? formatUsd(cost.totalUsd) : "n/a"}
+                        {formatCostTotal(cost)}
                       </td>
                       <td className="border-b border-line-subtle px-2 py-2 text-right font-mono text-xs tabular-nums">
                         {formatDuration(row.durationMs)}

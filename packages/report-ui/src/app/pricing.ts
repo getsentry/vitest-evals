@@ -52,12 +52,19 @@ export type UsageCost = {
   pricedCachedReads: boolean;
   usedTotalTokensFallback: boolean;
   mixed?: boolean;
+  /**
+   * Usages with tokens or a model that no rate matched. When above zero the
+   * total is a lower bound, shown as `≥$X`.
+   */
+  unpricedUsages: number;
 };
 
 export type ReportUiMeta = {
   workspaceRoot?: string;
   /** Eval vitest config found at the workspace root, used for re-runs. */
   evalConfig?: string;
+  /** True when the server accepts re-run requests (loopback + workspace). */
+  rerunEnabled?: boolean;
   pricing: PricingTable;
 };
 
@@ -133,14 +140,6 @@ export const FALLBACK_PRICING: PricingTable = {
       cacheReadPerMillionUsd: 0.075,
     },
     {
-      id: "gpt-5.6-terra",
-      provider: "openai",
-      toolCall: true,
-      reasoning: true,
-      inputPerMillionUsd: 1.25,
-      outputPerMillionUsd: 10,
-    },
-    {
       id: "claude-sonnet-4.5",
       provider: "anthropic",
       toolCall: true,
@@ -172,7 +171,18 @@ export const FALLBACK_PRICING: PricingTable = {
   ],
 };
 
-/** Finds the best catalog row for a recorded model id. */
+type RateIndex = {
+  byId: Map<string, ModelRate>;
+  byNormalizedId: Map<string, ModelRate>;
+};
+
+const rateIndexes = new WeakMap<PricingTable, RateIndex>();
+
+/**
+ * Finds the best catalog row for a recorded model id. Tries the exact id,
+ * then the id without a provider prefix, then a normalized id so
+ * `claude-sonnet-4-5-20250929` matches a `claude-sonnet-4.5` row.
+ */
 export function matchModelRate(
   model: string | undefined,
   table: PricingTable,
@@ -180,17 +190,48 @@ export function matchModelRate(
   if (!model) {
     return undefined;
   }
-  const exact = table.models.find((row) => row.id === model);
-  if (exact) {
-    return exact;
-  }
-  const bare = model.split("/").pop() ?? model;
+  const index = rateIndex(table);
   return (
-    table.models.find((row) => row.id === bare) ??
-    table.models.find(
-      (row) => row.id.endsWith(`/${bare}`) || row.id.endsWith(`/${model}`),
-    )
+    index.byId.get(model) ??
+    index.byId.get(bareModelId(model)) ??
+    index.byNormalizedId.get(normalizeModelId(model))
   );
+}
+
+/** Lowercase id without provider prefix, `.` → `-`, or a trailing date. */
+function normalizeModelId(model: string): string {
+  return bareModelId(model)
+    .toLowerCase()
+    .replace(/\./g, "-")
+    .replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2}|latest)$/, "");
+}
+
+function bareModelId(model: string): string {
+  return model.split("/").pop() ?? model;
+}
+
+function rateIndex(table: PricingTable): RateIndex {
+  const cached = rateIndexes.get(table);
+  if (cached) {
+    return cached;
+  }
+  const index: RateIndex = { byId: new Map(), byNormalizedId: new Map() };
+  for (const row of table.models) {
+    setFirst(index.byId, row.id, row);
+  }
+  // Bare and normalized keys never shadow an exact id.
+  for (const row of table.models) {
+    setFirst(index.byId, bareModelId(row.id), row);
+    setFirst(index.byNormalizedId, normalizeModelId(row.id), row);
+  }
+  rateIndexes.set(table, index);
+  return index;
+}
+
+function setFirst(map: Map<string, ModelRate>, key: string, row: ModelRate) {
+  if (!map.has(key)) {
+    map.set(key, row);
+  }
 }
 
 /** Reads cache-hit tokens from harness usage or provider metadata. */
@@ -238,9 +279,14 @@ export function estimateUsageCost(
   const rawInputTokens = usedTotalTokensFallback
     ? (usage.totalTokens ?? 0)
     : reportedInput;
+  // AI SDK `inputTokens` is the total input, including cache reads and
+  // writes, so both are taken out before pricing the uncached remainder.
   const cachedReads = Math.min(cachedReadTokens(usage), rawInputTokens);
-  const uncachedInput = Math.max(0, rawInputTokens - cachedReads);
-  const writes = cacheWriteTokens(usage);
+  const writes = Math.min(
+    cacheWriteTokens(usage),
+    rawInputTokens - cachedReads,
+  );
+  const uncachedInput = Math.max(0, rawInputTokens - cachedReads - writes);
   const pricedCachedReads =
     cachedReads > 0 && rate.cacheReadPerMillionUsd !== undefined;
   const cachedReadUsd = pricedCachedReads
@@ -248,9 +294,8 @@ export function estimateUsageCost(
     : (cachedReads / 1_000_000) * rate.inputPerMillionUsd;
   const inputUsd = (uncachedInput / 1_000_000) * rate.inputPerMillionUsd;
   const cacheWriteUsd =
-    writes > 0 && rate.cacheWritePerMillionUsd !== undefined
-      ? (writes / 1_000_000) * rate.cacheWritePerMillionUsd
-      : 0;
+    (writes / 1_000_000) *
+    (rate.cacheWritePerMillionUsd ?? rate.inputPerMillionUsd);
   const outputUsd = (outputTokens / 1_000_000) * rate.outputPerMillionUsd;
   return {
     model: usage.model,
@@ -271,6 +316,7 @@ export function estimateUsageCost(
     cacheWritePerMillionUsd: rate.cacheWritePerMillionUsd,
     pricedCachedReads,
     usedTotalTokensFallback,
+    unpricedUsages: 0,
   };
 }
 
@@ -291,27 +337,27 @@ function recordedUsageCost(usage: PricedUsage, costUsd: number): UsageCost {
     outputPerMillionUsd: 0,
     pricedCachedReads: false,
     usedTotalTokensFallback: false,
+    unpricedUsages: 0,
   };
 }
 
-/** Sums priced cases. Unmatched models are skipped. */
-export function estimateWorkspaceCost(
-  usages: PricedUsage[],
-  table: PricingTable,
-): number | undefined {
-  return estimateWorkspaceUsageCost(usages, table)?.totalUsd;
-}
-
-/** Same as estimateWorkspaceCost, with token/USD rows for the header popover. */
+/**
+ * Sums priced usages with token/USD rows for the cost popovers. Usages no
+ * rate matches are counted in `unpricedUsages`, so callers can show the
+ * total as a lower bound instead of a silent undercount.
+ */
 export function estimateWorkspaceUsageCost(
   usages: PricedUsage[],
   table: PricingTable,
 ): UsageCost | undefined {
   const costs: UsageCost[] = [];
+  let unpricedUsages = 0;
   for (const usage of usages) {
     const cost = estimateUsageCost(usage, table);
     if (cost) {
       costs.push(cost);
+    } else if (hasBillableUsage(usage)) {
+      unpricedUsages += 1;
     }
   }
   if (costs.length === 0) {
@@ -345,7 +391,26 @@ export function estimateWorkspaceUsageCost(
     pricedCachedReads: costs.some((cost) => cost.pricedCachedReads),
     usedTotalTokensFallback: costs.some((cost) => cost.usedTotalTokensFallback),
     mixed,
+    unpricedUsages,
   };
+}
+
+/** Total USD for display, marked `≥` when some usages had no price. */
+export function formatCostTotal(cost: UsageCost | undefined): string {
+  if (!cost) {
+    return "n/a";
+  }
+  const total = formatUsd(cost.totalUsd);
+  return cost.unpricedUsages > 0 ? `≥${total}` : total;
+}
+
+function hasBillableUsage(usage: PricedUsage): boolean {
+  return (
+    Boolean(usage.model) ||
+    (usage.inputTokens ?? 0) > 0 ||
+    (usage.outputTokens ?? 0) > 0 ||
+    (usage.totalTokens ?? 0) > 0
+  );
 }
 
 function sumCost(

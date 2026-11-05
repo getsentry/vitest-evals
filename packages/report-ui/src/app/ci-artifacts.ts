@@ -7,7 +7,11 @@ import {
   judgeRunsForCase,
   summarizeWorkspace,
 } from "./model";
-import { type PricingTable, estimateWorkspaceCost, formatUsd } from "./pricing";
+import {
+  type PricingTable,
+  estimateWorkspaceUsageCost,
+  formatCostTotal,
+} from "./pricing";
 
 /** Writes a JUnit XML document for CI systems that consume xUnit reports. */
 export function formatJunitXml(workspace: ReportWorkspace): string {
@@ -44,7 +48,7 @@ export function formatPullRequestComment(
   pricing?: PricingTable,
 ): string {
   const summary = summarizeWorkspace(workspace);
-  const cost = estimateWorkspaceCost(
+  const cost = estimateWorkspaceUsageCost(
     workspace.cases.flatMap((testCase) => [
       testCase.harness?.run?.usage ?? {},
       ...judgeRunsForCase(testCase).map((run) => run.usage),
@@ -70,7 +74,7 @@ export function formatPullRequestComment(
     `| Avg score | ${formatScore(summary.averageScore)} |`,
     `| Runtime | ${formatDuration(summary.durationMs)} |`,
     `| Tokens | ${formatNumber(summary.totalTokens)} |`,
-    `| Est. cost | ${formatUsd(cost)} |`,
+    `| Est. cost | ${formatCostTotal(cost)} |`,
   ];
   if (delta) {
     lines.push(

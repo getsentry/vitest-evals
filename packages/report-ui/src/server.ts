@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import { readReportWorkspace } from "@vitest-evals/core/node";
 import { FALLBACK_PRICING, type ReportUiMeta } from "./app/pricing.js";
+import type { RerunApiResult } from "./app/rerun.js";
 import { currentModuleUrl } from "./esm-runtime.js";
 import { loadPricingTable } from "./pricing-catalog.js";
 import { findEvalConfig } from "./rerun-exec.js";
@@ -45,6 +46,8 @@ export type ReportUiServer = {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 0;
+const MAX_JSON_BODY_BYTES = 64 * 1024;
+const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 /** Collects JSON result inputs and serves the report UI. */
 export async function serveReportUi(
@@ -73,14 +76,17 @@ export async function serveReportWorkspace(
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const assetsDir = resolve(options.assetsDir ?? defaultAssetsDir());
+  const loopback = LOOPBACK_HOSTNAMES.has(host);
   const meta: ReportUiMeta = {
     pricing: options.pricing ?? FALLBACK_PRICING,
     workspaceRoot: options.workspaceRoot,
     evalConfig: options.workspaceRoot
       ? await findEvalConfig(options.workspaceRoot)
       : undefined,
+    rerunEnabled: loopback && Boolean(options.workspaceRoot),
   };
   const handler = createRequestHandler(workspace, assetsDir, meta, {
+    loopback,
     resultFiles: options.resultFiles ?? [],
   });
   const server = createServer(handler.handle);
@@ -103,7 +109,7 @@ function createRequestHandler(
   workspace: ReportWorkspace,
   assetsDir: string,
   meta: ReportUiMeta,
-  options: { resultFiles: string[] },
+  options: { loopback: boolean; resultFiles: string[] },
 ) {
   let currentWorkspace = workspace;
   const hub = createRerunHub({
@@ -124,62 +130,41 @@ function createRequestHandler(
           `http://${request.headers.host ?? "localhost"}`,
         );
 
-        if (requestUrl.pathname === "/api/rerun") {
-          if (request.method !== "POST") {
-            sendText(
+        // A page on another site must not read the report through a
+        // rebound DNS name pointing at this loopback server.
+        if (options.loopback && !isLoopbackHostHeader(request.headers.host)) {
+          sendText(response, 403, "Forbidden\n", "text/plain; charset=utf-8");
+          return;
+        }
+
+        const action = API_ACTIONS[requestUrl.pathname];
+        if (action) {
+          const rejection = rejectApiRequest(request, meta);
+          if (rejection) {
+            sendJson(
               response,
-              405,
-              "Method not allowed\n",
-              "text/plain; charset=utf-8",
+              { ok: false, error: rejection.error },
+              rejection.status,
             );
             return;
           }
           let body: unknown;
           try {
             body = await readJsonBody(request);
-          } catch {
-            sendJson(response, { ok: false, error: "Invalid JSON" }, 400);
-            return;
-          }
-          const result = await hub.startJob(body);
-          sendJson(response, result, result.status ?? (result.ok ? 202 : 400));
-          return;
-        }
-
-        if (requestUrl.pathname === "/api/rerun/cancel") {
-          if (request.method !== "POST") {
-            sendText(
+          } catch (error) {
+            const tooLarge = error instanceof BodyTooLargeError;
+            sendJson(
               response,
-              405,
-              "Method not allowed\n",
-              "text/plain; charset=utf-8",
+              {
+                ok: false,
+                error: tooLarge ? "Body too large" : "Invalid JSON",
+              },
+              tooLarge ? 413 : 400,
             );
             return;
           }
-          let cancelBody: unknown;
-          try {
-            cancelBody = await readJsonBody(request);
-          } catch {
-            sendJson(response, { ok: false, error: "Invalid JSON" }, 400);
-            return;
-          }
-          const result = hub.cancelJob(cancelBody);
-          sendJson(response, result, result.status ?? (result.ok ? 200 : 400));
-          return;
-        }
-
-        if (requestUrl.pathname === "/api/reload") {
-          if (request.method !== "POST") {
-            sendText(
-              response,
-              405,
-              "Method not allowed\n",
-              "text/plain; charset=utf-8",
-            );
-            return;
-          }
-          const result = await hub.reloadDump();
-          sendJson(response, result, result.status ?? (result.ok ? 200 : 500));
+          const result = await action(hub, body);
+          sendJson(response, result, result.status);
           return;
         }
 
@@ -210,6 +195,60 @@ function createRequestHandler(
     },
   };
 }
+
+type RerunHub = ReturnType<typeof createRerunHub>;
+
+const API_ACTIONS: Record<
+  string,
+  (hub: RerunHub, body: unknown) => Promise<RerunApiResult> | RerunApiResult
+> = {
+  "/api/rerun": (hub, body) => hub.startJob(body),
+  "/api/rerun/cancel": (hub, body) => hub.cancelJob(body),
+  "/api/reload": (hub) => hub.reloadDump(),
+};
+
+/**
+ * Guards the endpoints that start processes. Requiring a JSON content type
+ * forces a CORS preflight for cross-site pages, and the Origin check rejects
+ * the rest, so only the report's own page can trigger a re-run.
+ */
+function rejectApiRequest(
+  request: IncomingMessage,
+  meta: ReportUiMeta,
+): { status: number; error: string } | undefined {
+  if (request.method !== "POST") {
+    return { status: 405, error: "Method not allowed" };
+  }
+  if (!meta.rerunEnabled) {
+    return {
+      status: 403,
+      error:
+        "Re-run is only available when the report serves on localhost with a workspace root.",
+    };
+  }
+  const contentType = request.headers["content-type"] ?? "";
+  if (!contentType.toLowerCase().startsWith("application/json")) {
+    return { status: 415, error: "Expected application/json" };
+  }
+  const origin = request.headers.origin;
+  if (origin !== undefined && origin !== `http://${request.headers.host}`) {
+    return { status: 403, error: "Cross-origin request rejected" };
+  }
+  return undefined;
+}
+
+function isLoopbackHostHeader(hostHeader: string | undefined) {
+  if (!hostHeader) {
+    return false;
+  }
+  try {
+    return LOOPBACK_HOSTNAMES.has(new URL(`http://${hostHeader}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
+class BodyTooLargeError extends Error {}
 
 function sendInternalServerError(response: ServerResponse, error: unknown) {
   if (response.headersSent) {
@@ -284,10 +323,20 @@ function sendJson(response: ServerResponse, value: unknown, statusCode = 200) {
 function readJsonBody(request: IncomingMessage) {
   return new Promise<unknown>((resolveBody, rejectBody) => {
     const chunks: Buffer[] = [];
-    request.on("data", (chunk) => {
+    let size = 0;
+    request.on("data", (chunk: Buffer) => {
+      size += chunk.byteLength;
+      if (size > MAX_JSON_BODY_BYTES) {
+        // Keep draining so the 413 reaches the client before the socket ends.
+        rejectBody(new BodyTooLargeError());
+        return;
+      }
       chunks.push(chunk);
     });
     request.on("end", () => {
+      if (size > MAX_JSON_BODY_BYTES) {
+        return;
+      }
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw) {
         resolveBody(undefined);

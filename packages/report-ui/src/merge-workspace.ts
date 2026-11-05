@@ -45,8 +45,37 @@ export function mergeRerunWorkspace(
   };
 }
 
+/**
+ * Swaps one case for its freshly re-run result. The case keeps its id, run,
+ * and paths so URL selection and run grouping survive the rerun.
+ */
+export function replaceRerunCase(
+  previous: ReportWorkspace,
+  caseId: string,
+  replacement: ReportCase,
+): ReportWorkspace {
+  const cases = previous.cases.map((testCase) =>
+    testCase.id === caseId
+      ? {
+          ...replacement,
+          id: testCase.id,
+          runId: testCase.runId,
+          source: testCase.source,
+          file: testCase.file,
+          displayFile: testCase.displayFile,
+        }
+      : testCase,
+  );
+  return {
+    schemaVersion: previous.schemaVersion,
+    runs: mergeRuns(previous.runs, [], cases),
+    cases,
+  };
+}
+
 function caseKey(testCase: ReportCase) {
-  return `${testCase.runId}\0${testCase.file}\0${testCase.fullName}`;
+  // displayFile is workspace-relative, so it matches across checkouts.
+  return `${testCase.runId}\0${testCase.displayFile}\0${testCase.fullName}`;
 }
 
 function mergeRuns(

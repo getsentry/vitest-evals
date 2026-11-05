@@ -1,6 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { formatNumber } from "../model";
-import { type PricingTable, type UsageCost, formatUsd } from "../pricing";
+import {
+  type PricingTable,
+  type UsageCost,
+  formatCostTotal,
+  formatUsd,
+} from "../pricing";
 import { cx } from "../ui";
 
 export function CostHelp({
@@ -118,7 +123,7 @@ export function CostHelp({
 }
 
 const FORMULA =
-  "Harness-reported cost is used as-is. Otherwise: uncached input, cache reads, cache writes, and output, each × its USD / 1M-token rate. models.dev first, then LiteLLM. Unknown models are skipped.";
+  "Harness-reported cost is used as-is. Otherwise: uncached input, cache reads, cache writes, and output, each × its USD / 1M-token rate. models.dev first, then LiteLLM. Runs on unknown models are left out, and the total is marked ≥.";
 
 function isFullyRecorded(cost: UsageCost) {
   return cost.recordedUsd > 0 && cost.totalUsd === cost.recordedUsd;
@@ -183,12 +188,15 @@ function CostBreakdown({ cost }: { cost: UsageCost }) {
         )}
         value={formatUsd(cost.outputUsd)}
       />
-      <BreakdownRow label="Total" value={formatUsd(cost.totalUsd)} />
+      <BreakdownRow label="Total" value={formatCostTotal(cost)} />
       <p className="text-[0.7rem] text-muted">
         {cost.matchedId ?? "unmatched"}
         {cost.usedTotalTokensFallback ? " · total tokens billed as input" : ""}
         {cost.cachedReadTokens > 0 && !cost.pricedCachedReads
           ? " · cache hits at the input rate"
+          : ""}
+        {cost.unpricedUsages > 0
+          ? ` · ${cost.unpricedUsages} unpriced run${cost.unpricedUsages === 1 ? "" : "s"} not counted`
           : ""}
       </p>
     </dl>

@@ -22,7 +22,7 @@ import {
 import { ReportHeader, RunStrip, SummaryBar } from "./components/ReportChrome";
 import {
   RerunSessionProvider,
-  useRerunSession,
+  useRerunActions,
 } from "./components/RerunSession";
 import {
   relativeDisplayPath,
@@ -102,7 +102,7 @@ function ReportApp({
   meta: ReportMeta;
   workspace: ReportWorkspace;
 }) {
-  const { requestRerun } = useRerunSession();
+  const { enabled: rerunEnabled, requestRerun } = useRerunActions();
   const { search, setSearch } = useReportSearch();
   const filters = useMemo<CaseFilters>(
     () => ({
@@ -297,13 +297,15 @@ function ReportApp({
           ),
       },
     ];
-    if (selectedCase) {
+    if (selectedCase && rerunEnabled) {
       commands.push({
         id: "rerun-selected",
         group: "Actions",
         label: "Re-run selected case",
         run: () => requestRerun(selectedCase),
       });
+    }
+    if (selectedCase) {
       commands.push({
         id: "open-selected",
         group: "Navigation",
@@ -566,54 +568,6 @@ export function adjacentVisibleCase(
     return cases[index];
   }
   return cases[next];
-}
-
-export function resolveSelectedCaseId(
-  selectedCaseId: string | undefined,
-  filteredCases: ReportWorkspace["cases"],
-) {
-  if (selectedCaseId === undefined) {
-    return undefined;
-  }
-
-  if (filteredCases.some((testCase) => testCase.id === selectedCaseId)) {
-    return selectedCaseId;
-  }
-  return filteredCases[0]?.id;
-}
-
-export function summarizeVisibleWorkspace(
-  workspace: ReportWorkspace,
-  filters: CaseFilters,
-  filteredCases: ReportWorkspace["cases"],
-) {
-  return summarizeWorkspace({
-    ...workspace,
-    cases: filteredCases,
-    runs: visibleWorkspaceRuns(workspace.runs, filters, filteredCases),
-  });
-}
-
-export function visibleWorkspaceRuns(
-  runs: ReportWorkspace["runs"],
-  filters: CaseFilters,
-  filteredCases: ReportWorkspace["cases"],
-) {
-  if (!hasActiveCaseFilters(filters)) {
-    return runs;
-  }
-
-  return visibleRunsForCases(runs, filteredCases);
-}
-
-function visibleRunsForCases(
-  runs: ReportWorkspace["runs"],
-  filteredCases: ReportWorkspace["cases"],
-) {
-  const visibleRunIds = new Set(
-    filteredCases.map((testCase) => testCase.runId),
-  );
-  return runs.filter((run) => visibleRunIds.has(run.id));
 }
 
 export async function loadWorkspace(

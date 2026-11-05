@@ -6,18 +6,21 @@ import type {
 import { caseCost, caseModel } from "./model";
 import type { PricingTable } from "./pricing";
 
-/** Stable identity for the same eval assertion across runs. */
+/**
+ * Stable identity for the same eval assertion across runs. Uses the
+ * workspace-relative path so CI and local reports of one suite line up.
+ */
 export function caseKey(testCase: ReportCase): string {
-  return `${testCase.file}::${testCase.fullName}`;
+  return `${testCase.displayFile}::${testCase.fullName}`;
 }
 
 /** Same leaf title in a file — used to find model variants. */
-export function caseFamilyKey(testCase: ReportCase): string {
-  return `${testCase.file}::${testCase.title}`;
+function caseFamilyKey(testCase: ReportCase): string {
+  return `${testCase.displayFile}::${testCase.title}`;
 }
 
 /** Picks the older run as the default baseline when two or more exist. */
-export function defaultBaselineRun(runs: ReportRun[]): ReportRun | undefined {
+function defaultBaselineRun(runs: ReportRun[]): ReportRun | undefined {
   if (runs.length < 2) {
     return undefined;
   }
@@ -111,6 +114,35 @@ export type TrialStats = {
   meanScore?: number;
   stdevScore?: number;
 };
+
+/** Trial stats for every case, grouped once instead of per row. */
+export function trialStatsByCase(cases: ReportCase[]): Map<string, TrialStats> {
+  const groups = new Map<string, ReportCase[]>();
+  for (const testCase of cases) {
+    const key = `${testCase.runId}\0${caseKey(testCase)}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(testCase);
+    } else {
+      groups.set(key, [testCase]);
+    }
+  }
+  const stats = new Map<string, TrialStats>();
+  for (const trials of groups.values()) {
+    const scores = trials
+      .map((trial) => trial.eval?.avgScore)
+      .filter((score): score is number => typeof score === "number");
+    const groupStats = {
+      count: trials.length,
+      meanScore: mean(scores),
+      stdevScore: stdev(scores),
+    };
+    for (const trial of trials) {
+      stats.set(trial.id, groupStats);
+    }
+  }
+  return stats;
+}
 
 /** Groups same-key cases in one run (retries / trialCount). */
 export function trialStats(

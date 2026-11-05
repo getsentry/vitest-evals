@@ -2,7 +2,7 @@ import type { ReportCase } from "@vitest-evals/core";
 import { useReportMeta } from "../report-meta";
 import { previewRerunCommand } from "../rerun";
 import { cx } from "../ui";
-import { useRerunSession } from "./RerunSession";
+import { useRerunActions } from "./RerunSession";
 
 export function RerunButton({
   testCase,
@@ -11,8 +11,12 @@ export function RerunButton({
   testCase: ReportCase;
   compact?: boolean;
 }) {
-  const { requestRerun } = useRerunSession();
-  const command = previewRerunCommand(testCase, useReportMeta());
+  const { enabled, requestRerun } = useRerunActions();
+  const meta = useReportMeta();
+  if (!enabled) {
+    return null;
+  }
+  const command = previewRerunCommand(testCase, meta);
 
   return (
     <button

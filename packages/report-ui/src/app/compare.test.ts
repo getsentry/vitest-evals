@@ -30,16 +30,17 @@ function testCase(
 }
 
 describe("case identity", () => {
-  test("keys a case by file and full name", () => {
+  test("keys a case by workspace-relative file and full name", () => {
     expect(
       caseKey(
         testCase({
           id: "a",
-          file: "/repo/a.ts",
+          file: "/home/runner/work/repo/a.ts",
+          displayFile: "a.ts",
           fullName: "suite case",
         }),
       ),
-    ).toBe("/repo/a.ts::suite case");
+    ).toBe("a.ts::suite case");
   });
 });
 

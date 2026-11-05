@@ -1,45 +1,50 @@
 import { describe, expect, test } from "vitest";
 import {
-  escapeRegExp,
   formatElapsed,
   formatRerunCommand,
   jobElapsedMs,
   looksLikeEvalFile,
   previewRerunCommand,
-  rerunRequest,
+  rerunTestNamePattern,
   runningJobForCase,
 } from "./rerun";
 
-describe("rerunRequest", () => {
-  test("takes file and title from the case", () => {
+describe("rerunTestNamePattern", () => {
+  test("anchors the full describe > test name and escapes it", () => {
     expect(
-      rerunRequest({
-        file: "/repo/evals/refund.eval.ts",
-        title: "approves eligible refund",
+      rerunTestNamePattern({
+        ancestorTitles: ["refunds"],
+        title: "approves (eligible)",
       }),
-    ).toEqual({
-      file: "/repo/evals/refund.eval.ts",
-      title: "approves eligible refund",
-    });
+    ).toBe("^refunds > approves \\(eligible\\)$");
+  });
+
+  test("does not match a longer title that shares the prefix", () => {
+    const pattern = new RegExp(
+      rerunTestNamePattern({ ancestorTitles: [], title: "returns weather" }),
+    );
+    expect(pattern.test("returns weather")).toBe(true);
+    expect(pattern.test("returns weather for Paris")).toBe(false);
   });
 });
 
 describe("formatRerunCommand", () => {
-  test("quotes titles that need a regex escape", () => {
+  test("quotes patterns that need a shell escape", () => {
     expect(
       formatRerunCommand({
         file: "evals/refund.eval.ts",
-        title: "refund (eligible)",
+        testNamePattern: "^refund \\(eligible\\)$",
         config: "vitest.evals.config.ts",
       }),
     ).toBe(
-      "pnpm exec vitest run evals/refund.eval.ts -t 'refund \\(eligible\\)' --config vitest.evals.config.ts",
+      "vitest run evals/refund.eval.ts --testNamePattern='^refund \\(eligible\\)$' --config vitest.evals.config.ts",
     );
   });
 
   test("previews the server command from the served workspace meta", () => {
     const testCase = {
       file: "/repo/evals/refund.eval.ts",
+      ancestorTitles: [],
       title: "approves",
     };
     expect(
@@ -48,20 +53,20 @@ describe("formatRerunCommand", () => {
         evalConfig: "vitest.eval.config.ts",
       }),
     ).toBe(
-      "pnpm exec vitest run evals/refund.eval.ts -t approves --config vitest.eval.config.ts",
+      "vitest run evals/refund.eval.ts --testNamePattern='^approves$' --config vitest.eval.config.ts",
     );
     expect(previewRerunCommand(testCase, { workspaceRoot: "/repo" })).toBe(
-      "pnpm exec vitest run evals/refund.eval.ts -t approves",
+      "vitest run evals/refund.eval.ts --testNamePattern='^approves$'",
     );
   });
 
   test("keeps unit-test files on the default vitest config", () => {
     expect(
-      formatRerunCommand({
-        file: "src/refund.spec.ts",
-        title: "approves",
-      }),
-    ).toBe("pnpm exec vitest run src/refund.spec.ts -t approves");
+      previewRerunCommand(
+        { file: "/repo/src/refund.spec.ts", ancestorTitles: [], title: "a" },
+        { workspaceRoot: "/repo", evalConfig: "vitest.eval.config.ts" },
+      ),
+    ).toBe("vitest run src/refund.spec.ts --testNamePattern='^a$'");
   });
 });
 
@@ -88,6 +93,7 @@ describe("jobElapsedMs", () => {
       jobElapsedMs(
         {
           id: "1",
+          caseId: "c1",
           title: "case",
           command: "vitest",
           status: "running",
@@ -101,6 +107,7 @@ describe("jobElapsedMs", () => {
       jobElapsedMs(
         {
           id: "1",
+          caseId: "c1",
           title: "case",
           command: "vitest",
           status: "ok",
@@ -115,34 +122,19 @@ describe("jobElapsedMs", () => {
 });
 
 describe("runningJobForCase", () => {
-  test("matches the in-flight job by display name", () => {
+  test("matches the in-flight job by case id, not title", () => {
     const jobs = [
       {
         id: "1",
-        title: "Product metadata suggestion — Datafast > Datafast",
-        command: "pnpm exec vitest",
+        caseId: "case-a",
+        title: "Datafast",
+        command: "vitest run",
         status: "running" as const,
         log: "",
         startedAt: 1,
       },
     ];
-    expect(
-      runningJobForCase(jobs, {
-        displayName: "Product metadata suggestion — Datafast > Datafast",
-        title: "Datafast",
-      })?.id,
-    ).toBe("1");
-    expect(
-      runningJobForCase(jobs, {
-        displayName: "other",
-        title: "Atlas",
-      }),
-    ).toBeUndefined();
-  });
-});
-
-describe("escapeRegExp", () => {
-  test("escapes regex metacharacters", () => {
-    expect(escapeRegExp("a.b+c")).toBe("a\\.b\\+c");
+    expect(runningJobForCase(jobs, { id: "case-a" })?.id).toBe("1");
+    expect(runningJobForCase(jobs, { id: "case-b" })).toBeUndefined();
   });
 });

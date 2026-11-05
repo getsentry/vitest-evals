@@ -1,11 +1,12 @@
 import type { ReportCase, ReportRun } from "@vitest-evals/core";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import {
   type CaseDelta,
+  type TrialStats,
   formatSignedScore,
   formatSignedUsd,
   judgeSpread,
-  trialStats,
+  trialStatsByCase,
 } from "../compare";
 import {
   distinctPathLabels,
@@ -29,9 +30,9 @@ import {
   formatNumber,
   hasActiveCaseFilters,
 } from "../model";
-import { formatUsd } from "../pricing";
+import { formatCostTotal } from "../pricing";
 import { useReportMeta } from "../report-meta";
-import { formatElapsed, jobElapsedMs, runningJobForCase } from "../rerun";
+import { runningJobForCase } from "../rerun";
 import { suggestBetterModel } from "../suggest-model";
 import { EmptyState, Input, Select, cx } from "../ui";
 import { FileOpenMenu } from "./FileOpenMenu";
@@ -39,7 +40,7 @@ import { InstantTooltip } from "./InstantTooltip";
 import { ModelHint } from "./ModelHint";
 import { ScoreValue, StatusMark } from "./ReportPrimitives";
 import { RerunButton } from "./RerunButton";
-import { TaskSpinner, useRerunSession } from "./RerunSession";
+import { JobElapsed, TaskSpinner, useRerunJobs } from "./RerunSession";
 
 type CaseColumn = {
   id: CaseSortColumn;
@@ -319,6 +320,7 @@ function CaseTable({
   onSelectCase: (testCase: ReportCase) => void;
   onSortChange: (column: CaseSortColumn) => void;
 }) {
+  const trials = useMemo(() => trialStatsByCase(allCases), [allCases]);
   if (cases.length === 0) {
     return <EmptyState>No matching eval cases</EmptyState>;
   }
@@ -381,13 +383,13 @@ function CaseTable({
           {cases.map((testCase) => (
             <CaseRow
               key={testCase.id}
-              allCases={allCases}
               delta={deltas.get(testCase.id)}
               query={query}
               selected={selectedCaseId === testCase.id}
               showDelta={columns.some((column) => column.id === "delta")}
               showExpected={columns.some((column) => column.id === "expected")}
               testCase={testCase}
+              trials={trials.get(testCase.id) ?? SINGLE_TRIAL}
               onSelectCase={onSelectCase}
             />
           ))}
@@ -397,26 +399,28 @@ function CaseTable({
   );
 }
 
+const SINGLE_TRIAL: TrialStats = { count: 1 };
+
 function CaseRow({
-  allCases,
   delta,
   query,
   selected,
   showDelta,
   showExpected,
   testCase,
+  trials,
   onSelectCase,
 }: {
-  allCases: ReportCase[];
   delta: CaseDelta | undefined;
   query: string;
   selected: boolean;
   showDelta: boolean;
   showExpected: boolean;
   testCase: ReportCase;
+  trials: TrialStats;
   onSelectCase: (testCase: ReportCase) => void;
 }) {
-  const { jobs, now } = useRerunSession();
+  const jobs = useRerunJobs();
   const runningJob = runningJobForCase(jobs, testCase);
   const { pricing, workspaceRoot } = useReportMeta();
   const model = caseModel(testCase);
@@ -427,7 +431,6 @@ function CaseRow({
     testCase.displayFile;
   const usageCost = caseCost(testCase, pricing);
   const spread = judgeSpread(testCase);
-  const trials = trialStats(testCase, allCases);
   const tally = judgeTally(testCase);
   const scoreHint = [
     judgeTallyLabel(tally),
@@ -572,7 +575,7 @@ function CaseRow({
         >
           {runningJob ? (
             <span className="text-warn">
-              {formatElapsed(jobElapsedMs(runningJob, now))}
+              <JobElapsed job={runningJob} />
             </span>
           ) : (
             formatDuration(testCase.durationMs)
@@ -596,7 +599,7 @@ function CaseRow({
           selected={cellSelected}
           onClick={selectCase}
         >
-          {usageCost ? formatUsd(usageCost.totalUsd) : "n/a"}
+          {formatCostTotal(usageCost)}
         </CaseCellButton>
       </td>
       <td className="min-w-0 p-0 align-middle">

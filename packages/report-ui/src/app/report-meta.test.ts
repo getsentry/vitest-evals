@@ -20,6 +20,7 @@ describe("readReportMeta", () => {
       }),
     ).toEqual({
       workspaceRoot: "/repo",
+      rerunEnabled: false,
       pricing: {
         source: "https://models.dev/api.json",
         sources: FALLBACK_PRICING.sources,
@@ -36,7 +37,13 @@ describe("readReportMeta", () => {
 
   test("falls back when the payload is empty", () => {
     expect(readReportMeta({})).toEqual({
+      rerunEnabled: false,
       pricing: FALLBACK_PRICING,
     });
+  });
+
+  test("enables rerun only when the server says so", () => {
+    expect(readReportMeta({ rerunEnabled: true }).rerunEnabled).toBe(true);
+    expect(readReportMeta({ rerunEnabled: "yes" }).rerunEnabled).toBe(false);
   });
 });

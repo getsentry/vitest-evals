@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useReportMeta } from "../report-meta";
 import {
   type HubEvent,
@@ -25,20 +26,53 @@ import { cx } from "../ui";
 import { formatVitestLog } from "../vitest-log";
 import { CopyButton } from "./CopyButton";
 
-type RerunSessionValue = {
-  jobs: RerunJobView[];
-  now: number;
+type RerunActions = {
+  /** False when the server refuses re-runs (non-loopback or no workspace). */
+  enabled: boolean;
   requestRerun: (testCase: ReportCase) => void;
+  /**
+   * Renders the task tray inside this element while it is set. The case
+   * drawer is a modal dialog, so a tray outside it would be inert.
+   */
+  setTrayHost: (host: HTMLElement | null) => void;
 };
 
-const RerunSessionContext = createContext<RerunSessionValue>({
-  jobs: [],
-  now: 0,
+const RerunActionsContext = createContext<RerunActions>({
+  enabled: false,
   requestRerun: () => undefined,
+  setTrayHost: () => undefined,
 });
 
-export function useRerunSession(): RerunSessionValue {
-  return useContext(RerunSessionContext);
+const RerunJobsContext = createContext<RerunJobView[]>([]);
+
+/** Stable re-run actions; reading them never re-renders on job updates. */
+export function useRerunActions(): RerunActions {
+  return useContext(RerunActionsContext);
+}
+
+/** Current re-run jobs, without their logs. Changes when a job changes. */
+export function useRerunJobs(): RerunJobView[] {
+  return useContext(RerunJobsContext);
+}
+
+/** Wall clock that ticks every 500ms while `active` is true. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+/** Live elapsed time for one job. Only this text re-renders each tick. */
+export function JobElapsed({ job }: { job: RerunJobView }) {
+  const now = useNow(job.status === "running");
+  return <>{formatElapsed(jobElapsedMs(job, now))}</>;
 }
 
 export function RerunSessionProvider({
@@ -49,20 +83,24 @@ export function RerunSessionProvider({
   onDump: () => void;
 }) {
   const meta = useReportMeta();
+  const enabled = meta.rerunEnabled === true;
   const [jobs, setJobs] = useState<RerunJobView[]>([]);
-  const [now, setNow] = useState(() => Date.now());
+  // Logs live apart from jobs so streaming output re-renders only the tray.
+  const [logs, setLogs] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<ReportCase>();
-  const running = jobs.some((job) => job.status === "running");
+  const [trayHost, setTrayHost] = useState<HTMLElement | null>(null);
+
+  const applyJob = useCallback((job: RerunJobView) => {
+    setJobs((current) => upsertJob(current, { ...job, log: "" }));
+    if (job.log) {
+      setLogs((current) => ({ ...current, [job.id]: job.log }));
+    }
+  }, []);
 
   useEffect(() => {
-    if (!running) {
+    if (!enabled) {
       return;
     }
-    const timer = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(timer);
-  }, [running]);
-
-  useEffect(() => {
     const source = new EventSource("/api/events");
     source.onmessage = (message) => {
       let event: HubEvent;
@@ -72,21 +110,21 @@ export function RerunSessionProvider({
         return;
       }
       if (event.type === "hello") {
-        setJobs(event.jobs);
+        setJobs(event.jobs.map((job) => ({ ...job, log: "" })));
+        setLogs(Object.fromEntries(event.jobs.map((job) => [job.id, job.log])));
         return;
       }
       if (event.type === "job") {
-        setJobs((current) => upsertJob(current, event.job));
+        applyJob(event.job);
         return;
       }
       if (event.type === "log") {
-        setJobs((current) =>
-          current.map((job) =>
-            job.id === event.jobId
-              ? { ...job, log: trimRerunLog(`${job.log}${event.chunk}`) }
-              : job,
+        setLogs((current) => ({
+          ...current,
+          [event.jobId]: trimRerunLog(
+            `${current[event.jobId] ?? ""}${event.chunk}`,
           ),
-        );
+        }));
         return;
       }
       if (event.type === "dump") {
@@ -94,67 +132,82 @@ export function RerunSessionProvider({
       }
     };
     return () => source.close();
-  }, [onDump]);
+  }, [applyJob, enabled, onDump]);
 
   const requestRerun = useCallback((testCase: ReportCase) => {
     setPending(testCase);
   }, []);
+  const cancelPending = useCallback(() => setPending(undefined), []);
 
-  const value = useMemo(
-    () => ({ jobs, now, requestRerun }),
-    [jobs, now, requestRerun],
+  const actions = useMemo(
+    () => ({ enabled, requestRerun, setTrayHost }),
+    [enabled, requestRerun],
   );
 
+  const confirmPending = async () => {
+    const testCase = pending;
+    setPending(undefined);
+    if (!testCase) {
+      return;
+    }
+    const result = await postRerun(testCase);
+    if (result.job) {
+      applyJob(result.job);
+    }
+    if (!result.ok && !result.job) {
+      const failedAt = Date.now();
+      applyJob({
+        id: `local-${failedAt}`,
+        caseId: testCase.id,
+        title: testCase.displayName,
+        command: previewRerunCommand(testCase, meta),
+        status: "err",
+        log: "",
+        startedAt: failedAt,
+        endedAt: failedAt,
+        error: result.error,
+      });
+    }
+  };
+
   return (
-    <RerunSessionContext.Provider value={value}>
-      {children}
-      {pending ? (
-        <RerunConfirm
-          testCase={pending}
-          onCancel={() => setPending(undefined)}
-          onConfirm={async () => {
-            const testCase = pending;
-            setPending(undefined);
-            const result = await postRerun(testCase);
-            if (result.job) {
-              setJobs((current) => upsertJob(current, result.job!));
-            } else if (!result.ok) {
-              setJobs((current) => [
-                {
-                  id: `local-${Date.now()}`,
-                  title: testCase.displayName,
-                  command: previewRerunCommand(testCase, meta),
-                  status: "err",
-                  log: "",
-                  startedAt: Date.now(),
-                  endedAt: Date.now(),
-                  error: result.error ?? "Re-run failed",
-                },
-                ...current,
-              ]);
-            }
-          }}
-        />
-      ) : null}
-      <TaskTray
-        jobs={jobs}
-        now={now}
-        onCancel={async (jobId) => {
-          const result = await postCancel(jobId);
-          if (result.job) {
-            setJobs((current) => upsertJob(current, result.job!));
-          }
-        }}
-        onClearDone={() => {
-          setJobs((current) =>
-            current.filter((job) => job.status === "running"),
-          );
-        }}
-        onReload={() => {
-          void postReload();
-        }}
-      />
-    </RerunSessionContext.Provider>
+    <RerunActionsContext.Provider value={actions}>
+      <RerunJobsContext.Provider value={jobs}>
+        {children}
+        {pending ? (
+          <RerunConfirm
+            testCase={pending}
+            onCancel={cancelPending}
+            onConfirm={() => void confirmPending()}
+          />
+        ) : null}
+        {jobs.length > 0
+          ? createPortal(
+              <TaskTray
+                // Remount when the host moves so the popover re-opens on top.
+                key={trayHost ? "drawer" : "page"}
+                jobs={jobs}
+                logs={logs}
+                onCancel={async (jobId) => {
+                  const result = await postCancel(jobId);
+                  if (result.job) {
+                    applyJob(result.job);
+                  }
+                }}
+                onClearDone={() => {
+                  setJobs((current) =>
+                    current.filter((job) => job.status === "running"),
+                  );
+                }}
+                onReload={() => {
+                  void postReload();
+                }}
+              />,
+              trayHost ?? document.body,
+            )
+          : null}
+      </RerunJobsContext.Provider>
+    </RerunActionsContext.Provider>
   );
 }
 
@@ -180,32 +233,23 @@ function RerunConfirm({
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) {
-      return;
+    if (dialog && !dialog.open) {
+      dialog.showModal();
     }
-    if (!dialog.open) {
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      } else {
-        dialog.setAttribute("open", "");
-      }
-    }
-    const onDialogCancel = (event: Event) => {
-      event.preventDefault();
-      onCancel();
-    };
-    dialog.addEventListener("cancel", onDialogCancel);
     return () => {
-      dialog.removeEventListener("cancel", onDialogCancel);
-      if (dialog.open) {
+      if (dialog?.open) {
         dialog.close();
       }
     };
-  }, [onCancel]);
+  }, []);
 
   return (
     <dialog
       ref={dialogRef}
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-lg border border-line bg-panel p-4 text-ink shadow-2xl backdrop:bg-ink/30"
       aria-labelledby="rerun-confirm-title"
     >
@@ -249,22 +293,22 @@ function RerunConfirm({
 
 function TaskTray({
   jobs,
-  now,
+  logs,
   onCancel,
   onClearDone,
   onReload,
 }: {
   jobs: RerunJobView[];
-  now: number;
+  logs: Record<string, string>;
   onCancel: (jobId: string) => void;
   onClearDone: () => void;
   onReload: () => void;
 }) {
-  const trayRef = useRef<HTMLElement | null>(null);
   const [openId, setOpenId] = useState<string>();
   const [dismissed, setDismissed] = useState(false);
   const runningJobs = jobs.filter((job) => job.status === "running");
   const running = runningJobs.length;
+  const now = useNow(running > 0);
   const doneCount = jobs.length - running;
   const runningElapsed =
     runningJobs.length === 0
@@ -279,30 +323,10 @@ function TaskTray({
     }
   }, [running]);
 
-  useEffect(() => {
-    const tray = trayRef.current;
-    if (!tray || jobs.length === 0 || !("showPopover" in tray)) {
-      return;
-    }
-    if (dismissed || !dismissed) {
-      try {
-        tray.showPopover();
-      } catch {
-        // Already open, or the browser rejected a duplicate show.
-      }
-    }
-  }, [dismissed, jobs.length]);
-
-  if (jobs.length === 0) {
-    return null;
-  }
-
   if (dismissed) {
     return (
       <button
-        ref={(node) => {
-          trayRef.current = node;
-        }}
+        ref={showAsPopover}
         className="fixed !right-3 !bottom-3 z-[80] !top-auto !left-auto !m-0 rounded-lg border border-line bg-panel px-3 py-2 text-xs font-semibold text-ink shadow-2xl"
         type="button"
         popover="manual"
@@ -327,9 +351,7 @@ function TaskTray({
   const expanded = openId ?? jobs.find((job) => job.status === "running")?.id;
   return (
     <aside
-      ref={(node) => {
-        trayRef.current = node;
-      }}
+      ref={showAsPopover}
       className="fixed !top-auto !right-3 !bottom-3 !left-auto z-[80] !m-0 !max-w-[min(28rem,calc(100vw-1.5rem))] !w-[min(28rem,calc(100vw-1.5rem))] !overflow-hidden rounded-lg border border-line bg-panel shadow-2xl"
       popover="manual"
       aria-label="Re-run tasks"
@@ -416,7 +438,7 @@ function TaskTray({
                   </button>
                 ) : null}
               </div>
-              {open ? <JobLog job={job} /> : null}
+              {open ? <JobLog job={job} log={logs[job.id] ?? ""} /> : null}
             </li>
           );
         })}
@@ -425,17 +447,25 @@ function TaskTray({
   );
 }
 
-function JobLog({ job }: { job: RerunJobView }) {
+/** Opens a `popover="manual"` element in the top layer once it mounts. */
+function showAsPopover(node: HTMLElement | null) {
+  if (node && "showPopover" in node && !node.matches(":popover-open")) {
+    node.showPopover();
+  }
+}
+
+function JobLog({ job, log }: { job: RerunJobView; log: string }) {
   const logRef = useRef<HTMLPreElement>(null);
   const pinRef = useRef(true);
-  const logText = formatVitestLog(job.log) || job.error || "";
+  const logText = formatVitestLog(log) || job.error || "";
 
+  // Runs after every render so new output stays pinned to the bottom.
   useEffect(() => {
-    const log = logRef.current;
-    if (log && pinRef.current && logText.length >= 0) {
-      log.scrollTop = log.scrollHeight;
+    const element = logRef.current;
+    if (element && pinRef.current) {
+      element.scrollTop = element.scrollHeight;
     }
-  }, [logText]);
+  });
 
   return (
     <div className="min-w-0">

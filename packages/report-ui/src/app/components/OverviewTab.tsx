@@ -10,7 +10,7 @@ import {
 import {
   type UsageCost,
   estimateWorkspaceUsageCost,
-  formatUsd,
+  formatCostTotal,
 } from "../pricing";
 import { useReportMeta } from "../report-meta";
 import { EmptyState, cx } from "../ui";
@@ -218,7 +218,7 @@ function UsageGrid({
   const costValue = (cost: UsageCost | undefined) =>
     cost ? (
       <span className="inline-flex items-center gap-1.5">
-        <span>{formatUsd(cost.totalUsd)}</span>
+        <span>{formatCostTotal(cost)}</span>
         <CostHelp cost={cost} pricing={pricing} />
       </span>
     ) : (

@@ -1,6 +1,6 @@
 import type { ReportCase, ReportWorkspace } from "@vitest-evals/core";
 import { describe, expect, test } from "vitest";
-import { mergeRerunWorkspace } from "./merge-workspace";
+import { mergeRerunWorkspace, replaceRerunCase } from "./merge-workspace";
 
 describe("mergeRerunWorkspace", () => {
   test("replaces only the rerun case and keeps the others", () => {
@@ -92,6 +92,51 @@ describe("mergeRerunWorkspace", () => {
     expect(mergeRerunWorkspace(previous, workspaceWith([])).cases[0]?.id).toBe(
       "atlas",
     );
+  });
+});
+
+describe("replaceRerunCase", () => {
+  test("swaps one case's result and keeps its identity and run", () => {
+    const previous: ReportWorkspace = {
+      schemaVersion: 2,
+      runs: [runOf("run-1", 1_000), runOf("run-2", 2_000)],
+      cases: [
+        caseOf({ id: "a1", runId: "run-1", fullName: "atlas", title: "A" }),
+        caseOf({
+          id: "a2",
+          runId: "run-2",
+          fullName: "atlas",
+          title: "A",
+          status: "failed",
+        }),
+      ],
+    };
+    const merged = replaceRerunCase(
+      previous,
+      "a2",
+      caseOf({
+        id: "tmp-id",
+        runId: "tmp-run",
+        file: "/tmp/elsewhere/a.eval.ts",
+        fullName: "atlas",
+        title: "A",
+        status: "passed",
+        durationMs: 5,
+      }),
+    );
+    expect(merged.cases[0]).toBe(previous.cases[0]);
+    expect(merged.cases[1]).toMatchObject({
+      id: "a2",
+      runId: "run-2",
+      file: previous.cases[1]?.file,
+      status: "passed",
+      durationMs: 5,
+    });
+    expect(merged.runs.map((run) => [run.id, run.startedAt])).toEqual([
+      ["run-1", 1_000],
+      ["run-2", 2_000],
+    ]);
+    expect(merged.runs[1]?.status).toBe("passed");
   });
 });
 

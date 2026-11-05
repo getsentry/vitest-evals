@@ -37,7 +37,12 @@ export function readReportMeta(value: unknown): ReportMeta {
     typeof value.evalConfig === "string" && value.evalConfig.length > 0
       ? value.evalConfig
       : undefined;
-  return { workspaceRoot, evalConfig, pricing };
+  return {
+    workspaceRoot,
+    evalConfig,
+    rerunEnabled: value.rerunEnabled === true,
+    pricing,
+  };
 }
 
 function isPricingTable(value: unknown): value is ReportMeta["pricing"] {
