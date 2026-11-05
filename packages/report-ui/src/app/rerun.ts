@@ -1,3 +1,5 @@
+import { relativeDisplayPath } from "./display-path";
+
 /** Body posted to the local report server to re-run one eval case. */
 export type RerunRequest = {
   file: string;
@@ -17,6 +19,16 @@ export const EVAL_VITEST_CONFIGS = [
 /** True when the file is an eval suite, not a default unit-test include. */
 export function looksLikeEvalFile(file: string): boolean {
   return /(?:^|\/)__eval__\/|\.evals?\.[cm]?[jt]sx?$/.test(file);
+}
+
+/** Most recent rerun output kept per job, on the server and in the tray. */
+export const RERUN_LOG_LIMIT = 32_768;
+
+/** Keeps the tail of a rerun log within RERUN_LOG_LIMIT. */
+export function trimRerunLog(value: string): string {
+  return value.length <= RERUN_LOG_LIMIT
+    ? value
+    : value.slice(value.length - RERUN_LOG_LIMIT);
 }
 
 /** Live job shown in the report task tray. */
@@ -72,13 +84,23 @@ export function formatRerunCommand(request: RerunRequest): string {
     "-t",
     shellQuote(escapeRegExp(request.title)),
   ];
-  const config =
-    request.config ??
-    (looksLikeEvalFile(request.file) ? EVAL_VITEST_CONFIGS[0] : undefined);
-  if (config) {
-    parts.push("--config", shellQuote(config));
+  if (request.config) {
+    parts.push("--config", shellQuote(request.config));
   }
   return parts.join(" ");
+}
+
+/** The command the report server will run, built from the served meta. */
+export function previewRerunCommand(
+  testCase: { file: string; title: string },
+  meta: { workspaceRoot?: string; evalConfig?: string },
+): string {
+  const file = relativeDisplayPath(testCase.file, meta.workspaceRoot);
+  return formatRerunCommand({
+    file,
+    title: testCase.title,
+    config: looksLikeEvalFile(file) ? meta.evalConfig : undefined,
+  });
 }
 
 /** Escapes a case title so vitest `-t` matches it literally. */

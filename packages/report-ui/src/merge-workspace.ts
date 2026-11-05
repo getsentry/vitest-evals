@@ -4,7 +4,10 @@ import type {
   ReportWorkspace,
 } from "@vitest-evals/core";
 
-/** Overlays incoming rerun cases onto the previous workspace by file + fullName. */
+/**
+ * Overlays incoming rerun cases onto the previous workspace by file + fullName.
+ * Replaced cases keep their previous id and runId so URL selection survives.
+ */
 export function mergeRerunWorkspace(
   previous: ReportWorkspace,
   incoming: ReportWorkspace,
@@ -24,7 +27,12 @@ export function mergeRerunWorkspace(
   for (const testCase of previous.cases) {
     const key = caseKey(testCase);
     seen.add(key);
-    cases.push(incomingByKey.get(key) ?? testCase);
+    const replacement = incomingByKey.get(key);
+    cases.push(
+      replacement
+        ? { ...replacement, id: testCase.id, runId: testCase.runId }
+        : testCase,
+    );
   }
   for (const testCase of incoming.cases) {
     const key = caseKey(testCase);

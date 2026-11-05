@@ -12,6 +12,7 @@ import { readReportWorkspace } from "@vitest-evals/core/node";
 import { FALLBACK_PRICING, type ReportUiMeta } from "./app/pricing.js";
 import { currentModuleUrl } from "./esm-runtime.js";
 import { loadPricingTable } from "./pricing-catalog.js";
+import { findEvalConfig } from "./rerun-exec.js";
 import { createRerunHub } from "./rerun-hub.js";
 
 /** Options for serving a report UI from one or more JSON result inputs. */
@@ -75,6 +76,9 @@ export async function serveReportWorkspace(
   const meta: ReportUiMeta = {
     pricing: options.pricing ?? FALLBACK_PRICING,
     workspaceRoot: options.workspaceRoot,
+    evalConfig: options.workspaceRoot
+      ? await findEvalConfig(options.workspaceRoot)
+      : undefined,
   };
   const handler = createRequestHandler(workspace, assetsDir, meta, {
     resultFiles: options.resultFiles ?? [],

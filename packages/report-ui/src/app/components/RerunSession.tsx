@@ -13,13 +13,14 @@ import {
   type HubEvent,
   type RerunJobView,
   formatElapsed,
-  formatRerunCommand,
   jobElapsedMs,
   postCancel,
   postReload,
   postRerun,
-  rerunRequest,
+  previewRerunCommand,
+  trimRerunLog,
 } from "../rerun";
+import { useReportMeta } from "../report-meta";
 import { cx } from "../ui";
 import { formatVitestLog } from "../vitest-log";
 import { CopyButton } from "./CopyButton";
@@ -47,6 +48,7 @@ export function RerunSessionProvider({
   children: ReactNode;
   onDump: () => void;
 }) {
+  const meta = useReportMeta();
   const [jobs, setJobs] = useState<RerunJobView[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState<ReportCase>();
@@ -81,7 +83,7 @@ export function RerunSessionProvider({
         setJobs((current) =>
           current.map((job) =>
             job.id === event.jobId
-              ? { ...job, log: `${job.log}${event.chunk}` }
+              ? { ...job, log: trimRerunLog(`${job.log}${event.chunk}`) }
               : job,
           ),
         );
@@ -121,7 +123,7 @@ export function RerunSessionProvider({
                 {
                   id: `local-${Date.now()}`,
                   title: testCase.displayName,
-                  command: formatRerunCommand(rerunRequest(testCase)),
+                  command: previewRerunCommand(testCase, meta),
                   status: "err",
                   log: "",
                   startedAt: Date.now(),
@@ -174,7 +176,7 @@ function RerunConfirm({
   onConfirm: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const command = formatRerunCommand(rerunRequest(testCase));
+  const command = previewRerunCommand(testCase, useReportMeta());
 
   useEffect(() => {
     const dialog = dialogRef.current;

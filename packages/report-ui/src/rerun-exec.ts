@@ -70,7 +70,9 @@ export async function prepareRerun(
 
   const relFile = relative(workspaceRoot, absFile);
   const pattern = escapeRegExp(request.title);
-  const config = await resolveEvalConfig(workspaceRoot, relFile);
+  const config = looksLikeEvalFile(relFile)
+    ? await findEvalConfig(workspaceRoot)
+    : undefined;
   const args = ["exec", "vitest", "run", relFile, "-t", pattern];
   if (config) {
     args.push("--config", config);
@@ -89,10 +91,8 @@ export async function prepareRerun(
   };
 }
 
-async function resolveEvalConfig(workspaceRoot: string, relFile: string) {
-  if (!looksLikeEvalFile(relFile)) {
-    return undefined;
-  }
+/** Returns the first eval vitest config present at the workspace root. */
+export async function findEvalConfig(workspaceRoot: string) {
   for (const name of EVAL_VITEST_CONFIGS) {
     try {
       await access(join(workspaceRoot, name));

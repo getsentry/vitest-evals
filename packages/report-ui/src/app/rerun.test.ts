@@ -5,6 +5,7 @@ import {
   formatRerunCommand,
   jobElapsedMs,
   looksLikeEvalFile,
+  previewRerunCommand,
   rerunRequest,
   runningJobForCase,
 } from "./rerun";
@@ -29,9 +30,28 @@ describe("formatRerunCommand", () => {
       formatRerunCommand({
         file: "evals/refund.eval.ts",
         title: "refund (eligible)",
+        config: "vitest.evals.config.ts",
       }),
     ).toBe(
       "pnpm exec vitest run evals/refund.eval.ts -t 'refund \\(eligible\\)' --config vitest.evals.config.ts",
+    );
+  });
+
+  test("previews the server command from the served workspace meta", () => {
+    const testCase = {
+      file: "/repo/evals/refund.eval.ts",
+      title: "approves",
+    };
+    expect(
+      previewRerunCommand(testCase, {
+        workspaceRoot: "/repo",
+        evalConfig: "vitest.eval.config.ts",
+      }),
+    ).toBe(
+      "pnpm exec vitest run evals/refund.eval.ts -t approves --config vitest.eval.config.ts",
+    );
+    expect(previewRerunCommand(testCase, { workspaceRoot: "/repo" })).toBe(
+      "pnpm exec vitest run evals/refund.eval.ts -t approves",
     );
   });
 

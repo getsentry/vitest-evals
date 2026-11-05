@@ -56,6 +56,8 @@ export type UsageCost = {
 
 export type ReportUiMeta = {
   workspaceRoot?: string;
+  /** Eval vitest config found at the workspace root, used for re-runs. */
+  evalConfig?: string;
   pricing: PricingTable;
 };
 

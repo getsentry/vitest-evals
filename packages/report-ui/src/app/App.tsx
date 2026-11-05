@@ -83,9 +83,11 @@ export function App() {
   }
 
   return (
-    <RerunSessionProvider onDump={reloadReadyWorkspace}>
-      <ReportApp meta={loadState.meta} workspace={loadState.workspace} />
-    </RerunSessionProvider>
+    <ReportMetaContext.Provider value={loadState.meta}>
+      <RerunSessionProvider onDump={reloadReadyWorkspace}>
+        <ReportApp meta={loadState.meta} workspace={loadState.workspace} />
+      </RerunSessionProvider>
+    </ReportMetaContext.Provider>
   );
 }
 
@@ -421,94 +423,89 @@ function ReportApp({
   ]);
 
   return (
-    <ReportMetaContext.Provider value={meta}>
-      <main className="min-h-screen bg-canvas text-ink">
-        <div className="mx-auto w-full max-w-[1800px] px-4 py-3 md:px-6">
-          <ReportHeader
-            caseCount={workspaceSummary.caseCount}
-            runCount={workspaceSummary.runCount}
-            sourceLabel={sourceLabel}
-            visibleCaseCount={visibleCases.length}
-            onOpenPalette={() => setPaletteOpen(true)}
+    <main className="min-h-screen bg-canvas text-ink">
+      <div className="mx-auto w-full max-w-[1800px] px-4 py-3 md:px-6">
+        <ReportHeader
+          caseCount={workspaceSummary.caseCount}
+          runCount={workspaceSummary.runCount}
+          sourceLabel={sourceLabel}
+          visibleCaseCount={visibleCases.length}
+          onOpenPalette={() => setPaletteOpen(true)}
+        />
+        <section
+          className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
+          aria-label="Report workspace"
+        >
+          <SummaryBar
+            currentStatus={search.status}
+            runDelta={runDelta}
+            summary={workspaceSummary}
+            appCost={appCost}
+            judgeCost={judgeCost}
+            workspaceCost={workspaceCost}
           />
-          <section
-            className="overflow-hidden rounded-lg border border-line-subtle bg-panel shadow-[0_14px_34px_rgba(23,32,28,0.06)]"
-            aria-label="Report workspace"
-          >
-            <SummaryBar
+          {workspace.runs.length > 1 ? (
+            <RunStrip
               currentStatus={search.status}
-              runDelta={runDelta}
-              summary={workspaceSummary}
-              appCost={appCost}
-              judgeCost={judgeCost}
-              workspaceCost={workspaceCost}
-            />
-            {workspace.runs.length > 1 ? (
-              <RunStrip
-                currentStatus={search.status}
-                runs={workspace.runs}
-                selectedRunId={search.run}
-              />
-            ) : null}
-            <CaseWorkbench
-              allCases={workspace.cases}
-              cases={visibleCases}
-              deltas={deltas}
-              filters={filters}
-              modelOptions={uniqueCaseModels(workspace.cases)}
               runs={workspace.runs}
-              selectedCaseId={selectedCase?.id}
-              showDelta={Boolean(baselineRun)}
-              sortColumn={search.sort}
-              sortDirection={search.dir}
-              totalCases={workspace.cases.length}
-              onFiltersChange={(nextFilters) =>
-                setSearch({
-                  q: nextFilters.query,
-                  model: nextFilters.model,
-                  run: nextFilters.runId,
-                  status: nextFilters.status,
-                })
-              }
-              onSelectCase={(testCase) =>
-                setSearch(
-                  { case: testCase.id, tab: "overview" },
-                  { replace: false },
-                )
-              }
-              onSortChange={(column) =>
-                setSearch(nextSortSearch(search.sort, search.dir, column))
-              }
+              selectedRunId={search.run}
             />
-          </section>
-
-          <CaseDrawer
-            baselineCases={baselineCases}
-            cases={workspace.cases}
-            detailTab={search.tab}
-            filtersActive={hasActiveCaseFilters(filters)}
-            open={isDrawerOpen}
+          ) : null}
+          <CaseWorkbench
+            allCases={workspace.cases}
+            cases={visibleCases}
+            deltas={deltas}
+            filters={filters}
+            modelOptions={uniqueCaseModels(workspace.cases)}
             runs={workspace.runs}
-            testCase={selectedCase}
-            onClose={() =>
+            selectedCaseId={selectedCase?.id}
+            showDelta={Boolean(baselineRun)}
+            sortColumn={search.sort}
+            sortDirection={search.dir}
+            totalCases={workspace.cases.length}
+            onFiltersChange={(nextFilters) =>
+              setSearch({
+                q: nextFilters.query,
+                model: nextFilters.model,
+                run: nextFilters.runId,
+                status: nextFilters.status,
+              })
+            }
+            onSelectCase={(testCase) =>
               setSearch(
-                { case: undefined, tab: "overview" },
+                { case: testCase.id, tab: "overview" },
                 { replace: false },
               )
             }
-            onNext={() => moveVisibleCase(1)}
-            onPrev={() => moveVisibleCase(-1)}
-            onResetFilters={clearFilters}
-            onTabChange={(tab) => setSearch({ tab })}
+            onSortChange={(column) =>
+              setSearch(nextSortSearch(search.sort, search.dir, column))
+            }
           />
-          <CommandPalette
-            commands={paletteCommands}
-            open={paletteOpen}
-            onClose={() => setPaletteOpen(false)}
-          />
-        </div>
-      </main>
-    </ReportMetaContext.Provider>
+        </section>
+
+        <CaseDrawer
+          baselineCases={baselineCases}
+          cases={workspace.cases}
+          detailTab={search.tab}
+          filtersActive={hasActiveCaseFilters(filters)}
+          open={isDrawerOpen}
+          runs={workspace.runs}
+          testCase={selectedCase}
+          onClose={() =>
+            setSearch({ case: undefined, tab: "overview" }, { replace: false })
+          }
+          onNext={() => moveVisibleCase(1)}
+          onPrev={() => moveVisibleCase(-1)}
+          onResetFilters={clearFilters}
+          onTabChange={(tab) => setSearch({ tab })}
+        />
+        <CommandPalette
+          commands={paletteCommands}
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+        />
+      </div>
+    </main>
   );
 }
 

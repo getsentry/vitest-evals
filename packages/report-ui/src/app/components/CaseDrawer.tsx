@@ -97,11 +97,12 @@ export function CaseDrawer({
     };
   }, [open]);
 
+  const { pricing, workspaceRoot } = useReportMeta();
+
   if (!open || !testCase) {
     return null;
   }
 
-  const { pricing, workspaceRoot } = useReportMeta();
   const run = runs.find((candidate) => candidate.id === testCase.runId);
   const harnessRun = testCase.harness?.run;
   const model = caseModel(testCase);

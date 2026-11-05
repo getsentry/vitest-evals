@@ -33,7 +33,11 @@ export function readReportMeta(value: unknown): ReportMeta {
             : FALLBACK_PRICING.sources,
       }
     : FALLBACK_PRICING;
-  return { workspaceRoot, pricing };
+  const evalConfig =
+    typeof value.evalConfig === "string" && value.evalConfig.length > 0
+      ? value.evalConfig
+      : undefined;
+  return { workspaceRoot, evalConfig, pricing };
 }
 
 function isPricingTable(value: unknown): value is ReportMeta["pricing"] {

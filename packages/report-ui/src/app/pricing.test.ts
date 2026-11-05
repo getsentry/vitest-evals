@@ -78,6 +78,29 @@ describe("estimateWorkspaceCost", () => {
   });
 });
 
+describe("recorded cost", () => {
+  test("uses harness-reported costUsd instead of re-estimating", () => {
+    expect(
+      estimateUsageCost(
+        { model: "gpt-4o", costUsd: 0.42, inputTokens: 1_000_000 },
+        FALLBACK_PRICING,
+      ),
+    ).toMatchObject({ recordedUsd: 0.42, totalUsd: 0.42, inputUsd: 0 });
+  });
+
+  test("adds recorded and estimated runs together", () => {
+    expect(
+      estimateWorkspaceUsageCost(
+        [
+          { model: "unknown-model", costUsd: 0.5 },
+          { model: "gpt-4o", inputTokens: 1_000_000, outputTokens: 0 },
+        ],
+        FALLBACK_PRICING,
+      ),
+    ).toMatchObject({ recordedUsd: 0.5, inputUsd: 2.5, totalUsd: 3 });
+  });
+});
+
 describe("cached token pricing", () => {
   test("bills cache hits at the cache-read rate and the rest at input", () => {
     expect(

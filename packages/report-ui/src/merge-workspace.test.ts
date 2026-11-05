@@ -35,7 +35,7 @@ describe("mergeRerunWorkspace", () => {
     expect(merged.cases).toHaveLength(2);
     expect(merged.cases[0]?.id).toBe("atlas");
     expect(merged.cases[1]).toMatchObject({
-      id: "datafast-rerun",
+      id: "datafast",
       status: "passed",
       durationMs: 16_000,
     });

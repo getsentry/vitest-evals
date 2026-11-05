@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import type { ReportWorkspace } from "@vitest-evals/core";
 import { readReportWorkspace } from "@vitest-evals/core/node";
-import type { HubEvent, RerunApiResult, RerunJobView } from "./app/rerun.js";
+import {
+  type HubEvent,
+  type RerunApiResult,
+  type RerunJobView,
+  trimRerunLog,
+} from "./app/rerun.js";
 import { mergeRerunWorkspace } from "./merge-workspace.js";
 import { type SpawnedVitest, prepareRerun, spawnVitest } from "./rerun-exec.js";
-
-const LOG_LIMIT = 32_768;
 
 /** Fan-out for rerun jobs, live logs, and dump reloads after a job ends. */
 export function createRerunHub(options: {
@@ -53,7 +56,7 @@ export function createRerunHub(options: {
 
   async function runJob(job: RerunJobView, args: string[], cwd: string) {
     const spawned = spawnVitest(args, cwd, (chunk) => {
-      job.log = trimLog(`${job.log}${chunk}`);
+      job.log = trimRerunLog(`${job.log}${chunk}`);
       emit({ type: "log", jobId: job.id, chunk });
     });
     children.set(job.id, spawned);
@@ -155,11 +158,4 @@ export function createRerunHub(options: {
   }
 
   return { startJob, cancelJob, reloadDump, subscribe, close };
-}
-
-function trimLog(value: string) {
-  if (value.length <= LOG_LIMIT) {
-    return value;
-  }
-  return value.slice(value.length - LOG_LIMIT);
 }
