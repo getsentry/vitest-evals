@@ -68,6 +68,27 @@ export const qaHarness = createHarness<string, string>({
 });
 ```
 
+### Plain Task Functions
+
+When the entrypoint already returns its output and the tool calls it made, use
+`createTaskHarness()` and skip the transcript. It records the user input, one
+`tool_call` event per call (plus a `tool_result` when the call has a `result`),
+and the assistant output.
+
+```ts title="evals/qaHarness.ts"
+import { createTaskHarness } from "vitest-evals";
+import { answerQuestionWithTools } from "../src/questionFlow";
+
+export const qaHarness = createTaskHarness("qa-app", async (input: string) => {
+  const { text, toolCalls } = await answerQuestionWithTools(input);
+
+  return { result: text, toolCalls };
+});
+```
+
+A task can also return the output string alone. Legacy
+`(input) => Promise<string | { result, toolCalls }>` task functions fit as-is.
+
 Return a full `HarnessRun` only when you need complete control over the
 session, usage, timings, artifacts, traces, and errors. Full runs must already
 use canonical `session.events`; `createHarness()` is the preferred custom

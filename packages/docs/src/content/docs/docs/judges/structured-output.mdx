@@ -5,7 +5,7 @@ editUrl: false
 ---
 
 `StructuredOutputJudge()` compares the harness output with expected values from
-the judge config or matcher options. Use it for deterministic checks when the harness
+the judge config, `run(input, { expected })`, or matcher options. Use it for deterministic checks when the harness
 returns a parsed domain object instead of raw provider text.
 
 ## Usage

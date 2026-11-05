@@ -230,8 +230,13 @@ Harness-backed suites stay close to plain Vitest:
   when the harness output type includes `undefined`
 - judges own their prompt, rubric, and parsing; LLM-backed judges use
   `ctx.runJudge(...)` from a configured `judgeHarness`
-- pass scenario-specific judge criteria explicitly to matcher options, or bind
-  suite-wide criteria on the judge instance
+- pass scenario-specific judge criteria as `run(input, { expected,
+  expectedTools })` so automatic suite judges see them, or explicitly to
+  matcher options; bind suite-wide criteria on the judge instance
+- suite-level `judgeThreshold` compares the average score of all automatic
+  judges, like the legacy `threshold`
+- wrap a plain `(input) => string | { result, toolCalls }` task function with
+  `createTaskHarness(...)` instead of building transcript events by hand
 - reporter output separates application, judge, and combined token and
   `costUsd` usage from normalized runs. First-party harnesses attach native
   spans when provider/runtime data is available; `createHarness(...)` attaches a fallback
