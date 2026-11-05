@@ -1,1 +1,1 @@
-export type DetailTab = "overview" | "transcript" | "raw";
+export type DetailTab = "overview" | "transcript" | "compare" | "raw";

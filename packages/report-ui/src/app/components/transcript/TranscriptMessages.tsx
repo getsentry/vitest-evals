@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
-  formatJson,
   type TranscriptEvent,
   type TranscriptMessage,
   type TranscriptToolEvent,
+  formatJson,
 } from "../../model";
 import { cx } from "../../ui";
 import { TranscriptCodeBlock } from "./TranscriptCodeBlock";
