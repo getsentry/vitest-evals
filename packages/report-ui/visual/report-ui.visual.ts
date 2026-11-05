@@ -35,6 +35,8 @@ beforeAll(async () => {
   server = await serveReportWorkspace(workspace, {
     assetsDir,
     pricing: FALLBACK_PRICING,
+    // Enables the re-run controls; the rerun scene stubs the API call.
+    workspaceRoot: "/repo",
   });
   browser = await chromium.launch();
 });
@@ -56,7 +58,9 @@ describe("report UI scenes", () => {
       const page = await context.newPage();
       const problems = watchPageProblems(page, server.url);
       try {
-        await page.goto(sceneUrl(scene), { waitUntil: "networkidle" });
+        // Not "networkidle": the live /api/events stream never goes idle.
+        // Each scene's ready() locator waits for the content instead.
+        await page.goto(sceneUrl(scene), { waitUntil: "load" });
         await scene.act?.(page);
         await scene.ready(page).waitFor({ state: "visible" });
 
@@ -114,7 +118,8 @@ function horizontalOverflow(page: Page) {
 /**
  * Lists pairs of visible controls in the same layer whose boxes overlap. This
  * catches cramped toolbars where inputs, selects, or buttons collide. Overlap
- * across layers (drawer, popover, palette) is intentional, so it is ignored.
+ * across layers (drawer, popover, palette, tray) is intentional, so it is
+ * ignored.
  */
 function overlappingControls(page: Page) {
   return page.evaluate(() => {
@@ -125,6 +130,10 @@ function overlappingControls(page: Page) {
         node;
         node = node.parentElement
       ) {
+        // Modal dialogs and popovers render in the browser's top layer.
+        if (node.matches("dialog[open], :popover-open")) {
+          return node;
+        }
         const style = getComputedStyle(node);
         if (style.position !== "static" && Number(style.zIndex) > 0) {
           return node;
