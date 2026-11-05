@@ -20,9 +20,7 @@
   "bin": {
     "vitest-evals-github-report": "./dist/cli.js"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "publishConfig": {
     "access": "public"
   },
@@ -42,9 +40,9 @@
     "@vitest-evals/core": "workspace:*"
   },
   "peerDependencies": {
-    "vitest": ">=4 <5"
+    "vitest": ">=4 <6"
   },
   "devDependencies": {
-    "vitest": "^4.1.2"
+    "vitest": "^5.1.0"
   }
 }

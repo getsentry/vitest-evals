@@ -68,7 +68,7 @@ export type ToEval<R = unknown> = (
 ) => Promise<R>;
 
 declare module "vitest" {
-  interface Assertion<T = any> {
+  interface Assertion<R extends void | Promise<void> = void, T = unknown> {
     toEval: ToEval<T>;
   }
 
