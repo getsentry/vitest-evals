@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { relativeDisplayPath, resolveOpenPath } from "./display-path";
+import {
+  distinctPathLabels,
+  relativeDisplayPath,
+  resolveOpenPath,
+  sharedDirectory,
+} from "./display-path";
 
 describe("relativeDisplayPath", () => {
   test("strips the CLI workspace prefix", () => {
@@ -29,5 +34,25 @@ describe("resolveOpenPath", () => {
     expect(resolveOpenPath("/repo/file.ts", "/Users/me/app")).toBe(
       "/repo/file.ts",
     );
+  });
+});
+
+describe("distinctPathLabels", () => {
+  test("drops the directory sibling result files share", () => {
+    expect(
+      distinctPathLabels([
+        "eval-results/shard-1/vitest.json",
+        "eval-results/shard-2/vitest.json",
+      ]),
+    ).toEqual(["shard-1/vitest.json", "shard-2/vitest.json"]);
+    expect(
+      sharedDirectory(["eval-results/a.json", "eval-results/b.json"]),
+    ).toBe("eval-results");
+  });
+
+  test("keeps a single path whole", () => {
+    expect(distinctPathLabels(["eval-results/a.json"])).toEqual([
+      "eval-results/a.json",
+    ]);
   });
 });

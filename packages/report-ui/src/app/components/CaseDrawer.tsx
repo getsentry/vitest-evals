@@ -195,17 +195,19 @@ export function CaseDrawer({
               className="grid size-8 shrink-0 place-items-center border border-transparent text-xs font-semibold text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
               type="button"
               aria-label="Previous case"
+              title="Previous case (k)"
               onClick={onPrev}
             >
-              k
+              <Chevron path="M3 7.5 6 4.5l3 3" />
             </button>
             <button
               className="grid size-8 shrink-0 place-items-center border border-transparent text-xs font-semibold text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
               type="button"
               aria-label="Next case"
+              title="Next case (j)"
               onClick={onNext}
             >
-              j
+              <Chevron path="M3 4.5 6 7.5l3-3" />
             </button>
             <button
               className="relative grid size-8 shrink-0 place-items-center border border-transparent text-muted-strong outline-none hover:border-line-subtle hover:text-ink focus-visible:border-selected-line focus-visible:ring-2 focus-visible:ring-selected"
@@ -320,5 +322,22 @@ export function CaseDrawer({
         </div>
       </section>
     </dialog>
+  );
+}
+
+function Chevron({ path }: { path: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-3"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 12 12"
+    >
+      <path d={path} />
+    </svg>
   );
 }

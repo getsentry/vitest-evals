@@ -24,7 +24,11 @@ import {
   RerunSessionProvider,
   useRerunSession,
 } from "./components/RerunSession";
-import { relativeDisplayPath, resolveOpenPath } from "./display-path";
+import {
+  relativeDisplayPath,
+  resolveOpenPath,
+  sharedDirectory,
+} from "./display-path";
 import { editorTargets } from "./file-open";
 import {
   type CaseFilters,
@@ -187,11 +191,13 @@ function ReportApp({
       ),
     };
   }, [meta.pricing, workspace.cases]);
+  const runPaths = workspace.runs.map((run) =>
+    relativeDisplayPath(run.source ?? run.id, meta.workspaceRoot),
+  );
+  // With several result files, title the report by their shared directory.
   const sourceLabel =
-    relativeDisplayPath(
-      workspace.runs[0]?.source ?? workspace.runs[0]?.id,
-      meta.workspaceRoot,
-    ) || "Eval report";
+    (runPaths.length > 1 ? sharedDirectory(runPaths) : runPaths[0]) ||
+    "Eval report";
   const selectedCase = resolveSelectedCase(search.case, workspace.cases);
   const isDrawerOpen = Boolean(search.case && selectedCase);
   const [paletteOpen, setPaletteOpen] = useState(false);

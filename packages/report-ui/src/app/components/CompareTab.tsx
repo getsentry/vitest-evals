@@ -8,6 +8,7 @@ import {
   judgeSpread,
   trialStats,
 } from "../compare";
+import { distinctPathLabels, relativeDisplayPath } from "../display-path";
 import {
   caseCost,
   caseModel,
@@ -30,13 +31,18 @@ export function CompareTab({
   cases: ReportCase[];
   testCase: ReportCase;
 }) {
-  const { pricing } = useReportMeta();
+  const { pricing, workspaceRoot } = useReportMeta();
   const siblings = caseSiblings(testCase, cases);
   const variants = caseModelVariants(testCase, cases);
   const delta = caseDelta(testCase, baselineCases, pricing);
   const trials = trialStats(testCase, cases);
   const spread = judgeSpread(testCase);
   const rows = uniqueCases([testCase, ...siblings, ...variants]);
+  const runLabels = distinctPathLabels(
+    rows.map((row) =>
+      relativeDisplayPath(row.source ?? row.runId, workspaceRoot),
+    ),
+  );
 
   return (
     <DetailContent>
@@ -96,7 +102,7 @@ export function CompareTab({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map((row, index) => {
                   const rowDelta = caseDelta(row, baselineCases, pricing);
                   const cost = caseCost(row, pricing);
                   return (
@@ -104,9 +110,11 @@ export function CompareTab({
                       <td className="border-b border-line-subtle px-2 py-2">
                         <div className="flex items-center gap-2">
                           <StatusMark showLabel={false} status={row.status} />
-                          <span className="truncate">
-                            {compactValue(row.source ?? row.runId, 36) ||
-                              row.runId}
+                          <span
+                            className="truncate"
+                            title={row.source ?? row.runId}
+                          >
+                            {compactValue(runLabels[index], 36) || row.runId}
                             {row.id === testCase.id ? " · this" : ""}
                           </span>
                         </div>

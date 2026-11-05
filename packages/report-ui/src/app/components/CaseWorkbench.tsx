@@ -7,7 +7,11 @@ import {
   judgeSpread,
   trialStats,
 } from "../compare";
-import { relativeDisplayPath, resolveOpenPath } from "../display-path";
+import {
+  distinctPathLabels,
+  relativeDisplayPath,
+  resolveOpenPath,
+} from "../display-path";
 import { judgeTally, judgeTallyLabel } from "../judge-score";
 import {
   type CaseFilters,
@@ -159,7 +163,7 @@ export function CaseWorkbench({
   return (
     <section className="min-w-0 bg-panel">
       <div className="border-b border-line-subtle px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-nowrap">
           <h2 className="shrink-0 text-sm font-semibold text-ink">
             Ledger
             <span className="ml-1.5 font-normal text-muted">
@@ -174,7 +178,7 @@ export function CaseWorkbench({
           />
           <button
             className={cx(
-              "h-8 shrink-0 rounded-md px-2 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-selected-line",
+              "ml-auto h-8 shrink-0 rounded-md px-2 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-selected-line lg:ml-0",
               hasActiveCaseFilters(filters)
                 ? "border border-ink text-ink hover:bg-panel-subtle"
                 : "border border-line-subtle text-muted",
@@ -216,10 +220,14 @@ function CaseFilterControls({
   onFiltersChange: (filters: CaseFilters) => void;
 }) {
   const { workspaceRoot } = useReportMeta();
+  const runLabels = distinctPathLabels(
+    runs.map((run) => relativeDisplayPath(run.source ?? run.id, workspaceRoot)),
+  );
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    // Below lg the filters wrap onto their own row so selects never overlap.
+    <div className="order-last flex w-full min-w-0 flex-wrap items-center gap-2 lg:order-none lg:w-auto lg:flex-1 lg:flex-nowrap">
       <Input
-        className="min-w-0 flex-1"
+        className="min-w-[10rem] flex-1"
         id="case-search"
         value={filters.query}
         onChange={(event) =>
@@ -277,10 +285,9 @@ function CaseFilterControls({
           }
         >
           <option value="all">All runs</option>
-          {runs.map((run) => (
+          {runs.map((run, index) => (
             <option key={run.id} value={run.id}>
-              {relativeDisplayPath(run.source ?? run.id, workspaceRoot) ||
-                run.id}
+              {runLabels[index] || run.id}
             </option>
           ))}
         </Select>
