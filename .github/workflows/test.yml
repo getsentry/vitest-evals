@@ -62,8 +62,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Build GitHub reporter action
-        run: pnpm build:action
+      # Fail-only check on the PR merge commit, so a bundle that the merge with
+      # main makes stale cannot go green. action-bundle below fixes the branch.
+      - name: Check GitHub Action bundle on the merge result
+        run: sh scripts/check-action-bundle.sh
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4

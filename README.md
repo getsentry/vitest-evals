@@ -155,7 +155,9 @@ The root GitHub Action runs the bundled `github-reporter/dist/action/index.js`,
 which is committed on `main`. On pull requests from this repository, CI
 rebuilds the bundle and commits it back to the branch when it changed. On fork
 pull requests and on `main`, CI cannot push, so it fails when the bundle is
-stale. Then run `pnpm build:action` and commit the result.
+stale. Then run `pnpm build:action` and commit the result. CI also checks the
+bundle on the merge with `main`. If that check fails after the branch is fresh,
+merge or rebase on `main` so CI rebuilds the bundle for the merged code.
 
 Craft tags the release commit as `vX.Y.Z`, so workflows can use
 `getsentry/vitest-evals@vX.Y.Z`. After a stable release, the action tag
