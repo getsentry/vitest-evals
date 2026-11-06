@@ -1,4 +1,4 @@
-minVersion: 3.9.0
+minVersion: 3.11.1
 changelog:
   policy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
@@ -32,8 +32,7 @@ targets:
     id: "@vitest-evals/github-reporter"
     access: public
     includeNames: /^vitest-evals-github-reporter-\d.*\.tgz$/
-  # No floatingTags: v0 on the release commit makes `git describe` return v0.
-  # .github/workflows/update-action-tag.yml moves v0 instead.
   - name: github
     tagPrefix: v
+    floatingTags: ["v{major}"]
     includeNames: /^$/

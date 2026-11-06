@@ -160,14 +160,12 @@ bundle on the merge with `main`. If that check fails after the branch is fresh,
 merge or rebase on `main` so CI rebuilds the bundle for the merged code.
 
 Craft tags the release commit as `vX.Y.Z`, so workflows can use
-`getsentry/vitest-evals@vX.Y.Z`. After a stable release, the action tag
-workflow moves the `vX` tag (for example, `v0`) to a child commit of the
-release with the same files. `main` does not reach that commit, so Craft only
-sees `vX.Y.Z`. Prereleases do not move it. Do not use Craft `floatingTags`:
-it puts `v0` on the release commit, `git describe` then returns `v0`, and
-`auto` starts from `0.0.0`. It also moves `v0` on prereleases. The Craft GitHub
-target creates the release but is filtered away from package artifacts so it
-does not upload npm package contents as release assets.
+`getsentry/vitest-evals@vX.Y.Z`. On stable releases, Craft also moves the
+floating `vX` tag (for example, `v0`) to the same commit. Prereleases do not
+move it. Craft ignores `vX` when it looks up the previous release, so `auto`
+still starts from the latest `vX.Y.Z`. The Craft GitHub target creates the
+release but is filtered away from package artifacts so it does not upload npm
+package contents as release assets.
 
 Releases up to 0.18.0 tagged the bundle on a commit outside `main`, and `main`
 only reaches their `vX.Y.Z-src` tags. Craft reads those as prereleases. For the
