@@ -3,28 +3,20 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version bump type
+        description: Version bump type (ignored when version is set). auto picks it from the commits; pre cuts a prerelease of that version.
         required: true
         type: choice
-        default: minor
+        default: auto
         options:
-          - minor
+          - auto
+          - pre
           - patch
+          - minor
           - major
-      prerelease:
-        description: Prepare a prerelease instead of a stable release
+      version:
+        description: Exact version override (for example, 0.19.0 or 0.19.0-beta.0)
         required: false
-        type: boolean
-        default: false
-      prerelease_id:
-        description: Prerelease identifier
-        required: false
-        type: choice
-        default: beta
-        options:
-          - beta
-          - rc
-          - alpha
+        type: string
       force:
         description: Force release (bypass blockers)
         required: false
@@ -34,6 +26,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Craft writes AI changelog summaries with the workflow token.
+  copilot-requests: write
 
 jobs:
   release:
@@ -63,70 +57,16 @@ jobs:
         version: 10.33.0
         run_install: false
 
-    - name: Calculate version
-      id: version
-      env:
-        BUMP: ${{ inputs.bump }}
-        PRERELEASE: ${{ inputs.prerelease }}
-        PRERELEASE_ID: ${{ inputs.prerelease_id }}
-      run: |
-        set -euo pipefail
-        CURRENT=$(node -p "require('./packages/vitest-evals/package.json').version")
-        NEW=$(node ./scripts/calculate-release-version.mjs \
-          "$CURRENT" "$BUMP" "$PRERELEASE" "$PRERELEASE_ID")
-        echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-        echo "new=$NEW" >> "$GITHUB_OUTPUT"
-
-    # Craft uses `git describe --tags` to find the previous version. Published
-    # action tags point to bundled artifact commits, so the previous release
-    # must leave a reachable source tag for the next changelog baseline.
-    - name: Verify previous source tag
-      run: |
-        set -euo pipefail
-        VERSION="${{ steps.version.outputs.current }}"
-        SOURCE_TAG="v${VERSION}-src"
-        CURRENT_TAG="v${VERSION}"
-        DESCRIBED_TAG="$(git describe --tags --abbrev=0)"
-        DESCRIBED_SHA="$(git rev-parse "$DESCRIBED_TAG^{commit}")"
-
-        if git rev-parse "$SOURCE_TAG^{commit}" >/dev/null 2>&1; then
-          SOURCE_SHA="$(git rev-parse "$SOURCE_TAG^{commit}")"
-
-          if [ "$DESCRIBED_SHA" != "$SOURCE_SHA" ]; then
-            echo "::error::Expected git describe to resolve to $SOURCE_TAG ($SOURCE_SHA), got $DESCRIBED_TAG ($DESCRIBED_SHA)"
-            exit 1
-          fi
-
-          if ! git rev-parse "$CURRENT_TAG^{commit}" >/dev/null 2>&1; then
-            echo "::error::Missing bundled action tag $CURRENT_TAG."
-            exit 1
-          fi
-
-          if ! git cat-file -e "$CURRENT_TAG:github-reporter/dist/action/index.js" 2>/dev/null; then
-            echo "::error::Bundled action tag $CURRENT_TAG is missing github-reporter/dist/action/index.js."
-            exit 1
-          fi
-
-          echo "Craft previous-release baseline: $SOURCE_TAG ($SOURCE_SHA)"
-          exit 0
-        fi
-
-        if git tag --list "v*-src" | grep -q .; then
-          echo "::error::Missing source tag $SOURCE_TAG, but prior action source tags exist. The previous action release did not finalize its source tag."
-          exit 1
-        fi
-
-        if git tag --list "v*" | grep -q .; then
-          echo "::error::Missing source tag $SOURCE_TAG, but v-prefixed release tags already exist. Create the missing source tag before preparing another action release."
-          exit 1
-        fi
-
-        echo "No action source tags found; allowing first action-bundle release from existing baseline $DESCRIBED_TAG ($DESCRIBED_SHA)."
+    # Published action tags point to bundled artifact commits, so the
+    # previous release must leave a reachable source tag for Craft.
+    - name: Prepare release tags
+      run: ./scripts/prepare-release-tags.sh
 
     - name: Prepare release
-      uses: getsentry/action-prepare-release@v1
+      uses: getsentry/craft@v3
       env:
         GITHUB_TOKEN: ${{ steps.token.outputs.token }}
       with:
-        version: ${{ steps.version.outputs.new }}
+        version: ${{ inputs.version || inputs.bump }}
         force: ${{ inputs.force }}
+        llm_api_key: ${{ github.token }}

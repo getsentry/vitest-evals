@@ -139,15 +139,17 @@ pnpm exec vitest-evals serve eval-results/
 
 ## Releases
 
-Use the manual Release workflow for stable releases. Select `patch`, `minor`,
-or `major` for the normal version bump.
+Run the manual Release workflow. Leave `bump` at `auto` to pick the bump from
+the commits since the last stable release, or select `patch`, `minor`, or
+`major`. Before `1.0.0`, `auto` turns breaking changes into a minor bump.
 
-For a preview release that should not become the main stable version, set
-`prerelease` to `true` and leave `prerelease_id` as `beta` unless you want an
-`rc` or `alpha` line. From `0.8.0`, `bump=minor` produces `0.9.0-beta.0` and
-`bump=major` produces `1.0.0-beta.0`; running prerelease again from
-`1.0.0-beta.0` produces `1.0.0-beta.1`. Craft publishes npm prereleases under a
-prerelease dist-tag so the stable `latest` line is not moved.
+For a preview release that should not become the main stable version, select
+`pre`. It cuts an `alpha` prerelease of the version `auto` would release: from
+`0.8.0`, a minor bump produces `0.9.0-alpha.0`, and running `pre` again
+produces `0.9.0-alpha.1`. For a `beta` or `rc` line, set `version` to the exact
+version, such as `0.9.0-beta.0`. `version` overrides `bump`. Craft publishes
+npm prereleases under a prerelease dist-tag so the stable `latest` line is not
+moved.
 
 Release tags are updated after publish with the bundled `github-reporter`
 action so workflows can use `getsentry/vitest-evals@v0`. The release workflow

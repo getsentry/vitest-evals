@@ -315,10 +315,10 @@ function assertActionBundleConfig(root, errors) {
     );
   }
 
-  const releaseWorkflow = readFile(root, ".github/workflows/release.yml");
-  if (!releaseWorkflow.includes(`${ACTION_BUNDLE_MAIN}`)) {
+  const releaseTags = readFile(root, "scripts/prepare-release-tags.sh");
+  if (!releaseTags.includes(`${ACTION_BUNDLE_MAIN}`)) {
     errors.push(
-      `Release config check failed: release.yml must verify ${ACTION_BUNDLE_MAIN} on bundled action tags.`,
+      `Release config check failed: prepare-release-tags.sh must verify ${ACTION_BUNDLE_MAIN} on bundled action tags.`,
     );
   }
 }

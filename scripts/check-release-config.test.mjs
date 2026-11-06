@@ -161,8 +161,8 @@ function writeReleaseFixture({
 
   writeFixtureFile(
     root,
-    ".github/workflows/release.yml",
-    'steps:\n  - run: git cat-file -e "$CURRENT_TAG:github-reporter/dist/action/index.js"\n',
+    "scripts/prepare-release-tags.sh",
+    'git cat-file -e "$CURRENT_TAG:github-reporter/dist/action/index.js"\n',
   );
 
   return root;
