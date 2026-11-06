@@ -56,6 +56,9 @@ jobs:
       - name: Run typecheck
         run: pnpm typecheck
 
+      - name: Check GitHub Action bundle
+        run: sh scripts/check-action-bundle.sh
+
       - name: Run tests
         run: pnpm test:ci
 

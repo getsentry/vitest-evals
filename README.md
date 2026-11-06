@@ -151,17 +151,25 @@ version, such as `0.9.0-beta.0`. `version` overrides `bump`. Craft publishes
 npm prereleases under a prerelease dist-tag so the stable `latest` line is not
 moved.
 
-Release tags are updated after publish with the bundled `github-reporter`
-action so workflows can use `getsentry/vitest-evals@v0`. The release workflow
-keeps `vX.Y.Z-src` on the source commit for Craft's next changelog baseline,
-then moves `vX.Y.Z` and the stable `vX` tag to the bundled action commit. The
-Craft GitHub target creates the release but is filtered away from package
-artifacts so it does not upload npm package contents as release assets.
+The root GitHub Action runs the bundled `github-reporter/dist/action/index.js`,
+which is committed on `main`. When you change `packages/github-reporter` or the
+packages it bundles, run `pnpm build:action` and commit the result. CI fails
+when the committed bundle differs from a fresh build. Craft tags the release
+commit as `vX.Y.Z`, so workflows can use `getsentry/vitest-evals@vX.Y.Z`. After
+a stable release, the action tag workflow moves the `vX` tag (for example,
+`v0`) to the new release. Prereleases do not move it. The Craft GitHub target
+creates the release but is filtered away from package artifacts so it does not
+upload npm package contents as release assets.
+
+Releases up to 0.18.0 tagged the bundle on a commit outside `main`, and `main`
+only reaches their `vX.Y.Z-src` tags. Craft reads those as prereleases. For the
+first release after this change, set `version` to the exact version (for
+example, `0.18.1`). After that, `auto` and the bump types work.
 
 Release config validation treats every non-private `packages/*/package.json` as
 publishable. `pnpm release:check` verifies that `.craft.yml`, the post-merge
 pack step, Craft artifact selectors, package version bumping, and the bundled
-action tag workflow all cover that manifest-derived package set.
+action commit all cover that manifest-derived package set.
 
 ## Example
 

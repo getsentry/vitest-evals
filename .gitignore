@@ -183,3 +183,7 @@ Thumbs.db
 temp/
 .vitest-evals/
 .codex
+
+# The GitHub Action runs this bundle from the release tag. Rebuild it with
+# `pnpm build:action` and commit it.
+!/github-reporter/dist/

@@ -7,7 +7,8 @@
     "ignore": [
       "worker-configuration.d.ts",
       "tsconfig*.json",
-      "packages/docs/src/generated/api.json"
+      "packages/docs/src/generated/api.json",
+      "github-reporter/dist"
     ]
   },
   "vcs": {

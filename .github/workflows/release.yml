@@ -57,11 +57,6 @@ jobs:
         version: 10.33.0
         run_install: false
 
-    # Published action tags point to bundled artifact commits, so the
-    # previous release must leave a reachable source tag for Craft.
-    - name: Prepare release tags
-      run: ./scripts/prepare-release-tags.sh
-
     - name: Prepare release
       uses: getsentry/craft@v3
       env:
