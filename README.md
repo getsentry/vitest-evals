@@ -157,7 +157,8 @@ packages it bundles, run `pnpm build:action` and commit the result. CI fails
 when the committed bundle differs from a fresh build. Craft tags the release
 commit as `vX.Y.Z`, so workflows can use `getsentry/vitest-evals@vX.Y.Z`. After
 a stable release, the action tag workflow moves the `vX` tag (for example,
-`v0`) to the new release. Prereleases do not move it. The Craft GitHub target
+`v0`) to a child commit of the release with the same files. `main` does not
+reach that commit, so Craft only sees `vX.Y.Z`. Prereleases do not move it. The Craft GitHub target
 creates the release but is filtered away from package artifacts so it does not
 upload npm package contents as release assets.
 
