@@ -56,9 +56,6 @@ jobs:
       - name: Run typecheck
         run: pnpm typecheck
 
-      - name: Check GitHub Action bundle
-        run: sh scripts/check-action-bundle.sh
-
       - name: Run tests
         run: pnpm test:ci
 
@@ -90,3 +87,48 @@ jobs:
         with:
           report_paths: "**/*.junit.xml"
           comment: false
+
+  # Keeps the committed Action bundle fresh. On same-repo PRs it commits a
+  # rebuilt bundle back with the release bot token, so the push starts CI
+  # again. Fork PRs and main cannot be pushed to here, so they fail instead.
+  action-bundle:
+    runs-on: ubuntu-latest
+    env:
+      CAN_PUSH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Get auth token
+        id: token
+        if: env.CAN_PUSH == 'true'
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ env.CAN_PUSH == 'true' && github.head_ref || '' }}
+          token: ${{ steps.token.outputs.token || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      # pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        name: Install pnpm
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Update GitHub Action bundle
+        env:
+          PUSH_BRANCH: ${{ env.CAN_PUSH == 'true' && github.head_ref || '' }}
+          GIT_AUTHOR_NAME: ${{ steps.token.outputs.app-slug }}[bot]
+          GIT_AUTHOR_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ steps.token.outputs.app-slug }}[bot]
+          GIT_COMMITTER_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
+        run: sh scripts/update-action-bundle.sh

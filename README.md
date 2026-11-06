@@ -152,15 +152,20 @@ npm prereleases under a prerelease dist-tag so the stable `latest` line is not
 moved.
 
 The root GitHub Action runs the bundled `github-reporter/dist/action/index.js`,
-which is committed on `main`. When you change `packages/github-reporter` or the
-packages it bundles, run `pnpm build:action` and commit the result. CI fails
-when the committed bundle differs from a fresh build. Craft tags the release
-commit as `vX.Y.Z`, so workflows can use `getsentry/vitest-evals@vX.Y.Z`. After
-a stable release, the action tag workflow moves the `vX` tag (for example,
-`v0`) to a child commit of the release with the same files. `main` does not
-reach that commit, so Craft only sees `vX.Y.Z`. Prereleases do not move it. The Craft GitHub target
-creates the release but is filtered away from package artifacts so it does not
-upload npm package contents as release assets.
+which is committed on `main`. On pull requests from this repository, CI
+rebuilds the bundle and commits it back to the branch when it changed. On fork
+pull requests and on `main`, CI cannot push, so it fails when the bundle is
+stale. Then run `pnpm build:action` and commit the result.
+
+Craft tags the release commit as `vX.Y.Z`, so workflows can use
+`getsentry/vitest-evals@vX.Y.Z`. After a stable release, the action tag
+workflow moves the `vX` tag (for example, `v0`) to a child commit of the
+release with the same files. `main` does not reach that commit, so Craft only
+sees `vX.Y.Z`. Prereleases do not move it. Do not use Craft `floatingTags`:
+it puts `v0` on the release commit, `git describe` then returns `v0`, and
+`auto` starts from `0.0.0`. It also moves `v0` on prereleases. The Craft GitHub
+target creates the release but is filtered away from package artifacts so it
+does not upload npm package contents as release assets.
 
 Releases up to 0.18.0 tagged the bundle on a commit outside `main`, and `main`
 only reaches their `vX.Y.Z-src` tags. Craft reads those as prereleases. For the

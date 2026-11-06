@@ -32,6 +32,8 @@ targets:
     id: "@vitest-evals/github-reporter"
     access: public
     includeNames: /^vitest-evals-github-reporter-\d.*\.tgz$/
+  # No floatingTags: v0 on the release commit makes `git describe` return v0.
+  # .github/workflows/update-action-tag.yml moves v0 instead.
   - name: github
     tagPrefix: v
     includeNames: /^$/
