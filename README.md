@@ -153,7 +153,10 @@ moved.
 
 The root GitHub Action runs the bundled `github-reporter/dist/action/index.js`,
 which is committed on `main`. On pull requests from this repository, CI
-rebuilds the bundle and commits it back to the branch when it changed. On fork
+rebuilds the bundle and commits it back to the branch when it changed. The
+push runs in a separate `workflow_run` workflow from `main`, so pull request
+runs never get the release bot key. That workflow runs only from the default
+branch, so a change to it takes effect after it merges. On fork
 pull requests and on `main`, CI cannot push, so it fails when the bundle is
 stale. Then run `pnpm build:action` and commit the result. CI also checks the
 bundle on the merge with `main`. If that check fails after the branch is fresh,

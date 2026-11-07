@@ -1,7 +1,7 @@
 #!/bin/sh
 # Rebuilds the GitHub Action bundle and compares it with the committed files.
 # When CAN_PUSH=true (same-repo PRs), a stale bundle sets the `stale` step
-# output so a later job without dependency code can commit it. Otherwise
+# output so CI uploads it for the push-action-bundle workflow. Otherwise
 # (fork PRs, Dependabot, main) a stale bundle fails the job.
 set -eu
 
