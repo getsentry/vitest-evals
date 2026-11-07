@@ -139,27 +139,52 @@ pnpm exec vitest-evals serve eval-results/
 
 ## Releases
 
-Use the manual Release workflow for stable releases. Select `patch`, `minor`,
-or `major` for the normal version bump.
+Run the manual Release workflow. Leave `bump` at `auto` to pick the bump from
+the commits since the last stable release, or select `patch`, `minor`, or
+`major`. Before `1.0.0`, `auto` turns breaking changes into a minor bump.
 
-For a preview release that should not become the main stable version, set
-`prerelease` to `true` and leave `prerelease_id` as `beta` unless you want an
-`rc` or `alpha` line. From `0.8.0`, `bump=minor` produces `0.9.0-beta.0` and
-`bump=major` produces `1.0.0-beta.0`; running prerelease again from
-`1.0.0-beta.0` produces `1.0.0-beta.1`. Craft publishes npm prereleases under a
-prerelease dist-tag so the stable `latest` line is not moved.
+For a preview release that should not become the main stable version, select
+`pre`. It cuts an `alpha` prerelease of the version `auto` would release: from
+`0.8.0`, a minor bump produces `0.9.0-alpha.0`, and running `pre` again
+produces `0.9.0-alpha.1`. For a `beta` or `rc` line, set `version` to the exact
+version, such as `0.9.0-beta.0`. `version` overrides `bump`. Craft publishes
+npm prereleases under a prerelease dist-tag so the stable `latest` line is not
+moved.
 
-Release tags are updated after publish with the bundled `github-reporter`
-action so workflows can use `getsentry/vitest-evals@v0`. The release workflow
-keeps `vX.Y.Z-src` on the source commit for Craft's next changelog baseline,
-then moves `vX.Y.Z` and the stable `vX` tag to the bundled action commit. The
-Craft GitHub target creates the release but is filtered away from package
-artifacts so it does not upload npm package contents as release assets.
+The root GitHub Action runs the bundled `github-reporter/dist/action/index.js`,
+which is committed on `main`. On pull requests from this repository, CI
+rebuilds the bundle and commits it back to the branch when it changed. The
+push runs in a separate `workflow_run` workflow from `main`, so pull request
+runs never get the release bot key. That workflow runs only from the default
+branch, so a change to it takes effect after it merges. On fork
+pull requests and on `main`, CI cannot push, so it fails when the bundle is
+stale. Then run `pnpm build:action` and commit the result. CI also checks the
+bundle on the merge with `main`. If that check fails after the branch is fresh,
+merge or rebase on `main` so CI rebuilds the bundle for the merged code.
+
+Craft tags the release commit as `vX.Y.Z`, so workflows can use
+`getsentry/vitest-evals@vX.Y.Z`. On stable releases, Craft also moves the
+floating `vX` tag (for example, `v0`) to the same commit. Prereleases do not
+move it. Craft ignores `vX` when it looks up the previous release, so `auto`
+still starts from the latest `vX.Y.Z`. The Craft GitHub target creates the
+release but is filtered away from package artifacts so it does not upload npm
+package contents as release assets.
+
+Releases up to 0.18.0 tagged the bundle on a commit outside `main`, so `main`
+only reaches their `vX.Y.Z-src` tags. Craft would use `v0.18.0-src` as the
+previous release: `auto` would compute `0.18.0`, which already exists, and
+`major` or `pre` would cut the wrong version. A release check stops the
+workflow when the latest `vX.Y.Z` tag on `main` does not match the package
+version. For the first release after this change, set `version` to the exact
+version (for example, `0.18.1`). Then check that
+`git ls-remote origin refs/tags/v0` points at the `v0.18.1` commit: Craft only
+logs a warning when it cannot move a floating tag. After that, `auto` and the
+bump types work.
 
 Release config validation treats every non-private `packages/*/package.json` as
 publishable. `pnpm release:check` verifies that `.craft.yml`, the post-merge
 pack step, Craft artifact selectors, package version bumping, and the bundled
-action tag workflow all cover that manifest-derived package set.
+action commit all cover that manifest-derived package set.
 
 ## Example
 

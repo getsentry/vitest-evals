@@ -305,20 +305,10 @@ function assertActionBundleConfig(root, errors) {
     }
   }
 
-  const updateActionTag = readFile(
-    root,
-    ".github/workflows/update-action-tag.yml",
-  );
-  if (!updateActionTag.includes(`git add -f ${ACTION_BUNDLE_MAIN}`)) {
+  // CI runs this before any build, so the bundle exists only when committed.
+  if (!fs.existsSync(path.join(root, ACTION_BUNDLE_MAIN))) {
     errors.push(
-      `Release config check failed: update-action-tag.yml must commit ${ACTION_BUNDLE_MAIN}.`,
-    );
-  }
-
-  const releaseWorkflow = readFile(root, ".github/workflows/release.yml");
-  if (!releaseWorkflow.includes(`${ACTION_BUNDLE_MAIN}`)) {
-    errors.push(
-      `Release config check failed: release.yml must verify ${ACTION_BUNDLE_MAIN} on bundled action tags.`,
+      `Release config check failed: ${ACTION_BUNDLE_MAIN} must be committed. Run pnpm build:action and commit it.`,
     );
   }
 }

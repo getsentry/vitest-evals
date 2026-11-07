@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -153,17 +153,7 @@ function writeReleaseFixture({
     'export default { outDir: "../../github-reporter/dist/action" };\n',
   );
 
-  writeFixtureFile(
-    root,
-    ".github/workflows/update-action-tag.yml",
-    "steps:\n  - run: git add -f github-reporter/dist/action/index.js\n",
-  );
-
-  writeFixtureFile(
-    root,
-    ".github/workflows/release.yml",
-    'steps:\n  - run: git cat-file -e "$CURRENT_TAG:github-reporter/dist/action/index.js"\n',
-  );
+  writeFixtureFile(root, "github-reporter/dist/action/index.js", "\n");
 
   return root;
 }
@@ -192,6 +182,15 @@ describe("release config check", () => {
 
     expect(() => checkReleaseConfig(root)).toThrow(
       /Missing: @vitest-evals\/harness-extra/,
+    );
+  });
+
+  test("fails when the action bundle is not committed", () => {
+    const root = writeReleaseFixture({ craftPackages: ["vitest-evals"] });
+    rmSync(path.join(root, "github-reporter"), { recursive: true });
+
+    expect(() => checkReleaseConfig(root)).toThrow(
+      /github-reporter\/dist\/action\/index\.js must be committed/,
     );
   });
 

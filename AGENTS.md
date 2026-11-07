@@ -32,7 +32,7 @@ apps/                     # demo-ai-sdk, demo-openai-agents, demo-pi (realistic 
 - Keep `UsageSummary` to stable usage units such as tokens, USD cost, tools, retries, provider, and model. Set `costUsd` only when cost is known; provider-specific pricing details belong in `usage.metadata`.
 - GitHub reporting is action-first: document workflows with `uses: getsentry/vitest-evals@v0`, not CLI commands.
 - Sharded eval reporting uses distinct JSON artifacts per matrix job and one reducer job that publishes the combined action report.
-- Root GitHub Action releases keep source and bundled tags separate: Craft publishes the source release, `vX.Y.Z-src` preserves the source baseline, and `vX`/`vX.Y.Z` point at the bundled action commit. Keep the Craft `github` target filtered away from package artifacts.
+- The root GitHub Action bundle `github-reporter/dist/action/index.js` is committed on `main`. CI rebuilds it on same-repo PRs, and the `push-action-bundle.yml` `workflow_run` workflow (default branch only, holds the release bot key, runs no PR code) commits it back; fork PRs, `main`, and the PR merge result fail when it is stale, so run `pnpm build:action` (after merging `main` if only the merge result is stale) and commit the result. Craft tags `vX.Y.Z` on the release commit and moves the floating `vX` tag there on stable releases only (`floatingTags`, Craft 3.11.1 or later). Craft ignores `vX` when it looks up versions. Keep the Craft `github` target filtered away from package artifacts.
 - Update `README.md`, `packages/vitest-evals/README.md`, and relevant docs when product shape changes.
 - Follow `policies/code-comments.md` for exported-function JSDoc and non-obvious comments only.
 

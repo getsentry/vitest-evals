@@ -62,8 +62,11 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Build GitHub reporter action
-        run: pnpm build:action
+      # Fail-only check on the PR merge commit, so a bundle that the merge with
+      # main makes stale cannot go green. action-bundle and push-action-bundle.yml
+      # fix the branch.
+      - name: Check GitHub Action bundle on the merge result
+        run: sh scripts/check-action-bundle.sh
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
@@ -121,3 +124,44 @@ jobs:
           name: report-ui-visual
           path: packages/report-ui/.visual/
           if-no-files-found: ignore
+
+  # Keeps the committed Action bundle fresh. This job builds with no secrets.
+  # On same-repo PRs a stale bundle is uploaded as an artifact, and the
+  # push-action-bundle workflow (workflow_run, default branch) commits it
+  # back. Fork PRs, Dependabot, and main cannot be pushed to, so they fail.
+  action-bundle:
+    runs-on: ubuntu-latest
+    env:
+      CAN_PUSH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      # pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        name: Install pnpm
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Check GitHub Action bundle
+        id: check
+        run: sh scripts/check-action-bundle.sh
+
+      - name: Upload rebuilt GitHub Action bundle
+        if: steps.check.outputs.stale == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: action-bundle
+          path: github-reporter/dist
+          retention-days: 1

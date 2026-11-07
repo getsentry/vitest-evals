@@ -184,3 +184,7 @@ temp/
 .vitest-evals/
 .codex
 packages/report-ui/.visual/
+
+# The GitHub Action runs this bundle from the release tag. Rebuild it with
+# `pnpm build:action` and commit it.
+!/github-reporter/dist/

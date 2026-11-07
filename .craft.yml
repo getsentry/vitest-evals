@@ -1,4 +1,4 @@
-minVersion: 3.9.0
+minVersion: 3.11.1
 changelog:
   policy: none
 preReleaseCommand: bash scripts/craft-pre-release.sh
@@ -34,4 +34,5 @@ targets:
     includeNames: /^vitest-evals-github-reporter-\d.*\.tgz$/
   - name: github
     tagPrefix: v
+    floatingTags: ["v{major}"]
     includeNames: /^$/

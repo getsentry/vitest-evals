@@ -1,0 +1,89 @@
+name: Push Action Bundle
+
+# Commits the GitHub Action bundle that the Test workflow rebuilt on a
+# same-repo pull request back to its branch. workflow_run always runs this
+# file from the default branch, so a pull request cannot change it and the
+# release bot key never reaches a pull_request run. The PR's identity comes
+# from the workflow_run payload. The artifact is untrusted data: the
+# default-branch script copies only regular files from it, and no PR code
+# runs here. The app token is minted last and its push starts CI again.
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+# Keyed on head_sha so a Test run for an older commit that finishes late
+# cannot cancel the push for a newer one. A push for an older commit fails
+# the fast-forward check instead.
+concurrency:
+  group: push-action-bundle-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  push:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.actor.login != 'dependabot[bot]' &&
+      github.event.workflow_run.head_branch != github.event.repository.default_branch &&
+      !startsWith(github.event.workflow_run.head_branch, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out push scripts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          path: trusted
+          sparse-checkout: |
+            scripts/find-action-bundle-artifact.sh
+            scripts/push-action-bundle.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Find rebuilt GitHub Action bundle
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: sh trusted/scripts/find-action-bundle-artifact.sh
+
+      - name: Check out pull request
+        if: steps.artifact.outputs.found == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: pr
+          persist-credentials: false
+
+      - name: Download rebuilt GitHub Action bundle
+        if: steps.artifact.outputs.found == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: action-bundle
+          path: ${{ runner.temp }}/action-bundle
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Get auth token
+        if: steps.artifact.outputs.found == 'true'
+        id: token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Push GitHub Action bundle
+        if: steps.artifact.outputs.found == 'true'
+        working-directory: pr
+        env:
+          PUSH_TOKEN: ${{ steps.token.outputs.token }}
+          PUSH_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          GIT_AUTHOR_NAME: ${{ steps.token.outputs.app-slug }}[bot]
+          GIT_AUTHOR_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ steps.token.outputs.app-slug }}[bot]
+          GIT_COMMITTER_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
+        run: sh "$GITHUB_WORKSPACE/trusted/scripts/push-action-bundle.sh" "$RUNNER_TEMP/action-bundle"
