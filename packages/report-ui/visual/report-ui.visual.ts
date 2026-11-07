@@ -116,10 +116,10 @@ function horizontalOverflow(page: Page) {
 }
 
 /**
- * Lists pairs of visible controls in the same layer whose boxes overlap. This
- * catches cramped toolbars where inputs, selects, or buttons collide. Overlap
- * across layers (drawer, popover, palette, tray) is intentional, so it is
- * ignored.
+ * Lists pairs of visible controls or headings in the same layer whose boxes
+ * overlap. This catches cramped toolbars where inputs, selects, or buttons
+ * collide, and controls pulled over a section title. Overlap across layers
+ * (drawer, popover, palette, tray) is intentional, so it is ignored.
  */
 function overlappingControls(page: Page) {
   return page.evaluate(() => {
@@ -147,7 +147,9 @@ function overlappingControls(page: Page) {
       element.getAttribute("placeholder") ||
       element.tagName.toLowerCase();
     const controls = [
-      ...document.querySelectorAll("a[href], button, input, select, textarea"),
+      ...document.querySelectorAll(
+        "a[href], button, input, select, textarea, h1, h2, h3, h4",
+      ),
     ].flatMap((element) => {
       const rect = element.getBoundingClientRect();
       const area = rect.width * rect.height;

@@ -11,6 +11,7 @@ import {
   previewArgumentValue,
   truncatePreview,
 } from "./transcriptPreview";
+import { HighlightText, useTranscriptSearch } from "./transcriptSearch";
 
 const TOOL_RUN_REVEAL_THRESHOLD = 4;
 
@@ -24,8 +25,9 @@ export function TranscriptToolRun({
   keyPrefix: string;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const { active: searchActive } = useTranscriptSearch();
 
-  if (calls.length >= TOOL_RUN_REVEAL_THRESHOLD && !revealed) {
+  if (calls.length >= TOOL_RUN_REVEAL_THRESHOLD && !revealed && !searchActive) {
     return (
       <ToolRunReveal
         hiddenCount={calls.length}
@@ -70,7 +72,7 @@ function TranscriptToolView({ call }: { call: ToolCall }) {
         <>
           <ToolStatus failed={failed} />
           <strong className="min-w-0 break-words font-bold text-ink">
-            {call.name}
+            <HighlightText text={call.name} />
           </strong>
           {isPreviewableValue(call.arguments) ? (
             <code className="min-w-0 break-words font-[inherit] text-muted-strong max-md:hidden">
@@ -105,6 +107,7 @@ function ToolFrame({
   signature: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const { active: searchActive } = useTranscriptSearch();
   const metaText = meta.join(" · ");
   const interactive = expandable ?? Boolean(children);
   const closedMobileMeta =
@@ -145,7 +148,8 @@ function ToolFrame({
       </div>
     ) : null;
 
-  if (raw || !interactive) {
+  // Force-expand tool details during search so highlighted matches are visible.
+  if (searchActive || raw || !interactive) {
     return (
       <div className={toolFrameClass()}>
         <div className={toolHeaderClass(false)}>{header}</div>
