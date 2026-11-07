@@ -16,9 +16,12 @@ permissions:
   contents: read
   actions: read
 
+# Keyed on head_sha so a Test run for an older commit that finishes late
+# cannot cancel the push for a newer one. A push for an older commit fails
+# the fast-forward check instead.
 concurrency:
-  group: push-action-bundle-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
+  group: push-action-bundle-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 
 jobs:
   push:
