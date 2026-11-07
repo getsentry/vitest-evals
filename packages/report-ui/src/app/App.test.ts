@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ReportWorkspace } from "@vitest-evals/core";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  adjacentVisibleCase,
   loadWorkspace,
+  nextSortSearch,
   resolveSelectedCase,
-  resolveSelectedCaseId,
-  summarizeVisibleWorkspace,
-  visibleWorkspaceRuns,
 } from "./App";
 import { passRate } from "./components/ReportPrimitives";
 
@@ -40,157 +39,47 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("case selection", () => {
-  test("keeps selection scoped to visible filtered cases", () => {
-    const visibleCases = [cases[1]!];
-
-    expect(resolveSelectedCase("failed-case", visibleCases)).toBeUndefined();
-    expect(resolveSelectedCaseId("failed-case", visibleCases)).toBe(
-      "passed-case",
-    );
-    expect(resolveSelectedCaseId("failed-case", [])).toBeUndefined();
-  });
-
-  test("preserves a selected case that remains visible", () => {
-    expect(resolveSelectedCase("failed-case", cases)).toEqual(cases[0]);
-    expect(resolveSelectedCaseId("failed-case", cases)).toBe("failed-case");
-  });
-
-  test("preserves an empty selection when filters change", () => {
-    expect(resolveSelectedCaseId(undefined, cases)).toBeUndefined();
+describe("nextSortSearch", () => {
+  test("starts a new column with its default direction and toggles the active one", () => {
+    expect(nextSortSearch(undefined, "asc", "score")).toEqual({
+      dir: "desc",
+      sort: "score",
+    });
+    expect(nextSortSearch("score", "desc", "score")).toEqual({
+      dir: "asc",
+      sort: "score",
+    });
+    expect(nextSortSearch("score", "asc", "case")).toEqual({
+      dir: "asc",
+      sort: "case",
+    });
+    expect(nextSortSearch(undefined, "asc", "model")).toEqual({
+      dir: "asc",
+      sort: "model",
+    });
   });
 });
 
-describe("visible summary", () => {
-  const runs: ReportWorkspace["runs"] = [
-    {
-      id: "run-1",
-      status: "failed",
-      durationMs: 1000,
-      totals: {
-        evalFailed: 1,
-        evalPassed: 0,
-        evalTotal: 1,
-        failed: 1,
-        passed: 0,
-        skipped: 0,
-        total: 1,
-      },
-    },
-    {
-      id: "run-2",
-      status: "passed",
-      durationMs: 2000,
-      totals: {
-        evalFailed: 0,
-        evalPassed: 1,
-        evalTotal: 1,
-        failed: 0,
-        passed: 1,
-        skipped: 0,
-        total: 1,
-      },
-    },
-  ];
-
-  test("summarizes only visible cases when filters are active", () => {
-    expect(
-      summarizeVisibleWorkspace(
-        {
-          schemaVersion: 2,
-          runs,
-          cases: [
-            cases[0]!,
-            {
-              ...cases[1]!,
-              runId: "run-2",
-            },
-          ],
-        },
-        {
-          query: "",
-          runId: "run-2",
-          status: "passed",
-        },
-        [
-          {
-            ...cases[1]!,
-            runId: "run-2",
-          },
-        ],
-      ),
-    ).toMatchObject({
-      caseCount: 1,
-      durationMs: 2000,
-      failed: 0,
-      passed: 1,
-      runCount: 1,
-    });
+describe("adjacentVisibleCase", () => {
+  test("opens the first or last case when nothing is selected", () => {
+    expect(adjacentVisibleCase(cases, undefined, 1)?.id).toBe("failed-case");
+    expect(adjacentVisibleCase(cases, undefined, -1)?.id).toBe("passed-case");
   });
 
-  test("returns the same visible runs used by filtered summaries", () => {
-    expect(
-      visibleWorkspaceRuns(
-        runs,
-        {
-          query: "",
-          runId: "run-2",
-          status: "passed",
-        },
-        [
-          {
-            ...cases[1]!,
-            runId: "run-2",
-          },
-        ],
-      ),
-    ).toEqual([runs[1]]);
-
-    expect(
-      visibleWorkspaceRuns(
-        runs,
-        {
-          query: "",
-          runId: "all",
-          status: "all",
-        },
-        [],
-      ),
-    ).toEqual(runs);
+  test("moves to the next visible case and stays at the ends", () => {
+    expect(adjacentVisibleCase(cases, "failed-case", 1)?.id).toBe(
+      "passed-case",
+    );
+    expect(adjacentVisibleCase(cases, "passed-case", 1)?.id).toBe(
+      "passed-case",
+    );
+    expect(adjacentVisibleCase(cases, "passed-case", -1)?.id).toBe(
+      "failed-case",
+    );
   });
+});
 
-  test("keeps run counts for unfiltered empty reports", () => {
-    expect(
-      summarizeVisibleWorkspace(
-        {
-          schemaVersion: 2,
-          runs: [
-            {
-              id: "run-1",
-              status: "passed",
-              totals: {
-                evalFailed: 0,
-                evalPassed: 0,
-                evalTotal: 0,
-                failed: 0,
-                passed: 1,
-                skipped: 0,
-                total: 1,
-              },
-            },
-          ],
-          cases: [],
-        },
-        {
-          query: "",
-          runId: "all",
-          status: "all",
-        },
-        [],
-      ).runCount,
-    ).toBe(1);
-  });
-
+describe("passRate", () => {
   test("calculates pass rate from executed cases", () => {
     expect(
       passRate({

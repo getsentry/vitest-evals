@@ -87,3 +87,37 @@ jobs:
         with:
           report_paths: "**/*.junit.xml"
           comment: false
+
+  report-ui-visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      # pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        name: Install pnpm
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Chromium
+        run: pnpm --filter @vitest-evals/report-ui exec playwright install --with-deps chromium
+
+      - name: Run report UI visual scenes
+        run: pnpm test:visual
+
+      - name: Upload report UI screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-ui-visual
+          path: packages/report-ui/.visual/
+          if-no-files-found: ignore

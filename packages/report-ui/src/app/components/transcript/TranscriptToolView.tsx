@@ -1,5 +1,5 @@
-import { Fragment, useState, type ReactNode } from "react";
-import { formatDuration, type TranscriptToolEvent } from "../../model";
+import { Fragment, type ReactNode, useState } from "react";
+import { type TranscriptToolEvent, formatDuration } from "../../model";
 import { cx } from "../../ui";
 import { TranscriptCodeBlock } from "./TranscriptCodeBlock";
 import {

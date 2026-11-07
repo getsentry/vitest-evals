@@ -183,3 +183,4 @@ Thumbs.db
 temp/
 .vitest-evals/
 .codex
+packages/report-ui/.visual/

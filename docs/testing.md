@@ -34,7 +34,10 @@ packages/github-reporter/src/
   report.test.ts
 packages/report-ui/src/
   server.test.ts
-  app/model.test.ts
+  app/*.test.ts
+packages/report-ui/visual/
+  scenes.ts
+  report-ui.visual.ts
 apps/demo-pi/src/
   refundAgent.test.ts
 apps/demo-openai-agents/src/
@@ -96,6 +99,30 @@ Cover:
 - usage/tool normalization
 - replay behavior for `@vitest-evals/harness-pi-ai`
 
+### Report UI Changes
+
+Cover data shaping, cost math, and server behavior with unit tests under
+`packages/report-ui/src/`.
+
+For layout or interaction changes, run the visual scenes:
+
+```bash
+pnpm exec playwright install chromium   # once, from packages/report-ui
+pnpm test:visual
+```
+
+`pnpm test:visual` builds the UI, serves the two visual fixtures (a baseline
+run and a later run) through `serveReportWorkspace` with bundled pricing, and
+drives each scene in `packages/report-ui/visual/scenes.ts` with Playwright.
+Every scene fails on uncaught page errors, `console.error`, failed requests,
+sideways page scroll, or overlapping controls in the same layer. Screenshots
+land in `packages/report-ui/.visual/`; CI uploads them as the
+`report-ui-visual` artifact for review.
+
+Add a scene when you add a view, panel, or responsive breakpoint. The suite
+does not diff pixels against baselines; review the screenshots in the PR
+instead.
+
 ### Legacy Compatibility Changes
 
 If you touch scorer-first code, add tests under
@@ -153,6 +180,7 @@ Common commands:
 pnpm typecheck
 pnpm docs:check
 pnpm test
+pnpm test:visual   # report UI changes
 pnpm build
 pnpm evals
 ```

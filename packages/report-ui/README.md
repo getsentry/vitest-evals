@@ -14,7 +14,16 @@ and directories containing JSON files. It collects them into the shared
 exposes the collected data at `/data/workspace.json`. The viewer separates
 application, judge, and total token and cost usage at workspace and case level.
 
-For visual QA, build and serve the intentionally awkward fixture:
+For visual QA, run the browser scenes. They build the UI, render each scene
+from `visual/scenes.ts` in Chromium, fail on page errors or overlapping
+controls, and write screenshots to `.visual/`:
+
+```bash
+pnpm exec playwright install chromium   # once
+pnpm run test:visual
+```
+
+To click around the same fixtures yourself, serve them:
 
 ```bash
 pnpm --filter @vitest-evals/report-ui run visual:fixture
