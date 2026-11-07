@@ -7,5 +7,12 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "tsup.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "visual/**/*.ts",
+    "vite.config.ts",
+    "vitest.visual.config.ts",
+    "tsup.config.ts"
+  ]
 }

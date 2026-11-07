@@ -23,34 +23,12 @@ export function toneTextClass(tone: Tone) {
   return toneText[tone];
 }
 
-export function Field({
-  htmlFor,
-  label,
-  children,
-}: {
-  htmlFor: string;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <label
-        className="text-xs font-semibold text-muted-strong"
-        htmlFor={htmlFor}
-      >
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
+        "h-8 w-full rounded-md border border-line-subtle bg-panel px-2.5 text-sm text-ink outline-none",
         "placeholder:text-muted focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}
@@ -63,7 +41,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
     <select
       {...props}
       className={cx(
-        "h-9 w-full rounded-md border border-line-subtle bg-panel px-3 text-sm text-ink outline-none",
+        "h-8 w-auto max-w-full rounded-md border border-line-subtle bg-panel px-2.5 text-sm text-ink outline-none",
         "focus:border-selected-line focus:ring-2 focus:ring-selected",
         props.className,
       )}

@@ -48,4 +48,14 @@
   button {
     color: inherit;
   }
+
+  .json-view {
+    color: var(--color-code);
+    --json-property: var(--color-pass);
+    --json-index: var(--color-trace);
+    --json-number: var(--color-trace);
+    --json-string: var(--color-warn);
+    --json-boolean: var(--color-fail);
+    --json-null: var(--color-fail);
+  }
 }

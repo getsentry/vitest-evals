@@ -1,13 +1,24 @@
 import type { HarnessRun, ReportCase } from "@vitest-evals/core";
 import {
+  caseExpected,
+  caseInput,
   formatDuration,
   formatNumber,
-  formatUsd,
+  judgeRunsForCase,
   summarizeRuns,
 } from "../model";
-import { EmptyState } from "../ui";
+import {
+  type UsageCost,
+  estimateWorkspaceUsageCost,
+  formatCostTotal,
+} from "../pricing";
+import { useReportMeta } from "../report-meta";
+import { EmptyState, cx } from "../ui";
+import { CostHelp } from "./CostHelp";
 import { DetailContent, DetailSection } from "./DetailLayout";
-import { Fact, FactsGrid, JsonBlock, ScoreValue } from "./ReportPrimitives";
+import { FailureList } from "./FailureList";
+import { JsonInspector } from "./JsonInspector";
+import { Fact, FactsGrid, ScoreValue } from "./ReportPrimitives";
 
 export function OverviewTab({
   testCase,
@@ -16,30 +27,66 @@ export function OverviewTab({
   testCase: ReportCase;
   run: HarnessRun | undefined;
 }) {
+  const input = caseInput(testCase);
+  const expected = caseExpected(testCase);
+  const showInput = input !== undefined && input !== "";
+  const showExpected = expected !== undefined && expected !== "";
+
+  const datasetTitle =
+    showInput && showExpected ? "Dataset" : showInput ? "Input" : "Expected";
+
   return (
     <DetailContent>
+      {showInput || showExpected ? (
+        <DetailSection title={datasetTitle}>
+          <div
+            className={cx(
+              "grid gap-4",
+              showInput && showExpected ? "lg:grid-cols-2" : "",
+            )}
+          >
+            {showInput ? (
+              <div className="min-w-0">
+                {showInput && showExpected ? (
+                  <p className="mb-2 text-[0.68rem] font-semibold uppercase text-muted">
+                    Input
+                  </p>
+                ) : null}
+                <JsonInspector value={input} />
+              </div>
+            ) : null}
+            {showExpected ? (
+              <div className="min-w-0">
+                {showInput && showExpected ? (
+                  <p className="mb-2 text-[0.68rem] font-semibold uppercase text-muted">
+                    Expected
+                  </p>
+                ) : null}
+                <JsonInspector value={expected} />
+              </div>
+            ) : null}
+          </div>
+        </DetailSection>
+      ) : null}
       <DetailSection title="Output">
-        <JsonBlock value={testCase.eval?.output ?? run?.output} />
+        <JsonInspector value={testCase.eval?.output ?? run?.output} />
       </DetailSection>
       <DetailSection title="Judge evidence">
         <ScoreTable testCase={testCase} />
       </DetailSection>
-      <DetailSection title="Usage">
-        <UsageGrid testCase={testCase} run={run} />
-      </DetailSection>
-      <DetailSection title="Failures">
-        {testCase.failureMessages.length > 0 ? (
-          <ul className="list-disc space-y-2 pl-5 text-sm text-ink">
-            {testCase.failureMessages.map((message) => (
-              <li className="break-words" key={message}>
-                {message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState>No failure messages</EmptyState>
-        )}
-      </DetailSection>
+      <details className="min-w-0 border-b border-line-subtle bg-panel p-5 last:border-b-0">
+        <summary className="cursor-pointer text-sm font-semibold outline-none hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-selected-line">
+          Usage
+        </summary>
+        <div className="mt-3">
+          <UsageGrid testCase={testCase} run={run} />
+        </div>
+      </details>
+      {testCase.failureMessages.length > 0 ? (
+        <DetailSection title="Failures">
+          <FailureList messages={testCase.failureMessages} />
+        </DetailSection>
+      ) : null}
     </DetailContent>
   );
 }
@@ -151,17 +198,32 @@ function UsageGrid({
   testCase: ReportCase;
   run: HarnessRun | undefined;
 }) {
+  const { pricing } = useReportMeta();
   const usage = run?.usage;
+  const judgeRuns = judgeRunsForCase(testCase);
   const app = summarizeRuns(run ? [run] : []);
-  const judge = summarizeRuns(
-    (testCase.eval?.scores ?? []).flatMap((score) => score.judgeRuns ?? []),
+  const judge = summarizeRuns(judgeRuns);
+  const appCost = estimateWorkspaceUsageCost(run ? [run.usage] : [], pricing);
+  const judgeCost = estimateWorkspaceUsageCost(
+    judgeRuns.map((judgeRun) => judgeRun.usage),
+    pricing,
   );
-  const totalCost =
-    (app.runCount === 0 || app.costUsd !== undefined) &&
-    (judge.runCount === 0 || judge.costUsd !== undefined) &&
-    app.runCount + judge.runCount > 0
-      ? (app.costUsd ?? 0) + (judge.costUsd ?? 0)
-      : undefined;
+  const totalCost = estimateWorkspaceUsageCost(
+    [
+      ...(run ? [run.usage] : []),
+      ...judgeRuns.map((judgeRun) => judgeRun.usage),
+    ],
+    pricing,
+  );
+  const costValue = (cost: UsageCost | undefined) =>
+    cost ? (
+      <span className="inline-flex items-center gap-1.5">
+        <span>{formatCostTotal(cost)}</span>
+        <CostHelp cost={cost} pricing={pricing} />
+      </span>
+    ) : (
+      "n/a"
+    );
 
   return (
     <FactsGrid compact>
@@ -171,9 +233,9 @@ function UsageGrid({
         label="Total tokens"
         value={formatNumber(app.tokens + judge.tokens)}
       />
-      <Fact label="App cost" value={formatUsd(app.costUsd)} />
-      <Fact label="Judge cost" value={formatUsd(judge.costUsd)} />
-      <Fact label="Total cost" value={formatUsd(totalCost)} />
+      <Fact label="App cost" value={costValue(appCost)} />
+      <Fact label="Judge cost" value={costValue(judgeCost)} />
+      <Fact label="Total cost" value={costValue(totalCost)} />
       <Fact label="App provider" value={usage?.provider ?? "n/a"} />
       <Fact label="App model" value={usage?.model ?? "n/a"} />
       <Fact label="Retries" value={formatNumber(usage?.retries)} />

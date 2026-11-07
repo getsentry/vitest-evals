@@ -1,20 +1,9 @@
-import type { ReactNode } from "react";
 import type { ReportCase } from "@vitest-evals/core";
-import {
-  formatJson,
-  formatScore,
-  scoreTone,
-  type summarizeWorkspace,
-} from "../model";
-import { CodeBlock, EmptyState, cx, toneTextClass, type Tone } from "../ui";
-
-export function JsonBlock({ value }: { value: unknown }) {
-  if (value === undefined || value === "") {
-    return <EmptyState>n/a</EmptyState>;
-  }
-
-  return <CodeBlock value={formatJson(value)} />;
-}
+import type { ReactNode } from "react";
+import { type JudgeTally, judgeTallyLabel } from "../judge-score";
+import { formatScore, scoreTone, type summarizeWorkspace } from "../model";
+import { type Tone, cx, toneTextClass } from "../ui";
+import { InstantTooltip } from "./InstantTooltip";
 
 export function FactsGrid({
   compact,
@@ -42,13 +31,25 @@ export function FactsGrid({
   );
 }
 
-export function Fact({ label, value }: { label: string; value: string }) {
+export function Fact({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div className="min-w-0">
       <dt className="text-[0.68rem] font-semibold uppercase text-muted">
         {label}
       </dt>
-      <dd className="mt-1 truncate text-sm font-semibold text-ink">{value}</dd>
+      <dd className="mt-1 min-w-0 text-sm font-semibold text-ink">
+        {typeof value === "string" ? (
+          <span className="block truncate">{value}</span>
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   );
 }
@@ -80,12 +81,16 @@ export function StatusMark({
 export function ScoreValue({
   score,
   size = "md",
+  tally,
+  tone: toneOverride,
 }: {
   score: number | null | undefined;
   size?: "md" | "lg";
+  tally?: JudgeTally;
+  tone?: Tone;
 }) {
-  const tone = scoreTone(score) as Tone;
-  return (
+  const tone = (toneOverride ?? scoreTone(score)) as Tone;
+  const value = (
     <span
       className={cx(
         "font-semibold tabular-nums",
@@ -95,6 +100,14 @@ export function ScoreValue({
     >
       {formatScore(score)}
     </span>
+  );
+
+  if (!tally || tally.total === 0) {
+    return value;
+  }
+
+  return (
+    <InstantTooltip content={judgeTallyLabel(tally)}>{value}</InstantTooltip>
   );
 }
 
