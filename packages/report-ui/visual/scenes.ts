@@ -73,6 +73,23 @@ export const scenes: VisualScene[] = [
     ready: caseDialog,
   },
   {
+    // Matches a system message and a failed tool's error, hides the rest.
+    name: "case-transcript-search",
+    act: (page) => searchTranscript(page, "fraud"),
+    ready: (page) => caseDialog(page).locator("mark").first(),
+  },
+  {
+    name: "case-transcript-search-phone",
+    viewport: PHONE,
+    act: (page) => searchTranscript(page, "fraud"),
+    ready: (page) => caseDialog(page).locator("mark").first(),
+  },
+  {
+    name: "case-transcript-search-empty",
+    act: (page) => searchTranscript(page, "no-such-event"),
+    ready: (page) => caseDialog(page).getByText("No events match your search."),
+  },
+  {
     name: "case-compare",
     act: (page) => openCaseTab(page, FAILING_CASE, "Compare"),
     ready: caseDialog,
@@ -158,6 +175,14 @@ async function stubRunningRerun(page: Page) {
       }),
     });
   });
+}
+
+/** Opens the failing case's transcript and types a search query. */
+async function searchTranscript(page: Page, query: string) {
+  await openCaseTab(page, FAILING_CASE, "Transcript");
+  await caseDialog(page)
+    .getByRole("searchbox", { name: "Search transcript" })
+    .fill(query);
 }
 
 async function openCase(page: Page, title: string) {

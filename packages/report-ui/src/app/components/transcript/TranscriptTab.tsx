@@ -30,9 +30,10 @@ function TranscriptTabContent({ run }: { run: HarnessRun }) {
           </span>
         }
       >
-        <div className="-mx-5 -mt-4 mb-3 border-b border-line-subtle px-5 pb-3">
+        <div className="-mx-5 mb-3 border-b border-line-subtle px-5 pb-3">
           <input
             type="search"
+            aria-label="Search transcript"
             placeholder="Search transcript…"
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
