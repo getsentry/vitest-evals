@@ -167,22 +167,34 @@ jobs:
           path: github-reporter/dist
           retention-days: 1
 
+  # Holds the release bot token, so no pull request code runs here: the PR
+  # checkout keeps no credentials, and the push script comes from the base
+  # branch. On pull_request a same-repo author can still edit this workflow
+  # itself; that needs an environment or a pull_request_target split.
   push-action-bundle:
     needs: action-bundle
-    if: needs.action-bundle.outputs.stale == 'true'
+    if: >-
+      needs.action-bundle.outputs.stale == 'true' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Get auth token
-        id: token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
-        with:
-          app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
-          private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
-
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Check out pull request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          token: ${{ steps.token.outputs.token }}
+          path: pr
+          persist-credentials: false
+
+      - name: Check out trusted push script
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          sparse-checkout: scripts/push-action-bundle.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Download rebuilt GitHub Action bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -190,11 +202,20 @@ jobs:
           name: action-bundle
           path: ${{ runner.temp }}/action-bundle
 
+      - name: Get auth token
+        id: token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Push GitHub Action bundle
+        working-directory: pr
         env:
+          PUSH_TOKEN: ${{ steps.token.outputs.token }}
           PUSH_BRANCH: ${{ github.head_ref }}
           GIT_AUTHOR_NAME: ${{ steps.token.outputs.app-slug }}[bot]
           GIT_AUTHOR_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: ${{ steps.token.outputs.app-slug }}[bot]
           GIT_COMMITTER_EMAIL: ${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com
-        run: sh scripts/push-action-bundle.sh "$RUNNER_TEMP/action-bundle"
+        run: sh "$GITHUB_WORKSPACE/trusted/scripts/push-action-bundle.sh" "$RUNNER_TEMP/action-bundle"
