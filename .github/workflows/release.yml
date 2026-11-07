@@ -46,6 +46,10 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
+    - name: Check release baseline
+      if: inputs.version == ''
+      run: sh scripts/check-release-baseline.sh
+
     - name: Setup Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:

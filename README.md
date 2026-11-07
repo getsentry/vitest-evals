@@ -167,10 +167,16 @@ still starts from the latest `vX.Y.Z`. The Craft GitHub target creates the
 release but is filtered away from package artifacts so it does not upload npm
 package contents as release assets.
 
-Releases up to 0.18.0 tagged the bundle on a commit outside `main`, and `main`
-only reaches their `vX.Y.Z-src` tags. Craft reads those as prereleases. For the
-first release after this change, set `version` to the exact version (for
-example, `0.18.1`). After that, `auto` and the bump types work.
+Releases up to 0.18.0 tagged the bundle on a commit outside `main`, so `main`
+only reaches their `vX.Y.Z-src` tags. Craft would use `v0.18.0-src` as the
+previous release: `auto` would compute `0.18.0`, which already exists, and
+`major` or `pre` would cut the wrong version. A release check stops the
+workflow when the latest `vX.Y.Z` tag on `main` does not match the package
+version. For the first release after this change, set `version` to the exact
+version (for example, `0.18.1`). Then check that
+`git ls-remote origin refs/tags/v0` points at the `v0.18.1` commit: Craft only
+logs a warning when it cannot move a floating tag. After that, `auto` and the
+bump types work.
 
 Release config validation treats every non-private `packages/*/package.json` as
 publishable. `pnpm release:check` verifies that `.craft.yml`, the post-merge
