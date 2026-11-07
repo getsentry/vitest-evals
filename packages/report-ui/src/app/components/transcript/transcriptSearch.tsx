@@ -96,7 +96,6 @@ export function eventMatchesSearch(
 
   return (
     textContains(event.name, normalizedQuery) ||
-    textContains(event.callId, normalizedQuery) ||
     textContains(formatJson(event.arguments), normalizedQuery) ||
     textContains(formatJson(event.result), normalizedQuery) ||
     textContains(formatJson(event.error), normalizedQuery)

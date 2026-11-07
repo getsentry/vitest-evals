@@ -313,7 +313,8 @@ export function CaseDrawer({
             <OverviewTab testCase={testCase} run={harnessRun} />
           ) : null}
           {activeTab === "transcript" ? (
-            <TranscriptTab run={harnessRun} />
+            // Keyed by case so a search query does not carry over to the next case.
+            <TranscriptTab key={testCase.id} run={harnessRun} />
           ) : null}
           {activeTab === "compare" && canCompare ? (
             <CompareTab

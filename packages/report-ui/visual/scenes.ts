@@ -85,6 +85,28 @@ export const scenes: VisualScene[] = [
     ready: (page) => caseDialog(page).locator("mark").first(),
   },
   {
+    // Moving to the next case must clear the previous case's query.
+    name: "case-transcript-search-next-case",
+    act: async (page) => {
+      // The next ledger row is the same case from the other run, which also
+      // has a transcript, so the tab stays mounted across the switch.
+      await searchTranscript(page, "invoice", PASSING_CASE);
+      await caseDialog(page).getByRole("button", { name: "Next case" }).click();
+      await page.waitForFunction(
+        () => {
+          const input = document.querySelector<HTMLInputElement>(
+            'input[aria-label="Search transcript"]',
+          );
+          return input?.value === "";
+        },
+        undefined,
+        { timeout: 2_000 },
+      );
+    },
+    ready: (page) =>
+      caseDialog(page).getByRole("searchbox", { name: "Search transcript" }),
+  },
+  {
     name: "case-transcript-search-empty",
     act: (page) => searchTranscript(page, "no-such-event"),
     ready: (page) => caseDialog(page).getByText("No events match your search."),
@@ -177,9 +199,13 @@ async function stubRunningRerun(page: Page) {
   });
 }
 
-/** Opens the failing case's transcript and types a search query. */
-async function searchTranscript(page: Page, query: string) {
-  await openCaseTab(page, FAILING_CASE, "Transcript");
+/** Opens a case's transcript and types a search query. */
+async function searchTranscript(
+  page: Page,
+  query: string,
+  title = FAILING_CASE,
+) {
+  await openCaseTab(page, title, "Transcript");
   await caseDialog(page)
     .getByRole("searchbox", { name: "Search transcript" })
     .fill(query);

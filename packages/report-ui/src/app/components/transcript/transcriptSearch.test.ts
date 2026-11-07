@@ -12,6 +12,7 @@ const message: TranscriptEvent = {
 const tool: TranscriptEvent = {
   kind: "tool",
   id: "t1",
+  callId: "call_lookup",
   name: "lookupInvoice",
   arguments: { invoiceId: "inv_404" },
   result: { status: "flagged" },
@@ -27,6 +28,10 @@ describe("eventMatchesSearch", () => {
     expect(eventMatchesSearch(tool, "lookupinvoice")).toBe(true);
     expect(eventMatchesSearch(tool, "flagged")).toBe(true);
     expect(eventMatchesSearch(tool, "refund")).toBe(false);
+  });
+
+  test("ignores tool call ids, which are not highlighted", () => {
+    expect(eventMatchesSearch(tool, "call_")).toBe(false);
   });
 
   test("treats an empty query as a match", () => {
