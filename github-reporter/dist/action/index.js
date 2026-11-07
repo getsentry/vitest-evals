@@ -13961,6 +13961,8 @@ var EvalScoreSchema = external_exports.object({
 var EvalMetaSchema = external_exports.object({
   scores: external_exports.array(EvalScoreSchema).optional(),
   avgScore: NullableFiniteNumberSchema,
+  input: JsonValueSchema.optional(),
+  expected: JsonValueSchema.optional(),
   output: JsonValueSchema.optional(),
   thresholdFailed: external_exports.boolean().optional(),
   toolCalls: external_exports.array(ToolCallSchema).optional()
