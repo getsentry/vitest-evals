@@ -74,5 +74,46 @@ describeEval(
 );
 ```
 
+## Per-Case Expectations
+
+Suite-level judges also need case-specific expectations. Pass them as the
+second `run(...)` argument. The harness never sees them; each automatic judge
+receives them in its context, and `toSatisfyJudge(...)` reuses them for the
+returned run unless matcher options override them.
+
+```ts title="evals/capital.eval.ts"
+import {
+  describeEval,
+  StructuredOutputJudge,
+  ToolCallJudge,
+} from "vitest-evals";
+import { qaHarness } from "./qaHarness";
+
+describeEval(
+  "capital questions",
+  {
+    harness: qaHarness,
+    judges: [ToolCallJudge(), StructuredOutputJudge()],
+    judgeThreshold: 0.75,
+  },
+  (it) => {
+    it.for([
+      {
+        input: "What is the capital of France?",
+        expected: { answer: "Paris" },
+        expectedTools: ["lookupCapital"],
+      },
+    ])("$input", async ({ input, ...expectations }, { run }) => {
+      await run(input, expectations);
+    });
+  },
+);
+```
+
+`judgeThreshold` compares the average score of all automatic judges, so one
+judge can fall short while the case still passes. A `null` score counts as 0.
+Use explicit `toSatisfyJudge(...)` assertions when each judge must pass on its
+own threshold.
+
 Keep deterministic judges close to the harness contract. Use custom judges for
 rubrics that need domain-specific scoring or reusable explanations.

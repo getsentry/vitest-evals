@@ -284,6 +284,63 @@ export type CreateHarnessOptions<
   ) => MaybePromise<HarnessResultLike<TOutput>>;
 };
 
+/**
+ * Tool call reported by a plain task function.
+ *
+ * @example
+ * ```ts
+ * const call: TaskHarnessToolCall = {
+ *   name: "lookupInvoice",
+ *   arguments: { invoiceId: "inv_123" },
+ *   result: { refundable: true },
+ * };
+ * ```
+ */
+export type TaskHarnessToolCall = {
+  /** Tool name as exposed to the agent or application runtime. */
+  name: string;
+  /** Tool arguments. Kept only when they normalize to a JSON object. */
+  arguments?: unknown;
+  /** Tool result. When present, a matching `tool_result` event is recorded. */
+  result?: unknown;
+};
+
+/**
+ * Value returned by a plain task function: the output alone when it is a
+ * string, or `{ result, toolCalls }`.
+ *
+ * @example
+ * ```ts
+ * const result: TaskHarnessResult = {
+ *   result: "Refund approved.",
+ *   toolCalls: [{ name: "lookupInvoice", arguments: { invoiceId: "inv_123" } }],
+ * };
+ * ```
+ */
+export type TaskHarnessResult<TOutput extends JsonValue | undefined = string> =
+  // NoInfer keeps TOutput inferred from `result` when the task returns an object.
+  | NoInfer<Extract<TOutput, string>>
+  | {
+      /** App-facing output for assertions and judges. */
+      result: TOutput;
+      /** Tool calls in the order the task made them. */
+      toolCalls?: TaskHarnessToolCall[];
+    };
+
+/**
+ * Plain task function adapted by `createTaskHarness(...)`.
+ *
+ * Legacy `(input) => Promise<string | { result, toolCalls }>` task functions
+ * already match this shape.
+ */
+export type TaskHarnessFn<
+  TInput = string,
+  TOutput extends JsonValue | undefined = string,
+> = (
+  input: TInput,
+  context: HarnessContext,
+) => MaybePromise<TaskHarnessResult<TOutput>>;
+
 function isJsonPrimitive(value: unknown): value is JsonPrimitive {
   return (
     value === null ||
@@ -504,6 +561,87 @@ export function createHarness<
   };
 
   return harness;
+}
+
+/**
+ * Creates a harness from a plain task function that returns its output and,
+ * optionally, the tool calls it made.
+ *
+ * The harness records the transcript itself: the user input, one `tool_call`
+ * event per reported call (plus a `tool_result` event when the call has a
+ * `result`), then the assistant output. Use `createHarness(...)` instead when
+ * the app needs to report usage, traces, or a richer transcript.
+ *
+ * @param name - Stable harness name used in reports.
+ * @param task - Task function that runs the system under test.
+ *
+ * @example
+ * ```ts
+ * import { createTaskHarness, describeEval, ToolCallJudge } from "vitest-evals";
+ *
+ * describeEval(
+ *   "refund agent",
+ *   {
+ *     harness: createTaskHarness("refund-agent", async (input) => {
+ *       const { text, toolCalls } = await runRefundAgent(input);
+ *       return { result: text, toolCalls };
+ *     }),
+ *     judges: [ToolCallJudge()],
+ *   },
+ *   (it) => {
+ *     it("looks up the invoice", async ({ run }) => {
+ *       await run("Refund invoice inv_123", {
+ *         expectedTools: ["lookupInvoice"],
+ *       });
+ *     });
+ *   },
+ * );
+ * ```
+ */
+export function createTaskHarness<
+  TInput = string,
+  TOutput extends JsonValue | undefined = string,
+>(
+  name: string,
+  task: TaskHarnessFn<TInput, TOutput>,
+): Harness<TInput, TOutput> {
+  return createHarness<TInput, TOutput>({
+    name,
+    run: async ({ input, ...context }) => {
+      const value = await task(input, context);
+      const { result: output, toolCalls: calls = [] } =
+        typeof value === "string"
+          ? { result: value as TOutput, toolCalls: [] }
+          : value;
+
+      const events: TranscriptEvent[] = [
+        { type: "message", role: "user", content: normalizeContent(input) },
+      ];
+      calls.forEach((call, index) => {
+        const id = `call_${index}`;
+        const args = toJsonValue(call.arguments);
+        events.push({
+          type: "tool_call",
+          id,
+          name: call.name,
+          ...(isJsonRecord(args) ? { arguments: args } : {}),
+        });
+        if (call.result !== undefined) {
+          events.push({
+            type: "tool_result",
+            toolCallId: id,
+            name: call.name,
+            content: normalizeContent(call.result),
+          });
+        }
+      });
+      if (output !== undefined) {
+        events.push({ type: "message", role: "assistant", content: output });
+      }
+
+      return { output, events } as SimpleHarnessResult<TOutput>;
+    },
+  });
 }
 
 /**

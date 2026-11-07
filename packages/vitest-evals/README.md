@@ -43,10 +43,13 @@ workflow.
   not return traces themselves. Span attributes include typed
   OpenTelemetry GenAI semantic keys while still allowing provider-specific
   metadata
-- scenario-specific judge criteria should live in `input` or explicit matcher
-  options, depending on whether the app or only the judge needs them
+- scenario-specific judge criteria should live in `input` when the app needs
+  them; per-case judge expectations go in `run(input, { expected,
+  expectedTools })` or explicit matcher options when only the judge needs them
 - suite-level `judges` are optional and run automatically after each `run(...)`
-- suite-level `judgeThreshold` controls fail-on-score for those automatic judges
+- suite-level `judgeThreshold` controls fail-on-score for those automatic
+  judges; it compares the average score of all automatic judges (a `null`
+  score counts as 0) and defaults to 1
 - every judge is a named object with `assess(ctx)`
 - every judge receives `JudgeContext` with typed `input`, typed `output`, the
   normalized run/session, and tool calls; `output` is only optional
@@ -130,6 +133,33 @@ describeEval("refund agent", { harness }, (it) => {
 });
 ```
 
+When suite-level judges need per-case expectations, pass them as the second
+`run(...)` argument. The harness never sees them; every automatic judge
+receives them in its context, and `toSatisfyJudge(...)` reuses them for the
+returned run unless matcher options override them:
+
+```ts
+describeEval(
+  "refund agent",
+  {
+    harness,
+    judges: [ToolCallJudge(), StructuredOutputJudge()],
+    judgeThreshold: 0.75,
+  },
+  (it) => {
+    it.for([
+      {
+        input: "Refund invoice inv_123",
+        expected: { status: "approved" },
+        expectedTools: ["lookupInvoice", "createRefund"],
+      },
+    ])("$input", async ({ input, ...expectations }, { run }) => {
+      await run(input, expectations);
+    });
+  },
+);
+```
+
 ## Terminal Reporting
 
 The terminal reporter has two eval report levels. Normal mode prints compact
@@ -204,6 +234,40 @@ factory and a `Runner` or `runner` factory. The harness calls
 `Runner.run(agent, input, options)` by default and exposes the same
 normalization and replay hooks when the app needs a custom entrypoint or
 structured domain output mapping.
+
+## Plain Task Functions
+
+When the system under test is a function that returns its output and,
+optionally, the tool calls it made, wrap it with `createTaskHarness(...)`
+instead of building transcript events by hand. Legacy
+`(input) => Promise<string | { result, toolCalls }>` task functions fit as-is:
+
+```ts
+import { createTaskHarness, describeEval, ToolCallJudge } from "vitest-evals";
+
+describeEval(
+  "refund agent",
+  {
+    harness: createTaskHarness("refund-agent", async (input) => {
+      const { text, toolCalls } = await runRefundAgent(input);
+      return { result: text, toolCalls };
+    }),
+    judges: [ToolCallJudge()],
+  },
+  (it) => {
+    it("looks up the invoice", async ({ run }) => {
+      await run("Refund invoice inv_123", {
+        expectedTools: ["lookupInvoice"],
+      });
+    });
+  },
+);
+```
+
+The harness records the user input, one `tool_call` event per reported call
+(plus a `tool_result` event when the call has a `result`), and the assistant
+output. Use `createHarness(...)` when the app also needs to report usage,
+traces, or a richer transcript.
 
 ## Custom App Harnesses
 
@@ -331,8 +395,8 @@ Use `Harness.run(...)` for the application under test. Calling
 `ctx.harness.run(...)` from inside a judge runs the application a second time,
 so reserve that for judges that intentionally need a second execution. Put
 criteria on `input` when they are part of the scenario itself; pass
-case-specific judge criteria through matcher options, or configure suite-wide
-criteria on the judge instance.
+case-specific judge criteria through `run(input, options)` or matcher options,
+or configure suite-wide criteria on the judge instance.
 
 `createHarness(...)` lightweight results must return at least one normalized
 event, either directly as `events` or from strict camelCase `messages`. Stored
