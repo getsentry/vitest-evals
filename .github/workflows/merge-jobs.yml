@@ -60,8 +60,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Build GitHub reporter action
-        run: pnpm build:action
+      # Fails on a stale bundle, so Craft does not publish a release branch
+      # whose tag would ship an outdated Action.
+      - name: Check GitHub Action bundle
+        run: sh scripts/check-action-bundle.sh
 
       - name: Pack NPM Tarballs
         run: |
