@@ -5,7 +5,9 @@ import {
   createJudge,
   createJudgeHarness,
   createHarness,
+  createTaskHarness,
   describeEval,
+  type EvalRun,
   failedSpans,
   type GenAiSemanticAttributeKey,
   getHarnessRunFromError,
@@ -357,6 +359,158 @@ describeEval(
     });
   },
 );
+
+const refundTaskHarness = createTaskHarness(
+  "refund-task",
+  async (input: string) => ({
+    result: JSON.stringify({ status: "approved", invoice: input }),
+    toolCalls: [
+      {
+        name: "lookupInvoice",
+        arguments: { invoiceId: "inv_123" },
+        result: { refundable: true },
+      },
+    ],
+  }),
+);
+
+const structuredTaskHarness = createTaskHarness(
+  "structured-task",
+  async () => ({ result: { status: "approved" } }),
+);
+type _TaskHarnessInfersStringOutput = Expect<
+  Equal<
+    Awaited<ReturnType<(typeof refundTaskHarness)["run"]>>["output"],
+    string
+  >
+>;
+type _TaskHarnessInfersResultOutput = Expect<
+  Equal<
+    Awaited<ReturnType<(typeof structuredTaskHarness)["run"]>>["output"],
+    { status: string }
+  >
+>;
+
+const caseParamJudgeSpy = vi.fn(
+  async (_opts: JudgeOptions<string, string, { expectedStatus?: string }>) => ({
+    score: 1,
+  }),
+);
+
+const caseParamJudge = createJudge("CaseParamJudge", caseParamJudgeSpy);
+
+async function assertRunOptionTypes(run: EvalRun<string, string>) {
+  await run("Refund invoice inv_123", {
+    expected: { status: "approved" },
+    expectedTools: ["lookupInvoice", { name: "createRefund", arguments: {} }],
+    expectedStatus: "approved",
+  });
+
+  // @ts-expect-error expectedTools must use the ToolCallJudge expected shape.
+  await run("Refund invoice inv_123", { expectedTools: [1] });
+}
+
+void assertRunOptionTypes;
+
+test("createTaskHarness records input, tool calls, and output as events", async () => {
+  const taskHarness = createTaskHarness(
+    "refund-task",
+    async (input: string) => ({
+      result: `approved ${input}`,
+      toolCalls: [
+        {
+          name: "lookupInvoice",
+          arguments: { invoiceId: "inv_123" },
+          result: { refundable: true },
+        },
+        { name: "createRefund", arguments: "not an object" },
+      ],
+    }),
+  );
+
+  const run = await taskHarness.run("inv_123", {
+    artifacts: {},
+    setArtifact: vi.fn(),
+  });
+
+  expect(run.output).toBe("approved inv_123");
+  expect(run.session.events).toEqual([
+    { type: "message", role: "user", content: "inv_123" },
+    {
+      type: "tool_call",
+      id: "call_0",
+      name: "lookupInvoice",
+      arguments: { invoiceId: "inv_123" },
+    },
+    {
+      type: "tool_result",
+      toolCallId: "call_0",
+      name: "lookupInvoice",
+      content: { refundable: true },
+    },
+    { type: "tool_call", id: "call_1", name: "createRefund" },
+    { type: "message", role: "assistant", content: "approved inv_123" },
+  ]);
+  expect(toolCalls(run)).toEqual([
+    {
+      name: "lookupInvoice",
+      arguments: { invoiceId: "inv_123" },
+      status: "ok",
+      result: { refundable: true },
+    },
+    { name: "createRefund", status: "pending" },
+  ]);
+  expect(spansByKind(run, "run").map((span) => span.name)).toEqual([
+    "refund-task",
+  ]);
+});
+
+test("createTaskHarness accepts a bare string result and passes the run context", async () => {
+  const taskHarness = createTaskHarness(
+    "echo-task",
+    (input: string, { setArtifact }) => {
+      setArtifact("seen", input);
+      return input.toUpperCase();
+    },
+  );
+  const artifacts: HarnessContext["artifacts"] = {};
+
+  const run = await taskHarness.run("hello", {
+    artifacts,
+    setArtifact: (name, value) => {
+      artifacts[name] = value;
+    },
+  });
+
+  expect(run.output).toBe("HELLO");
+  expect(run.artifacts).toEqual({ seen: "hello" });
+  expect(run.session.events).toEqual([
+    { type: "message", role: "user", content: "hello" },
+    { type: "message", role: "assistant", content: "HELLO" },
+  ]);
+});
+
+test("createTaskHarness attaches a failed run when the task throws", async () => {
+  const taskHarness = createTaskHarness("broken-task", async () => {
+    throw new TypeError("task failed");
+  });
+
+  let thrown: unknown;
+  try {
+    await taskHarness.run("Refund invoice inv_123", {
+      artifacts: {},
+      setArtifact: vi.fn(),
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  const run = getHarnessRunFromError(thrown);
+  expect(userMessages(run!).map((message) => message.content)).toEqual([
+    "Refund invoice inv_123",
+  ]);
+  expect(run?.errors).toEqual([{ type: "TypeError", message: "task failed" }]);
+});
 
 test("createHarness rejects removed top-level tool call shortcut", async () => {
   const lightweightHarness = createHarness({
@@ -942,6 +1096,86 @@ describeEval(
           },
         ],
       });
+    });
+  },
+);
+
+describeEval(
+  "harness mode with per-case run options",
+  {
+    harness: refundTaskHarness,
+    judges: [ToolCallJudge(), StructuredOutputJudge(), caseParamJudge],
+  },
+  (it) => {
+    it("passes run options to automatic judges", async ({ run, task }) => {
+      caseParamJudgeSpy.mockClear();
+
+      await run("inv_123", {
+        expected: { status: "approved" },
+        expectedTools: ["lookupInvoice"],
+        expectedStatus: "approved",
+        input: "ignored: core context fields win",
+      });
+
+      expect(
+        task.meta.eval?.scores.map(({ name, score }) => [name, score]),
+      ).toEqual([
+        ["ToolCallJudge", 1],
+        ["StructuredOutputJudge", 1],
+        ["CaseParamJudge", 1],
+      ]);
+      expect(caseParamJudgeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: "inv_123",
+          expectedStatus: "approved",
+        }),
+      );
+    });
+  },
+);
+
+describeEval(
+  "harness mode averages automatic judges against judgeThreshold",
+  {
+    harness: refundTaskHarness,
+    judges: [ToolCallJudge(), StructuredOutputJudge()],
+    judgeThreshold: 0.5,
+  },
+  (it) => {
+    it("passes when the average meets the threshold", async ({ run, task }) => {
+      await run("inv_123", {
+        expected: { status: "approved" },
+        expectedTools: ["createRefund"],
+      });
+
+      expect(task.meta.eval).toMatchObject({
+        avgScore: 0.5,
+        scores: [
+          { name: "ToolCallJudge", score: 0 },
+          { name: "StructuredOutputJudge", score: 1 },
+        ],
+        thresholdFailed: false,
+      });
+    });
+  },
+);
+
+describeEval(
+  "harness mode reuses run options in explicit judge matchers",
+  { harness: refundTaskHarness },
+  (it) => {
+    it("lets matcher options override run options", async ({ run, task }) => {
+      const result = await run("inv_123", {
+        expectedTools: ["lookupInvoice"],
+      });
+
+      await expect(result).toSatisfyJudge(ToolCallJudge());
+      await expect(result).toSatisfyJudge(ToolCallJudge(), {
+        expectedTools: ["createRefund"],
+        threshold: null,
+      });
+
+      expect(task.meta.eval?.scores.map(({ score }) => score)).toEqual([1, 0]);
     });
   },
 );

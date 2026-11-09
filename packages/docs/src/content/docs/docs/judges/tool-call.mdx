@@ -25,8 +25,16 @@ describeEval("capital questions", {
 
 ## Arguments
 
-Use matcher options when a case-specific tool argument is the important
-assertion.
+Pass case-specific expected tools as a `run(...)` option so the suite judge
+checks them:
+
+```ts title="evals/capital.eval.ts"
+await run("What is the capital of France?", {
+  expectedTools: [{ name: "lookupCapital", arguments: { country: "France" } }],
+});
+```
+
+Or use matcher options when the tool argument is a separate assertion.
 
 ```ts title="evals/capital.eval.ts"
 const result = await run("What is the capital of France?");

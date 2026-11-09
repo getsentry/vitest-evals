@@ -40,8 +40,12 @@ Use the harness-backed API as the only authoring model.
 - Keep rubric text and parsing in the judge. Put provider calls in a
   `judgeHarness`, then call them through `ctx.runJudge(...)` so usage is recorded.
 - Put scenario-owned criteria on the input value. Put direct-check expected
-  values in Vitest case rows. Pass per-case judge criteria through explicit
-  matcher options, and suite-wide criteria through judge config.
+  values in Vitest case rows. Pass per-case judge criteria as
+  `run(input, { expected, expectedTools })` for automatic suite judges or
+  through explicit matcher options, and suite-wide criteria through judge
+  config.
+- Wrap plain `(input) => string | { result, toolCalls }` task functions with
+  `createTaskHarness(...)`.
 - Custom judges should use `createJudge(...)` for stable reporter labels.
 
 ## Verification

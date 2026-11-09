@@ -67,6 +67,11 @@ event stream is flat:
 - `type: "tool_call"` for a tool request
 - `type: "tool_result"` for a completed or failed tool execution
 
+`createTaskHarness(...)` is a thin wrapper over `createHarness(...)` for plain
+task functions that return `string | { result, toolCalls }`; it builds the
+user, `tool_call`, `tool_result`, and assistant events itself, so
+`createHarness(...)` keeps rejecting top-level `toolCalls`.
+
 This is the reporter and judge contract. `createHarness(...)` may accept strict
 camelCase message-shaped inputs at its lightweight result boundary: assistant
 `toolCalls`, `role: "tool"` results keyed by `toolCallId`, or AI SDK-style
@@ -244,14 +249,17 @@ For each eval test in a harness-backed suite:
 5. The harness returns a `HarnessRun` with `result.output`, `result.session`,
    `usage`, `timings`, `artifacts`, and `errors`.
 6. Core stores that run on `task.meta.harness` for the reporter.
-7. Automatic suite-level judges run against the normalized run/session pair.
+7. Automatic suite-level judges run against the normalized run/session pair,
+   plus any per-case judge params passed as `run(input, options)`. The suite
+   `judgeThreshold` is compared against the average of their scores.
 8. Each judge-harness invocation is stored under its judge score as `judgeRuns`.
 9. The eval test asserts on the same returned result and session.
 10. The reporter renders the recorded metadata and includes judge usage in totals
    without re-executing either harness.
 
 Explicit `expect(result).toSatisfyJudge(...)` calls use the run's typed output
-and reuse registered input, metadata, and harness context
+and reuse registered input, `run(input, options)` judge params, metadata, and
+harness context
 when `result` came from the fixture-backed `run(...)`. Inside an eval test,
 calls on registered output objects or session objects reuse that exact run
 context; other raw values fall back to the current test's most recent

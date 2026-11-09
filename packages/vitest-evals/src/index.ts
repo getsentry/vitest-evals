@@ -31,6 +31,7 @@ import type {
 } from "./judges/types";
 import type { JudgeHarness } from "./judges/judgeHarness";
 import { createRunJudge } from "./judges/judgeHarness";
+import type { ToolCallJudgeExpectedTool } from "./judges/toolCallJudge";
 import { wrapText } from "./wrapText";
 
 type RecordedJudgeResult = JudgeResult & {
@@ -59,6 +60,7 @@ type RegisteredJudgeRunContext = {
   harness: Harness<any, any>;
   input: unknown;
   judgeHarness?: JudgeHarness;
+  judgeParams: EvalRunOptions;
   run: HarnessRun;
   signal?: AbortSignal;
 };
@@ -124,18 +126,47 @@ export type EvalHarnessRun<
 };
 
 /**
+ * Per-case judge params passed as the second `run(input, options)` argument.
+ *
+ * The harness never sees these values. They are spread into the context of
+ * every automatic suite judge, and `toSatisfyJudge(...)` reuses them for the
+ * returned run unless matcher options override them. Core context fields such
+ * as `input`, `output`, `run`, and `toolCalls` always win over these params.
+ *
+ * @example
+ * ```ts
+ * await run("Refund invoice inv_123", {
+ *   expected: { status: "approved" },
+ *   expectedTools: ["lookupInvoice", "createRefund"],
+ * });
+ * ```
+ */
+export type EvalRunOptions = {
+  /** Expected output read by judges such as `StructuredOutputJudge()` and `FactualityJudge()`. */
+  expected?: unknown;
+  /** Expected tool calls read by `ToolCallJudge()`. */
+  expectedTools?: ToolCallJudgeExpectedTool[];
+  /** Extra params for custom judges. */
+  [param: string]: unknown;
+};
+
+/**
  * Explicit harness execution primitive exposed to each eval test.
  *
  * @example
  * ```ts
  * const result = await run("Refund invoice inv_123");
+ * await run("Refund invoice inv_123", { expectedTools: ["lookupInvoice"] });
  * ```
  */
 export type EvalRun<
   TInput = unknown,
   TOutput extends JsonValue | undefined = JsonValue | undefined,
   THarness extends Harness<TInput, TOutput> = Harness<TInput, TOutput>,
-> = (input: TInput) => Promise<EvalHarnessRun<TInput, TOutput, THarness>>;
+> = (
+  input: TInput,
+  options?: EvalRunOptions,
+) => Promise<EvalHarnessRun<TInput, TOutput, THarness>>;
 
 /**
  * Fixture-backed Vitest context exposed inside `describeEval(...)` tests.
@@ -193,7 +224,11 @@ export interface DescribeEvalOptions<
   judges?: Array<Judge<JudgeContext<TInput, TOutput, THarness>>>;
   /** Optional judge-side harness used only by judges that call `ctx.runJudge(...)`. */
   judgeHarness?: JudgeHarness;
-  /** Passing threshold for automatic suite-level judges. `null` disables fail-on-score. */
+  /**
+   * Passing threshold for automatic suite-level judges, compared against the
+   * average score of all of them (a `null` score counts as 0). Defaults to 1.
+   * `null` disables fail-on-score.
+   */
   judgeThreshold?: number | null;
   /** Skips the entire eval suite when the predicate returns true. */
   skipIf?: () => boolean;
@@ -339,7 +374,7 @@ const evalTest = test
       signal,
       task,
     }) => {
-      return async (input: unknown) => {
+      return async (input: unknown, judgeParams: EvalRunOptions = {}) => {
         const resolvedHarness = harness as Harness<
           unknown,
           JsonValue | undefined
@@ -378,6 +413,7 @@ const evalTest = test
               resolvedHarness,
               input,
               explicitJudgeHarness,
+              judgeParams,
               signal,
             );
           }
@@ -397,6 +433,7 @@ const evalTest = test
               resolvedHarness,
               input,
               explicitJudgeHarness,
+              judgeParams,
               signal,
             );
           }
@@ -419,6 +456,7 @@ const evalTest = test
           resolvedHarness,
           input,
           explicitJudgeHarness,
+          judgeParams,
           signal,
         );
 
@@ -430,6 +468,7 @@ const evalTest = test
             resolvedHarness,
             input,
             judgeHarness,
+            judgeParams,
             run,
             signal,
           );
@@ -600,6 +639,7 @@ async function applyAutomaticJudges<
   harness: THarness,
   input: TInput,
   judgeHarness: JudgeHarness | undefined,
+  judgeParams: EvalRunOptions,
   run: HarnessRun<TOutput>,
   signal?: AbortSignal,
 ) {
@@ -613,6 +653,7 @@ async function applyAutomaticJudges<
         (judgeRun) => judgeRuns.push(judgeRun),
       );
       const judgeOptions = {
+        ...judgeParams,
         input,
         output: run.output,
         toolCalls: runToolCalls,
@@ -674,12 +715,14 @@ function recordJudgeRunContext<TInput, TOutput extends JsonValue | undefined>(
   harness: Harness<TInput, TOutput>,
   input: TInput,
   judgeHarness: JudgeHarness | undefined,
+  judgeParams: EvalRunOptions,
   signal?: AbortSignal,
 ) {
   const context = {
     harness,
     input,
     judgeHarness,
+    judgeParams,
     run,
     signal,
   };
@@ -838,6 +881,7 @@ function buildJudgeAssertionOptions<
   >;
 
   return {
+    ...registeredContext?.judgeParams,
     ...judgeParams,
     input: resolvedInput,
     output,
@@ -1215,6 +1259,7 @@ export {
   createFailedHarnessRun,
   createGenAiUsageAttributes,
   createHarness,
+  createTaskHarness,
   ensureRunTrace,
   failedSpans,
   getHarnessRunFromError,
@@ -1273,6 +1318,9 @@ export {
   type SimpleSpanRecord,
   type SimpleTranscriptInput,
   type SimpleTraceRecord,
+  type TaskHarnessFn,
+  type TaskHarnessResult,
+  type TaskHarnessToolCall,
   type TimingSummary,
   type ToolCall,
   type UsageSummary,
