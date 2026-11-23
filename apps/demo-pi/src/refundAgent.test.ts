@@ -85,13 +85,14 @@ test("createRefundAgent awaits async reset before prompting", async () => {
       }),
   );
   agent.prompt = vi.fn(async () => {
+    expect(agent.state.model).toMatchObject({ id: "claude-sonnet-4-6" });
     agent.state.messages = [
       {
         role: "assistant",
         stopReason: "stop",
         errorMessage: "",
         provider: "anthropic",
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-6",
         usage: {
           input: 10,
           output: 4,
@@ -140,7 +141,7 @@ test("createRefundAgent awaits async reset before prompting", async () => {
     '{"status":"approved","invoiceId":"inv_123","refundId":"rf_inv_123","amount":4200}',
     {
       provider: "anthropic",
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       totalTokens: 14,
     },
   );

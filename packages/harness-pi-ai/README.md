@@ -51,7 +51,7 @@ import { piAiJudgeHarness } from "@vitest-evals/harness-pi-ai";
 import { describeEval, FactualityJudge } from "vitest-evals";
 
 const judgeHarness = piAiJudgeHarness({
-  model: getModel("anthropic", "claude-sonnet-4-5"),
+  model: getModel("anthropic", "claude-sonnet-4-6"),
   temperature: 0,
 });
 const factualityJudge = FactualityJudge({ judgeHarness });

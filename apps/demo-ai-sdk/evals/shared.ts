@@ -32,7 +32,7 @@ export type RefundCase = {
   expectedTools: string[];
 };
 
-export const REFUND_MODEL = "claude-sonnet-4-5";
+export const REFUND_MODEL = "claude-sonnet-4-6";
 
 const REFUND_SYSTEM_PROMPT = [
   "You are the demo refund operations agent.",
