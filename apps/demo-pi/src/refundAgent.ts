@@ -51,8 +51,8 @@ export const LOOKUP_INVOICE_DESCRIPTION =
   "Look up invoice details inside demo billing.";
 export const CREATE_REFUND_DESCRIPTION =
   "Create a refund for a refundable invoice.";
-type RefundAgentModel = "claude-sonnet-4-5";
-const DEFAULT_REFUND_MODEL: RefundAgentModel = "claude-sonnet-4-5";
+type RefundAgentModel = "claude-sonnet-4-6";
+const DEFAULT_REFUND_MODEL: RefundAgentModel = "claude-sonnet-4-6";
 export const REFUND_SYSTEM_PROMPT = [
   "You are the demo refund operations agent.",
   "You must decide whether a refund should be approved for the invoice in the user's request.",
